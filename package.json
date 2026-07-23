@@ -11,6 +11,8 @@
     "build": "pnpm -r --if-present build",
     "check": "pnpm docs:check && pnpm typecheck && pnpm test",
     "docs:check": "node scripts/validate-docs.mjs",
+    "smoke:dev": "node scripts/smoke-dev-api.mjs",
+    "supabase:verify": "node infra/supabase/scripts/verify-structure.mjs",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck"
   },

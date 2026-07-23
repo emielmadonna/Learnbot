@@ -1,4 +1,4 @@
-export const DEVELOPMENT_TENANT_ID = "tenant_estie_demo";
+export const DEVELOPMENT_TENANT_ID = "tenant_northstar_demo";
 
 export const developmentCourses = [
   {

@@ -10,10 +10,13 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/server.ts",
     "smoke": "pnpm build && tsx src/smoke.ts",
+    "test": "pnpm build && node --test dist/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@course-ai/application-services": "workspace:*",
     "@course-ai/contracts": "workspace:*",
+    "@course-ai/learning-pipeline": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.4.3"
   },

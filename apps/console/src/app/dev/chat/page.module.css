@@ -48,6 +48,18 @@
     box-shadow 180ms ease;
 }
 
+.voiceActiveFrame {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.voiceActiveFrame .topbar {
+  display: none;
+}
+
+.voiceActiveFrame .resizeHandle {
+  display: none;
+}
+
 .moving,
 .resizing {
   transition: none;
@@ -117,6 +129,14 @@
   font-family: Georgia, "Times New Roman", serif;
   font-size: 18px;
   font-weight: 700;
+}
+
+.brandMark img,
+.assistantMark img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: contain;
 }
 
 .brand > span:last-child,
@@ -513,6 +533,111 @@
   border-radius: 8px;
 }
 
+.diagramModal {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(13 29 22 / 68%);
+  backdrop-filter: blur(8px);
+}
+
+.diagramModal > div {
+  width: min(760px, 100%);
+  padding: 24px;
+  border: 1px solid #dce4de;
+  border-radius: 20px;
+  background: #fffdf8;
+  box-shadow: 0 30px 80px rgb(8 24 17 / 30%);
+}
+
+.diagramModal header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.diagramModal header span,
+.diagramModal header strong {
+  display: block;
+}
+
+.diagramModal header small {
+  color: var(--chat-muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.diagramModal header strong {
+  margin-top: 5px;
+  font-family: Georgia, serif;
+  font-size: 25px;
+}
+
+.diagramModal header button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--chat-line);
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  font-size: 22px;
+}
+
+.diagramModalFlow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 30px 0 22px;
+}
+
+.diagramModalFlow span {
+  display: grid;
+  min-width: 120px;
+  min-height: 92px;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  border: 1px solid #d8dfd9;
+  border-radius: 14px;
+  background: #f5f8f5;
+  color: var(--chat-ink);
+  font-weight: 720;
+}
+
+.diagramModalFlow span b {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--chat-green-soft);
+  color: var(--chat-green);
+  font-size: 10px;
+}
+
+.diagramModalFlow i {
+  color: #a58b61;
+  font-style: normal;
+}
+
+.diagramModal > div > p {
+  margin: 0;
+  color: #637068;
+  font-family: Georgia, serif;
+  font-size: 14px;
+  line-height: 1.65;
+  text-align: center;
+}
+
 .tryThis {
   display: flex;
   gap: 11px;
@@ -738,8 +863,7 @@
 .toolButton,
 .voiceButton,
 .sendButton,
-.attachmentCard button,
-.voicePanel button {
+.attachmentCard button {
   border: 0;
   cursor: pointer;
 }
@@ -828,8 +952,7 @@
   font-size: 8px;
 }
 
-.fileIcon,
-.listeningOrb {
+.fileIcon {
   display: grid;
   width: 31px;
   height: 31px;
@@ -864,240 +987,156 @@
   background: #f6eae8;
 }
 
-.listeningOrb {
-  color: white;
-  background: var(--chat-green);
-  box-shadow: 0 0 0 5px rgb(31 89 70 / 9%);
-  animation: pulse 1.9s ease-in-out infinite;
-}
-
-.voicePanel {
-  padding: 11px;
-  border-bottom: 1px solid #d9e3dd;
-  background:
-    radial-gradient(circle at 100% 0%, rgb(255 255 255 / 80%), transparent 12rem),
-    #f2f7f4;
+.attachmentError {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-bottom: 1px solid #edcdc7;
+  color: #8c463e;
+  background: #fff5f3;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 9px;
 }
 
-.voiceStatus {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.voiceStatus > span:nth-child(2) {
-  display: flex;
-  min-width: 0;
+.attachmentError span {
   flex: 1;
-  flex-direction: column;
 }
 
-.voiceStatus strong {
-  color: var(--chat-ink);
-  font-size: 11px;
-}
-
-.voiceStatus small {
-  color: var(--chat-muted);
-  font-size: 8px;
-}
-
-.realtimeBadge {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 2px;
-  color: var(--chat-green);
-  font-size: 7px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.realtimeBadge > span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #2f9a69;
-  box-shadow: 0 0 0 3px rgb(47 154 105 / 12%);
-}
-
-.voicePanel[data-phase="thinking"] .listeningOrb,
-.voicePanel[data-phase="connecting"] .listeningOrb {
-  color: var(--chat-green);
+.attachmentError button {
+  padding: 5px 7px;
+  border: 1px solid #dfb8af;
+  border-radius: 6px;
+  color: #8c463e;
   background: white;
-  box-shadow: inset 0 0 0 1px #d7e2dc;
-  animation: none;
+  font-size: 8px;
+  font-weight: 720;
 }
 
-.voicePanel[data-phase="speaking"] .listeningOrb {
-  background: #4e755f;
-}
-
-.phaseSpinner {
-  width: 21px;
-  height: 21px;
-  margin-right: 4px;
-  border: 2px solid #d7e1dc;
-  border-top-color: var(--chat-green);
-  border-radius: 50%;
-  animation: spin 900ms linear infinite;
-}
-
-.voiceRail {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 5px;
-  margin: 11px 0 9px;
-}
-
-.voiceRail > span {
-  display: grid;
-  grid-template-columns: 7px 1fr;
+.voiceFallback {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  color: #98a49e;
-  font-size: 7px;
-  font-weight: 700;
-}
-
-.voiceRail i {
-  width: 7px;
-  height: 7px;
-  border: 1px solid #bdc9c2;
-  border-radius: 50%;
-  background: #fff;
-}
-
-.voiceStageActive {
-  color: var(--chat-green) !important;
-}
-
-.voiceStageActive i {
-  border-color: var(--chat-green);
-  background: var(--chat-green);
-  box-shadow: 0 0 0 3px rgb(49 95 80 / 10%);
-}
-
-.voiceStageComplete i {
-  border-color: #8fac9d;
-  background: #bcd0c5;
-}
-
-.liveCaption {
-  min-height: 58px;
-  padding: 9px 10px;
-  border: 1px solid #dce6e0;
-  border-radius: 10px;
-  background: rgb(255 255 255 / 82%);
-}
-
-.liveCaption > span {
-  display: block;
-  margin-bottom: 3px;
-  color: var(--chat-green);
-  font-size: 7px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.liveCaption p {
-  margin: 0;
-  color: var(--chat-ink);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 11px;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 6px;
+  color: var(--chat-muted);
+  font-size: 9px;
   line-height: 1.4;
 }
 
-.liveCaption p i {
-  display: inline-block;
-  width: 2px;
-  height: 12px;
-  margin-left: 3px;
-  vertical-align: -2px;
-  background: var(--chat-green);
-  animation: blink 850ms steps(1) infinite;
+.inputArea > .voiceFallback {
+  justify-content: flex-start;
+  margin: 2px 0 4px;
 }
 
-.liveCaption small {
-  display: block;
-  margin-top: 4px;
-  color: var(--chat-muted);
-  font-size: 7px;
-}
-
-.interruptedNote {
-  color: #8a5a38 !important;
-}
-
-.voiceControls {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 8px;
-}
-
-.voiceControls button {
-  display: inline-flex;
-  min-height: 28px;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 8px;
-  border: 1px solid #dce4df;
-  border-radius: 8px;
-  color: var(--chat-muted);
-  background: rgb(255 255 255 / 82%);
-  font-size: 8px;
+.voiceFallback button {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  border-radius: 0;
+  color: var(--chat-green);
+  background: transparent;
+  font: inherit;
   font-weight: 700;
 }
 
-.voiceControls button:hover,
-.voiceControls .controlActive {
-  color: var(--chat-green);
-  border-color: #a8beb2;
-  background: white;
+.voiceFallback button:hover {
+  color: var(--chat-green-deep);
 }
 
-.voiceControls .interruptButton {
-  color: #835b30;
-  border-color: #e6d7c2;
-  background: #fff8ed;
+.voiceExperience {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+  padding: 22px 28px max(34px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(
+      ellipse at 50% 44%,
+      color-mix(in srgb, var(--chat-green-soft) 36%, transparent),
+      transparent 36%
+    ),
+    #fbfaf7;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
-.interruptButton span {
-  font-size: 7px;
+.orbStage {
+  display: grid;
+  min-height: 0;
+  place-items: center;
 }
 
-.voiceControls .endButton {
-  margin-left: auto;
-  color: #884b44;
-  border-color: #ead7d4;
-  background: #fff8f7;
+.liquidOrb {
+  display: block;
+  width: min(390px, 78vw);
+  height: min(390px, 48vh);
+  max-height: 100%;
 }
 
-.waveform {
+.voiceExperience .voiceControls {
   display: flex;
-  height: 24px;
   align-items: center;
-  gap: 2px;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 6px;
 }
 
-.waveform span {
-  width: 2px;
+.voiceExperience .voiceControls button {
+  position: relative;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #222825;
+  background: rgb(255 255 255 / 88%);
+  box-shadow:
+    0 10px 25px rgb(46 51 48 / 9%),
+    inset 0 0 0 1px rgb(40 47 43 / 7%);
+  backdrop-filter: blur(14px);
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.voiceExperience .voiceControls button:hover {
+  color: #18201c;
+  background: #fff;
+  box-shadow:
+    0 13px 30px rgb(46 51 48 / 13%),
+    inset 0 0 0 1px rgb(40 47 43 / 9%);
+  transform: translateY(-1px);
+}
+
+.voiceExperience .voiceControls button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--chat-green) 32%, transparent);
+  outline-offset: 4px;
+}
+
+.voiceExperience .voiceControls .controlActive {
+  color: #6f7773;
+  background: #eeefed;
+}
+
+.voiceExperience .voiceControls .controlActive::after {
+  position: absolute;
+  width: 27px;
+  height: 1.5px;
   border-radius: 99px;
-  background: #579078;
-  animation: wave 1.3s ease-in-out infinite alternate;
+  background: currentColor;
+  content: "";
+  transform: rotate(-45deg);
 }
 
-.waveform span:nth-child(3n + 2) {
-  animation-delay: -0.5s;
-}
-
-.waveform span:nth-child(3n) {
-  animation-delay: -0.9s;
+.voiceExperience .voiceControls .endButton {
+  color: #242927;
+  background: rgb(255 255 255 / 88%);
 }
 
 .resizeHandle {
@@ -1173,28 +1212,9 @@
   outline-offset: 2px;
 }
 
-@keyframes pulse {
-  50% {
-    box-shadow: 0 0 0 8px rgb(31 89 70 / 4%);
-  }
-}
-
-@keyframes wave {
-  to {
-    height: 6px;
-    opacity: 0.45;
-  }
-}
-
 @keyframes spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@keyframes blink {
-  50% {
-    opacity: 0;
   }
 }
 
@@ -1257,8 +1277,13 @@
     padding: 20px 14px 205px;
   }
 
-  .conversation:has(.voicePanel) .thread {
-    padding-bottom: 355px;
+  .voiceExperience {
+    padding: 14px 18px max(24px, env(safe-area-inset-bottom));
+  }
+
+  .liquidOrb {
+    width: min(340px, 86vw);
+    height: min(340px, 48vh);
   }
 
   .assistantRow {
@@ -1314,20 +1339,8 @@
     display: none;
   }
 
-  .waveform {
-    display: none;
-  }
-
-  .voiceRail {
-    gap: 3px;
-  }
-
-  .voiceRail > span {
-    font-size: 6px;
-  }
-
-  .voiceControls {
-    flex-wrap: wrap;
+  .voiceExperience .voiceControls {
+    gap: 16px;
   }
 
   .resizeHandle {
@@ -1336,9 +1349,13 @@
 }
 
 @media (max-width: 390px) {
-  .readyBadge,
-  .voiceStatus small {
+  .readyBadge {
     display: none;
+  }
+
+  .liquidOrb {
+    width: min(290px, 84vw);
+    height: min(290px, 43vh);
   }
 
   .steps > div {
@@ -1346,9 +1363,20 @@
   }
 }
 
+@media (max-width: 680px) {
+  .diagramModalFlow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .diagramModalFlow i {
+    text-align: center;
+    transform: rotate(90deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .listeningOrb,
-  .waveform span {
-    animation: none;
+  .voiceExperience .voiceControls button {
+    transition: none;
   }
 }

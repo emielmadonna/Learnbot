@@ -1,0 +1,1 @@
+-- Intentionally empty. Development fixtures must be explicit and non-secret.

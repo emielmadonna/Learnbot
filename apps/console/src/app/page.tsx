@@ -16,8 +16,20 @@ const modules = [
   {
     name: "Creator Console",
     description: "This Week, questions, confusion, Students and opportunities.",
-    status: "Planned",
-    href: null
+    status: "Interactive",
+    href: "/dev/creator"
+  },
+  {
+    name: "Teacher Console",
+    description: "Cohort pulse, learner questions, progress and safe follow-up.",
+    status: "Interactive",
+    href: "/dev/teacher"
+  },
+  {
+    name: "Platform Admin",
+    description: "Tenants, providers, budgets, audit, policy and MCP controls.",
+    status: "Interactive",
+    href: "/dev/admin"
   },
   {
     name: "Branding & Context",
@@ -28,8 +40,8 @@ const modules = [
   {
     name: "MCP Control Plane",
     description: "The same safe operations for Codex and authorized agents.",
-    status: "4 tools live",
-    href: null
+    status: "10 tools verified",
+    href: "/dev/admin#mcp"
   }
 ];
 

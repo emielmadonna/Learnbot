@@ -1,67 +1,616 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import styles from "./page.module.css";
 
-const lessons = [
-  { id: "01", title: "Welcome & orientation", meta: "6 min · Ready" },
-  { id: "02", title: "The three motion systems", meta: "12 min · Ready" },
-  { id: "03", title: "Build a movement map", meta: "18 min · Editing" },
-  { id: "04", title: "Reducing wasted effort", meta: "9 min · Ready" },
-  { id: "05", title: "Practice: your first audit", meta: "14 min · Ready" }
-];
+type ValidationIssue = {
+  code: string;
+  severity: "error" | "warning";
+  message: string;
+  lessonId?: string;
+  blockId?: string;
+};
+
+type AuthoringSnapshot = {
+  course: {
+    courseId: string;
+    title: string;
+    status: "draft" | "published" | "archived";
+    version: number;
+    modules: Array<{
+      moduleId: string;
+      title: string;
+      lessons: Array<{
+        lessonId: string;
+        title: string;
+        status: string;
+        estimatedMinutes?: number;
+        blocks: readonly unknown[];
+      }>;
+    }>;
+  };
+  lesson: {
+    lessonId: string;
+    title: string;
+    status: string;
+    estimatedMinutes?: number;
+    blocks: readonly unknown[];
+  };
+  editorContent: string;
+  validation: { valid: boolean; issues: ValidationIssue[] };
+  publishValidation: { valid: boolean; issues: ValidationIssue[] };
+  revisions: Array<{
+    revisionId: string;
+    version: number;
+    kind: "created" | "edited" | "published" | "rolled_back";
+    auditNote?: string;
+    createdAt: string;
+    rollbackTargetVersion?: number;
+  }>;
+  diagramCandidate: {
+    candidateId: string;
+    suggestedAltText?: string;
+    suggestedCaption?: string;
+    approved: boolean;
+  };
+  importWarnings?: readonly string[];
+};
+
+type NoticeTone = "neutral" | "success" | "error";
 
 const initialContent =
-  "A movement map helps you see where energy is spent across a system.\n\nStart by naming the trigger, the action that follows, and the result it creates. Then look for repeated effort, unclear ownership, or a handoff that slows the system down.\n\nThe goal is not to remove every step. It is to make each step intentional.";
+  "A Minimum Day is the smallest credible version of your practice.\n\nOn a disrupted day, open your plan, choose one priority, and stop after two intentional minutes. This protects the restart loop without turning the minimum into the permanent target.\n\nAfter two consistent days, rebuild the fuller practice. Diagram: Disruption -> Minimum Day -> Evidence -> Momentum.";
 
 export default function LearningWorkspace() {
-  const [selected, setSelected] = useState("03");
+  const [authoring, setAuthoring] = useState<AuthoringSnapshot>();
+  const [selected, setSelected] = useState("lesson_minimum_day");
   const [content, setContent] = useState(initialContent);
-  const [saved, setSaved] = useState(initialContent);
-  const [sourceCount, setSourceCount] = useState(8);
+  const [serverContent, setServerContent] = useState(initialContent);
+  const [sourceCount, setSourceCount] = useState(1);
   const [job, setJob] = useState<"ready" | "running" | "published">("ready");
-  const [notice, setNotice] = useState("Draft v12 · autosaved just now");
+  const [notice, setNotice] = useState("Loading tenant-scoped authoring state…");
+  const [noticeTone, setNoticeTone] = useState<NoticeTone>("neutral");
+  const [tenantName, setTenantName] = useState("Northstar Academy");
+  const [documentCount, setDocumentCount] = useState(1);
+  const [chunkCount, setChunkCount] = useState(1);
+  const [diagramCount, setDiagramCount] = useState(1);
+  const [showNewCourse, setShowNewCourse] = useState(false);
+  const [newCourseTitle, setNewCourseTitle] = useState("");
+  const [showNewLesson, setShowNewLesson] = useState(false);
+  const [newLessonTitle, setNewLessonTitle] = useState("");
+  const [importFormat, setImportFormat] = useState<"plain_text" | "markdown">(
+    "plain_text",
+  );
+  const [embedUrl, setEmbedUrl] = useState("");
+  const [diagramAltText, setDiagramAltText] = useState("");
+  const [diagramCaption, setDiagramCaption] = useState("");
+  const [activeVersionId, setActiveVersionId] = useState<string>();
+  const [previousActiveVersionId, setPreviousActiveVersionId] =
+    useState<string>();
+  const [draftVersionId, setDraftVersionId] = useState<string>();
 
-  function addLearning() {
-    setSourceCount((count) => count + 1);
-    setJob("running");
-    setNotice("New source added · extracting content");
+  const allLessons = useMemo(
+    () =>
+      authoring?.course.modules.flatMap((module) =>
+        module.lessons.map((lesson) => ({
+          ...lesson,
+          moduleId: module.moduleId,
+          moduleTitle: module.title,
+        })),
+      ) ?? [],
+    [authoring],
+  );
+  const currentLesson =
+    allLessons.find((lesson) => lesson.lessonId === selected) ?? allLessons[0];
+  const currentModule =
+    authoring?.course.modules.find((module) =>
+      module.lessons.some((lesson) => lesson.lessonId === currentLesson?.lessonId),
+    ) ?? authoring?.course.modules[0];
+  const issues = authoring?.publishValidation.issues ?? [];
+  const errors = issues.filter((issue) => issue.severity === "error");
+  const warnings = issues.filter((issue) => issue.severity === "warning");
+  const dirty = content !== serverContent;
+
+  function applySnapshot(snapshot: AuthoringSnapshot, replaceEditor = true) {
+    setAuthoring(snapshot);
+    setSelected(snapshot.lesson.lessonId);
+    if (replaceEditor) {
+      setContent(snapshot.editorContent);
+      setServerContent(snapshot.editorContent);
+    }
+    if (!diagramAltText && snapshot.diagramCandidate.suggestedAltText) {
+      setDiagramAltText(snapshot.diagramCandidate.suggestedAltText);
+    }
+    if (!diagramCaption && snapshot.diagramCandidate.suggestedCaption) {
+      setDiagramCaption(snapshot.diagramCandidate.suggestedCaption);
+    }
   }
 
-  function cleanContent() {
+  function showNotice(message: string, tone: NoticeTone = "neutral") {
+    setNotice(message);
+    setNoticeTone(tone);
+  }
+
+  async function parseAuthoringResponse(
+    response: Response,
+  ): Promise<AuthoringSnapshot> {
+    const payload = (await response.json()) as AuthoringSnapshot & {
+      code?: string;
+      message?: string;
+    };
+    if (!response.ok) {
+      throw new Error(
+        `${payload.message ?? "Authoring command failed"}${
+          payload.code ? ` · ${payload.code}` : ""
+        }`,
+      );
+    }
+    return payload;
+  }
+
+  async function postAuthoring(
+    body: Record<string, unknown>,
+  ): Promise<AuthoringSnapshot> {
+    return parseAuthoringResponse(
+      await fetch("/api/dev/authoring", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+
+  useEffect(() => {
+    void Promise.all([
+      fetch("/api/dev/ingestion", { cache: "no-store" }).then((response) =>
+        response.json(),
+      ),
+      fetch("/api/dev/platform", { cache: "no-store" }).then((response) =>
+        response.json(),
+      ),
+      fetch("/api/dev/authoring", { cache: "no-store" }).then(
+        parseAuthoringResponse,
+      ),
+    ])
+      .then(([pipeline, platform, authoringSnapshot]) => {
+        const ingestion = pipeline as {
+          active?: {
+            versionId: string;
+            sequence: number;
+            documents: Array<{ body: string }>;
+            chunks: readonly unknown[];
+            diagrams: readonly unknown[];
+          };
+        };
+        const tenant = platform as { tenant: { displayName: string } };
+        setTenantName(tenant.tenant.displayName);
+        applySnapshot(authoringSnapshot);
+        setActiveVersionId(ingestion.active?.versionId);
+        if (ingestion.active) {
+          setDocumentCount(ingestion.active.documents.length);
+          setSourceCount(ingestion.active.documents.length);
+          setChunkCount(ingestion.active.chunks.length);
+          setDiagramCount(ingestion.active.diagrams.length);
+          showNotice(
+            `Course v${authoringSnapshot.course.version} and knowledge v${ingestion.active.sequence} verified`,
+            "success",
+          );
+        }
+      })
+      .catch((error: unknown) =>
+        showNotice(
+          error instanceof Error ? error.message : "Authoring runtime unavailable.",
+          "error",
+        ),
+      );
+    // Development runtime is intentionally loaded once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadLesson(lessonId: string) {
+    try {
+      const snapshot = await parseAuthoringResponse(
+        await fetch(
+          `/api/dev/authoring?lessonId=${encodeURIComponent(lessonId)}`,
+          { cache: "no-store" },
+        ),
+      );
+      applySnapshot(snapshot);
+      showNotice(`Loaded ${snapshot.lesson.title} from course v${snapshot.course.version}`);
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Lesson could not load.", "error");
+    }
+  }
+
+  async function saveDraft(
+    version = authoring?.course.version,
+  ): Promise<AuthoringSnapshot> {
+    if (!authoring || version === undefined) {
+      throw new Error("Authoring state is still loading.");
+    }
+    if (!dirty) return authoring;
+    const snapshot = await postAuthoring({
+      action: "import",
+      lessonId: selected,
+      expectedVersion: version,
+      format: importFormat,
+      content,
+      idempotencyKey: `lesson-import-${crypto.randomUUID()}`,
+    });
+    applySnapshot(snapshot);
+    return snapshot;
+  }
+
+  async function createCourse() {
+    const title = newCourseTitle.trim();
+    if (!title) {
+      showNotice("Name the course before creating its private draft.", "error");
+      return;
+    }
+    try {
+      const response = await fetch("/api/dev/courses", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          title,
+          description: "New course draft",
+          idempotencyKey: `course-create-${crypto.randomUUID()}`,
+        }),
+      });
+      const payload = (await response.json()) as {
+        course?: { version: number };
+        message?: string;
+      };
+      if (!response.ok || !payload.course) {
+        throw new Error(payload.message ?? "Course draft was not created.");
+      }
+      setShowNewCourse(false);
+      setNewCourseTitle("");
+      showNotice(
+        `${title} created as private draft v${payload.course.version} · open it from Courses`,
+        "success",
+      );
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Course creation failed.", "error");
+    }
+  }
+
+  async function addLesson() {
+    if (!authoring) return;
+    try {
+      const snapshot = await postAuthoring({
+        action: "add_lesson",
+        expectedVersion: authoring.course.version,
+        title: newLessonTitle,
+        idempotencyKey: `lesson-add-${crypto.randomUUID()}`,
+      });
+      applySnapshot(snapshot);
+      setNewLessonTitle("");
+      setShowNewLesson(false);
+      showNotice(
+        `${snapshot.lesson.title} added as a private draft in course v${snapshot.course.version}`,
+        "success",
+      );
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Lesson was not added.", "error");
+    }
+  }
+
+  async function formatLesson(
+    format: "bold" | "italic" | "heading" | "list",
+  ) {
+    if (!authoring) return;
+    try {
+      const saved = await saveDraft();
+      const snapshot = await postAuthoring({
+        action: "format",
+        lessonId: selected,
+        expectedVersion: saved.course.version,
+        format,
+        idempotencyKey: `format-${format}-${crypto.randomUUID()}`,
+      });
+      applySnapshot(snapshot);
+      showNotice(
+        `${format} saved as structured blocks in draft v${snapshot.course.version}`,
+        "success",
+      );
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Formatting failed.", "error");
+    }
+  }
+
+  async function cleanContent() {
+    if (!authoring) return;
     const cleaned = content
-      .replace(/\s+/g, " ")
-      .replace(/\. /g, ".\n\n")
+      .replace(/[ \t]+/gu, " ")
+      .replace(/\n{3,}/gu, "\n\n")
       .trim();
-    setContent(cleaned);
-    setNotice("Cleaned formatting · review before publishing");
+    try {
+      const snapshot = await postAuthoring({
+        action: "import",
+        lessonId: selected,
+        expectedVersion: authoring.course.version,
+        format: "plain_text",
+        content: cleaned,
+        idempotencyKey: `clean-import-${crypto.randomUUID()}`,
+      });
+      applySnapshot(snapshot);
+      showNotice(
+        `Content sanitized and saved in draft v${snapshot.course.version}`,
+        "success",
+      );
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Content was not saved.", "error");
+    }
   }
 
-  function reingest() {
+  async function addEmbed() {
+    if (!authoring) return;
+    try {
+      const saved = await saveDraft();
+      const snapshot = await postAuthoring({
+        action: "add_embed",
+        lessonId: selected,
+        expectedVersion: saved.course.version,
+        url: embedUrl,
+        idempotencyKey: `embed-add-${crypto.randomUUID()}`,
+      });
+      applySnapshot(snapshot);
+      setEmbedUrl("");
+      showNotice(
+        `HTTPS embed approved and saved in draft v${snapshot.course.version}`,
+        "success",
+      );
+    } catch (error) {
+      showNotice(
+        error instanceof Error ? error.message : "Unsafe embed rejected.",
+        "error",
+      );
+    }
+  }
+
+  async function approveDiagram() {
+    if (!authoring) return;
+    try {
+      const saved = await saveDraft();
+      const snapshot = await postAuthoring({
+        action: "approve_diagram",
+        lessonId: selected,
+        expectedVersion: saved.course.version,
+        altText: diagramAltText,
+        caption: diagramCaption,
+        idempotencyKey: `diagram-approve-${crypto.randomUUID()}`,
+      });
+      applySnapshot(snapshot);
+      showNotice(
+        `Diagram approved with accessible text in draft v${snapshot.course.version}`,
+        "success",
+      );
+    } catch (error) {
+      showNotice(
+        error instanceof Error ? error.message : "Diagram approval failed.",
+        "error",
+      );
+    }
+  }
+
+  async function addLearning() {
     setJob("running");
-    setSaved(content);
-    setNotice("Selective re-ingest started for this lesson");
+    showNotice("New source added · validating, scanning and extracting");
+    try {
+      const response = await fetch("/api/dev/ingestion", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "start",
+          title: `Creator upload ${sourceCount + 1}`,
+          body: content,
+          idempotencyKey: `source-${crypto.randomUUID()}`,
+        }),
+      });
+      if (!response.ok) throw new Error("Ingestion failed.");
+      const result = (await response.json()) as {
+        job: {
+          draftVersionId?: string;
+          artifacts: { chunks: readonly unknown[] };
+        };
+      };
+      setSourceCount((count) => count + 1);
+      setDraftVersionId(result.job.draftVersionId);
+      setJob("ready");
+      showNotice(
+        `Source ready · ${result.job.artifacts.chunks.length} chunks in a reviewable draft`,
+        "success",
+      );
+    } catch {
+      setJob("ready");
+      showNotice("Source failed safely · active learning was not changed", "error");
+    }
   }
 
-  function publish() {
-    setSaved(content);
-    setJob("published");
-    setNotice("Version 12 published · students see the update");
+  async function reingest() {
+    if (!authoring) return;
+    setJob("running");
+    showNotice("Saving the authoring draft before selective re-ingest…");
+    try {
+      await saveDraft();
+      const response = await fetch("/api/dev/ingestion", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "reprocess",
+          body: content,
+          idempotencyKey: `lesson-reprocess-${crypto.randomUUID()}`,
+        }),
+      });
+      if (!response.ok) throw new Error("Re-ingest failed.");
+      const result = (await response.json()) as {
+        result: {
+          preview: { estimatedEmbeddingWrites: number };
+          draftVersion: { versionId: string; sequence: number };
+        };
+      };
+      setDraftVersionId(result.result.draftVersion.versionId);
+      setJob("ready");
+      showNotice(
+        `Knowledge draft v${result.result.draftVersion.sequence} ready · ${result.result.preview.estimatedEmbeddingWrites} affected embeddings`,
+        "success",
+      );
+    } catch (error) {
+      setJob("ready");
+      showNotice(
+        error instanceof Error
+          ? error.message
+          : "Selective re-ingest failed safely.",
+        "error",
+      );
+    }
   }
 
-  function rollback() {
-    setContent(saved);
-    setJob("ready");
-    setNotice("Rolled back to the last published lesson");
+  async function previewValidation() {
+    try {
+      const saved = await saveDraft();
+      showNotice(
+        saved.publishValidation.valid
+          ? `Validation passed · ${saved.publishValidation.issues.length} non-blocking warning(s)`
+          : `Validation blocked · ${saved.publishValidation.issues.filter((issue) => issue.severity === "error").length} error(s)`,
+        saved.publishValidation.valid ? "success" : "error",
+      );
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Validation failed.", "error");
+    }
+  }
+
+  async function publish() {
+    if (!authoring) return;
+    showNotice("Validating and publishing the tenant course revision…");
+    try {
+      const saved = await saveDraft();
+      if (!saved.publishValidation.valid) {
+        applySnapshot(saved);
+        showNotice(
+          `Publish blocked by ${saved.publishValidation.issues.filter((issue) => issue.severity === "error").length} validation error(s)`,
+          "error",
+        );
+        return;
+      }
+      const published = await postAuthoring({
+        action: "publish",
+        expectedVersion: saved.course.version,
+        auditNote: "Published from the Northstar creator workspace.",
+        idempotencyKey: `course-publish-${crypto.randomUUID()}`,
+      });
+      applySnapshot(published);
+
+      if (draftVersionId) {
+        const response = await fetch("/api/dev/ingestion", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "publish",
+            draftVersionId,
+            expectedActiveVersionId: activeVersionId,
+          }),
+        });
+        if (!response.ok) {
+          showNotice(
+            `Course v${published.course.version} published; knowledge publication conflicted and stayed unchanged`,
+            "error",
+          );
+          return;
+        }
+        const result = (await response.json()) as {
+          published: { versionId: string; sequence: number };
+        };
+        setPreviousActiveVersionId(activeVersionId);
+        setActiveVersionId(result.published.versionId);
+        setDraftVersionId(undefined);
+        showNotice(
+          `Course v${published.course.version} and knowledge v${result.published.sequence} published`,
+          "success",
+        );
+      } else {
+        showNotice(
+          `Course v${published.course.version} published · no knowledge re-index was pending`,
+          "success",
+        );
+      }
+      setJob("published");
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Publish failed.", "error");
+    }
+  }
+
+  async function rollbackTo(targetVersion: number) {
+    if (!authoring) return;
+    try {
+      const snapshot = await postAuthoring({
+        action: "rollback",
+        expectedVersion: authoring.course.version,
+        targetVersion,
+        auditNote: `Rolled back to reviewed course revision v${targetVersion}.`,
+        idempotencyKey: `course-rollback-${targetVersion}-${crypto.randomUUID()}`,
+      });
+      applySnapshot(snapshot);
+      showNotice(
+        `Course restored from v${targetVersion} as new draft v${snapshot.course.version}`,
+        "success",
+      );
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Rollback failed.", "error");
+    }
+  }
+
+  async function rollback() {
+    const previous =
+      authoring?.revisions
+        .filter((revision) => revision.version < (authoring?.course.version ?? 0))
+        .at(-1)?.version;
+    if (previous === undefined) {
+      showNotice("No prior authoring revision is available.", "error");
+      return;
+    }
+    await rollbackTo(previous);
+    if (previousActiveVersionId && activeVersionId) {
+      try {
+        const response = await fetch("/api/dev/ingestion", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "rollback",
+            targetVersionId: previousActiveVersionId,
+            expectedActiveVersionId: activeVersionId,
+          }),
+        });
+        if (response.ok) {
+          const result = (await response.json()) as {
+            rolledBack: { versionId: string };
+          };
+          setActiveVersionId(result.rolledBack.versionId);
+          setPreviousActiveVersionId(undefined);
+        }
+      } catch {
+        showNotice(
+          `Course rolled back; knowledge rollback could not be confirmed`,
+          "error",
+        );
+      }
+    }
   }
 
   const stages = [
-    ["Received", "8 sources"],
-    ["Extracted", "214 sections"],
-    ["Structured", "5 modules"],
-    ["Indexed", job === "running" ? "Updating…" : "1,842 chunks"],
-    ["Ready", job === "published" ? "Published" : "Draft v12"]
+    ["Received", `${sourceCount} source${sourceCount === 1 ? "" : "s"}`],
+    ["Extracted", `${documentCount} document${documentCount === 1 ? "" : "s"}`],
+    ["Structured", `${authoring?.course.modules.length ?? 1} module`],
+    [
+      "Indexed",
+      job === "running"
+        ? "Updating…"
+        : `${chunkCount} chunk${chunkCount === 1 ? "" : "s"}`,
+    ],
+    ["Ready", `Course v${authoring?.course.version ?? 12}`],
   ];
 
   return (
@@ -79,33 +628,56 @@ export default function LearningWorkspace() {
           <a href="#students">Students</a>
         </nav>
         <div className={styles.tenant}>
-          <span>AC</span>
-          <div><strong>Atlas Collective</strong><small>Creator workspace</small></div>
+          <span>NA</span>
+          <div><strong>{tenantName}</strong><small>Creator workspace</small></div>
         </div>
       </aside>
 
       <section className={styles.workspace}>
         <header className={styles.topbar}>
           <div>
-            <p className={styles.eyebrow}>Courses / Sustainable systems</p>
-            <h1>Sustainable Motion Systems</h1>
+            <p className={styles.eyebrow}>Courses / {authoring?.course.status ?? "loading"}</p>
+            <h1>{authoring?.course.title ?? "Momentum Method"}</h1>
           </div>
           <div className={styles.headerActions}>
-            <button className={styles.secondary} onClick={rollback}>Rollback</button>
-            <button className={styles.publish} onClick={publish}>Publish changes</button>
+            <button className={styles.secondary} onClick={() => void rollback()}>Rollback</button>
+            <button className={styles.publish} onClick={() => void publish()}>Publish changes</button>
           </div>
         </header>
 
-        <div className={styles.statusbar}>
+        <div
+          className={`${styles.statusbar} ${
+            noticeTone === "error"
+              ? styles.statusError
+              : noticeTone === "success"
+                ? styles.statusSuccess
+                : ""
+          }`}
+          role={noticeTone === "error" ? "alert" : "status"}
+        >
           <span className={job === "running" ? styles.pulse : styles.dot} />
           <strong>{notice}</strong>
-          <span>5 modules</span><span>{sourceCount} sources</span><span>98% coverage</span>
+          <span>{dirty ? "Unsaved editor" : "Draft saved"}</span>
+          <span>{errors.length} blocking</span>
+          <span>{warnings.length} warnings</span>
         </div>
+
+        {showNewCourse ? (
+          <section className={styles.quickCreate} aria-label="Create course">
+            <div><p className={styles.eyebrow}>Private by default</p><h2>Create a course draft</h2></div>
+            <input aria-label="New course title" placeholder="Course title" value={newCourseTitle} onChange={(event) => setNewCourseTitle(event.target.value)} />
+            <button className={styles.secondary} onClick={() => setShowNewCourse(false)}>Cancel</button>
+            <button className={styles.publish} onClick={() => void createCourse()}>Create draft</button>
+          </section>
+        ) : null}
 
         <section className={styles.pipeline} aria-label="Ingestion pipeline">
           <div className={styles.pipelineHeading}>
             <div><p className={styles.eyebrow}>Learning pipeline</p><h2>Course knowledge</h2></div>
-            <button className={styles.add} onClick={addLearning}>＋ Add learning</button>
+            <div className={styles.headerActions}>
+              <button className={styles.secondary} onClick={() => setShowNewCourse(true)}>＋ New course</button>
+              <button className={styles.add} onClick={() => void addLearning()}>＋ Add learning</button>
+            </div>
           </div>
           <div className={styles.stages}>
             {stages.map(([label, value], index) => (
@@ -123,18 +695,24 @@ export default function LearningWorkspace() {
         <div className={styles.editorGrid}>
           <aside className={styles.outline}>
             <div className={styles.panelTitle}>
-              <div><p className={styles.eyebrow}>Course outline</p><h2>Module 2</h2></div>
-              <button aria-label="Add lesson">＋</button>
+              <div><p className={styles.eyebrow}>Course outline</p><h2>{currentModule?.title ?? "Build Your Rhythm"}</h2></div>
+              <button aria-label="Add lesson" onClick={() => setShowNewLesson(true)}>＋</button>
             </div>
-            <p className={styles.moduleLabel}>Design the system</p>
-            {lessons.map((lesson) => (
+            {showNewLesson ? (
+              <div className={styles.inlineForm}>
+                <input aria-label="New lesson title" placeholder="Lesson title" value={newLessonTitle} onChange={(event) => setNewLessonTitle(event.target.value)} />
+                <div><button onClick={() => setShowNewLesson(false)}>Cancel</button><button onClick={() => void addLesson()}>Add</button></div>
+              </div>
+            ) : null}
+            <p className={styles.moduleLabel}>{currentModule?.title ?? "Build Your Rhythm"}</p>
+            {allLessons.map((lesson, index) => (
               <button
-                className={selected === lesson.id ? styles.lessonSelected : styles.lesson}
-                key={lesson.id}
-                onClick={() => setSelected(lesson.id)}
+                className={selected === lesson.lessonId ? styles.lessonSelected : styles.lesson}
+                key={lesson.lessonId}
+                onClick={() => void loadLesson(lesson.lessonId)}
               >
-                <span>{lesson.id}</span>
-                <div><strong>{lesson.title}</strong><small>{lesson.meta}</small></div>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <div><strong>{lesson.title}</strong><small>{lesson.estimatedMinutes ?? "—"} min · {lesson.status}</small></div>
               </button>
             ))}
           </aside>
@@ -142,49 +720,86 @@ export default function LearningWorkspace() {
           <section className={styles.editor}>
             <div className={styles.editorHeading}>
               <div>
-                <p className={styles.eyebrow}>Lesson {selected} · Rich text</p>
-                <h2>{lessons.find((lesson) => lesson.id === selected)?.title}</h2>
+                <p className={styles.eyebrow}>Lesson authoring · {importFormat.replace("_", " ")}</p>
+                <h2>{currentLesson?.title ?? "Minimum Day"}</h2>
               </div>
-              <span className={styles.health}>Grounding healthy</span>
+              <span className={styles.health}>{dirty ? "Unsaved draft" : "Version controlled"}</span>
             </div>
             <div className={styles.toolbar} aria-label="Formatting toolbar">
-              <button><b>B</b></button><button><i>I</i></button><button>H2</button>
-              <button>☷</button><span /><small>184 words · 3 chunks</small>
+              <button aria-label="Bold lesson text" onClick={() => void formatLesson("bold")}><b>B</b></button>
+              <button aria-label="Italicize lesson text" onClick={() => void formatLesson("italic")}><i>I</i></button>
+              <button aria-label="Make first block a heading" onClick={() => void formatLesson("heading")}>H2</button>
+              <button aria-label="Convert lesson to list" onClick={() => void formatLesson("list")}>☷</button>
+              <select aria-label="Import format" value={importFormat} onChange={(event) => setImportFormat(event.target.value as "plain_text" | "markdown")}>
+                <option value="plain_text">Plain text</option>
+                <option value="markdown">Markdown</option>
+              </select>
+              <span />
+              <small>{content.trim().split(/\s+/u).filter(Boolean).length} words · {currentLesson?.blocks.length ?? 0} blocks</small>
             </div>
             <textarea
               aria-label="Lesson content"
               value={content}
               onChange={(event) => {
                 setContent(event.target.value);
-                setNotice("Unsaved draft changes");
+                showNotice("Unsaved editor changes · live course remains unchanged");
               }}
             />
             <div className={styles.suggestion}>
               <span>✦</span>
-              <div><strong>One cleanup suggested</strong><p>Normalize spacing and split this lesson into clearer retrieval sections.</p></div>
-              <button onClick={cleanContent}>Clean content</button>
+              <div><strong>Safe import boundary</strong><p>Formatting is sanitized and saved as provider-neutral rich-text blocks.</p></div>
+              <button onClick={() => void cleanContent()}>Clean &amp; save</button>
             </div>
             <footer className={styles.editorFooter}>
-              <p>Only this lesson will be reprocessed. The live version stays available.</p>
-              <div><button className={styles.secondary} onClick={() => setNotice("Preview ready · 3 grounded test answers")}>Preview</button>
-              <button className={styles.reingest} onClick={reingest}>↻ Re-ingest lesson</button></div>
+              <p>Authoring revisions and retrieval versions are separate and remain rollback-safe.</p>
+              <div>
+                <button className={styles.secondary} onClick={() => void previewValidation()}>Validate</button>
+                <button className={styles.reingest} onClick={() => void reingest()}>↻ Re-ingest lesson</button>
+              </div>
             </footer>
           </section>
 
           <aside className={styles.inspector}>
-            <p className={styles.eyebrow}>Lesson intelligence</p>
-            <h2>Ready to publish</h2>
-            <div className={styles.score}><strong>98</strong><span>Retrieval<br />coverage</span></div>
-            <dl>
-              <div><dt>Source</dt><dd>Module 2 transcript</dd></div>
-              <div><dt>Last indexed</dt><dd>4 minutes ago</dd></div>
-              <div><dt>Diagrams</dt><dd>2 candidates</dd></div>
-              <div><dt>Warnings</dt><dd className={styles.good}>None</dd></div>
-            </dl>
-            <div className={styles.diagram}>
-              <span>Trigger</span><i>→</i><span>Action</span><i>→</i><span>Result</span>
+            <p className={styles.eyebrow}>Validation &amp; revisions</p>
+            <h2>{authoring?.publishValidation.valid ? "Ready to publish" : `${errors.length} blockers`}</h2>
+            <div className={styles.score}><strong>{currentLesson?.blocks.length ?? 0}</strong><span>Structured authoring<br />blocks</span></div>
+
+            <div className={styles.issueList}>
+              {issues.length === 0 ? <p className={styles.good}>No validation issues</p> : issues.slice(0, 4).map((issue) => (
+                <p className={issue.severity === "error" ? styles.issueError : styles.issueWarning} key={`${issue.code}:${issue.blockId ?? issue.lessonId ?? ""}`}>
+                  <strong>{issue.severity}</strong> {issue.message}
+                </p>
+              ))}
             </div>
-            <button className={styles.full}>Review diagram candidates</button>
+
+            <div className={styles.safetyPanel}>
+              <strong>External embed</strong>
+              <input aria-label="External embed URL" placeholder="https://youtube.com/…" value={embedUrl} onChange={(event) => setEmbedUrl(event.target.value)} />
+              <button className={styles.full} onClick={() => void addEmbed()}>Validate &amp; add embed</button>
+              <small>HTTPS allowlist only. Unsafe schemes, private hosts, and unapproved providers fail visibly.</small>
+            </div>
+
+            <div className={styles.diagram}>
+              <span>Disruption</span><i>→</i><span>Minimum</span><i>→</i><span>Evidence</span><i>→</i><span>Momentum</span>
+            </div>
+            <div className={styles.safetyPanel}>
+              <strong>{authoring?.diagramCandidate.approved ? "Diagram approved" : "Diagram candidate"}</strong>
+              <input aria-label="Diagram alt text" placeholder="Meaningful alt text required" value={diagramAltText} onChange={(event) => setDiagramAltText(event.target.value)} disabled={authoring?.diagramCandidate.approved} />
+              <input aria-label="Diagram caption" placeholder="Caption required" value={diagramCaption} onChange={(event) => setDiagramCaption(event.target.value)} disabled={authoring?.diagramCandidate.approved} />
+              <button className={styles.full} onClick={() => void approveDiagram()} disabled={authoring?.diagramCandidate.approved}>
+                {authoring?.diagramCandidate.approved ? "Approved with accessibility text" : "Approve diagram"}
+              </button>
+            </div>
+
+            <div className={styles.revisions}>
+              <strong>Immutable revisions</strong>
+              {[...(authoring?.revisions ?? [])].reverse().slice(0, 4).map((revision, index) => (
+                <div key={revision.revisionId}>
+                  <span>v{revision.version} · {revision.kind.replace("_", " ")}</span>
+                  {index > 0 ? <button onClick={() => void rollbackTo(revision.version)}>Restore</button> : <small>current</small>}
+                </div>
+              ))}
+            </div>
           </aside>
         </div>
       </section>

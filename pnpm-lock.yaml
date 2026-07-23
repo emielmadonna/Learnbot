@@ -14,9 +14,27 @@ importers:
 
   apps/console:
     dependencies:
+      '@course-ai/application-services':
+        specifier: workspace:*
+        version: link:../../packages/application-services
       '@course-ai/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@course-ai/course-authoring':
+        specifier: workspace:*
+        version: link:../../packages/course-authoring
+      '@course-ai/identity-access':
+        specifier: workspace:*
+        version: link:../../packages/identity-access
+      '@course-ai/learning-pipeline':
+        specifier: workspace:*
+        version: link:../../packages/learning-pipeline
+      '@course-ai/provider-router':
+        specifier: workspace:*
+        version: link:../../packages/provider-router
+      '@course-ai/realtime-voice':
+        specifier: workspace:*
+        version: link:../../packages/realtime-voice
       next:
         specifier: ^16.2.11
         version: 16.2.11(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -36,14 +54,64 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.17)
+      tsx:
+        specifier: ^4.23.1
+        version: 4.23.1
 
-  packages/contracts: {}
-
-  packages/mcp-server:
+  packages/application-services:
     dependencies:
       '@course-ai/contracts':
         specifier: workspace:*
         version: link:../contracts
+
+  packages/contracts: {}
+
+  packages/course-authoring:
+    dependencies:
+      '@course-ai/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/identity-access:
+    dependencies:
+      '@course-ai/application-services':
+        specifier: workspace:*
+        version: link:../application-services
+      '@course-ai/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
+  packages/learning-pipeline:
+    dependencies:
+      '@course-ai/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/mcp-server:
+    dependencies:
+      '@course-ai/application-services':
+        specifier: workspace:*
+        version: link:../application-services
+      '@course-ai/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@course-ai/learning-pipeline':
+        specifier: workspace:*
+        version: link:../learning-pipeline
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
@@ -57,6 +125,32 @@ importers:
       tsx:
         specifier: ^4.23.1
         version: 4.23.1
+
+  packages/provider-router:
+    dependencies:
+      '@course-ai/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/realtime-voice:
+    dependencies:
+      '@course-ai/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
 
 packages:
 

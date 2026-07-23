@@ -65,6 +65,7 @@
 .controls textarea { min-height: 76px; padding: 10px; resize: vertical; line-height: 1.5; }
 .controls input:focus, .controls select:focus, .controls textarea:focus, .mapping input:focus { border-color: #70a18a; box-shadow: 0 0 0 3px #e5f0e9; }
 .logoField input { display: none; }
+.logoField img, .launcher img, .companion header img { width: 32px; height: 32px; border-radius: 8px; background: white; object-fit: contain; }
 .logoField > div { display: grid; grid-template-columns: 39px 1fr auto; align-items: center; gap: 9px; min-height: 54px; padding: 8px; border: 1px dashed #ccd5ce; border-radius: 9px; cursor: pointer; }
 .logoField > div > b { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 9px; background: var(--green); color: white; }
 .logoField p { margin: 0; color: var(--muted); font-size: 9px; }

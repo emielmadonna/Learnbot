@@ -1,12 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import {
+  DEFAULT_RUNTIME_BRANDING,
+  loadRuntimeBranding,
+  publishRuntimeBranding,
+} from "../../../lib/branding-runtime";
 import styles from "./page.module.css";
 
 type Branding = {
   assistantName: string;
   initials: string;
+  logoDataUrl: string | null;
   primary: string;
   accent: string;
   surface: string;
@@ -19,17 +25,10 @@ type Branding = {
 };
 
 const initialBranding: Branding = {
-  assistantName: "Atlas Guide",
-  initials: "AG",
-  primary: "#1f5c46",
-  accent: "#d8a653",
-  surface: "#fffdf8",
+  ...DEFAULT_RUNTIME_BRANDING,
   launcherStyle: "Pill",
   position: "Bottom right",
-  welcome: "Hi, I’m Atlas Guide. Ask a question about this lesson, upload a file, or talk it through with me.",
   voice: "Harbor",
-  attribution: true,
-  privacyLink: true
 };
 
 function luminance(hex: string) {
@@ -50,23 +49,153 @@ function contrast(foreground: string, background: string) {
 export default function BrandingStudio() {
   const [draft, setDraft] = useState(initialBranding);
   const [published, setPublished] = useState(initialBranding);
-  const [status, setStatus] = useState("Published 12 minutes ago");
+  const [status, setStatus] = useState("Loading published tenant branding…");
   const [previewOpen, setPreviewOpen] = useState(true);
-  const [contextUrl, setContextUrl] = useState("/courses/sustainable-motion/module-2/lesson-3?progress=64");
+  const [contextUrl, setContextUrl] = useState("/courses/momentum-method/modules/build-your-rhythm/lessons/minimum-day");
+  const [resolvedContext, setResolvedContext] = useState<{
+    course?: string;
+    module?: string;
+    lesson?: string;
+    source: string;
+    confidence: number;
+    progress?: { coursePercentComplete: number };
+  } | null>(null);
   const ratio = useMemo(
     () => contrast(draft.primary, draft.surface),
     [draft.primary, draft.surface]
   );
   const dirty = JSON.stringify(draft) !== JSON.stringify(published);
 
+  useEffect(() => {
+    const persisted = { ...initialBranding, ...loadRuntimeBranding() };
+    setDraft(persisted);
+    setPublished(persisted);
+    void fetch("/api/dev/branding", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Branding unavailable.");
+        return (await response.json()) as {
+          assistant: { name: string; logoUrl?: string; welcomeMessage: string };
+          colors: { primary: string; accent: string; surface: string };
+          launcher: { style: string; position: string };
+          voice: { displayName: string };
+          attribution: { showPlatformAttribution: boolean; privacyUrl?: string };
+        };
+      })
+      .then((branding) => {
+        const loaded: Branding = {
+          ...persisted,
+          assistantName: branding.assistant.name,
+          initials: branding.assistant.name.slice(0, 2).toUpperCase(),
+          logoDataUrl: branding.assistant.logoUrl ?? null,
+          primary: branding.colors.primary,
+          accent: branding.colors.accent,
+          surface: branding.colors.surface,
+          launcherStyle:
+            branding.launcher.style === "circle"
+              ? "Circle"
+              : branding.launcher.style === "minimal"
+                ? "Minimal"
+                : "Pill",
+          position:
+            branding.launcher.position === "bottom_left"
+              ? "Bottom left"
+              : "Bottom right",
+          welcome: branding.assistant.welcomeMessage,
+          voice:
+            branding.voice.displayName === "Meadow" ||
+            branding.voice.displayName === "Sol"
+              ? branding.voice.displayName
+              : "Harbor",
+          attribution: branding.attribution.showPlatformAttribution,
+          privacyLink: Boolean(branding.attribution.privacyUrl),
+        };
+        setDraft(loaded);
+        setPublished(loaded);
+        publishRuntimeBranding({
+          assistantName: loaded.assistantName,
+          initials: loaded.initials,
+          logoDataUrl: loaded.logoDataUrl,
+          primary: loaded.primary,
+          accent: loaded.accent,
+          surface: loaded.surface,
+          welcome: loaded.welcome,
+          voice: loaded.voice,
+          attribution: loaded.attribution,
+          privacyLink: loaded.privacyLink,
+        });
+        setStatus("Published tenant branding loaded from the shared service");
+      })
+      .catch(() =>
+        setStatus("Shared branding unavailable · browser cache loaded safely"),
+      );
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetch("/api/dev/context", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: contextUrl, studentId: "student_maya_demo" }),
+      })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Context unavailable.");
+          return (await response.json()) as typeof resolvedContext;
+        })
+        .then(setResolvedContext)
+        .catch(() => setResolvedContext(null));
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [contextUrl]);
+
   function update<Key extends keyof Branding>(key: Key, value: Branding[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
     setStatus("Draft changes · autosaved");
   }
 
-  function publish() {
-    setPublished(draft);
-    setStatus("Branding published just now");
+  async function publish() {
+    const runtimeValue = {
+      assistantName: draft.assistantName,
+      initials: draft.initials,
+      logoDataUrl: draft.logoDataUrl,
+      primary: draft.primary,
+      accent: draft.accent,
+      surface: draft.surface,
+      welcome: draft.welcome,
+      voice: draft.voice,
+      attribution: draft.attribution,
+      privacyLink: draft.privacyLink,
+    } as const;
+    setStatus("Publishing tenant branding…");
+    try {
+      const response = await fetch("/api/dev/branding", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...runtimeValue,
+          idempotencyKey: `branding-${Date.now()}`,
+        }),
+      });
+      if (!response.ok) throw new Error("Branding publish failed.");
+      setPublished(draft);
+      publishRuntimeBranding(runtimeValue);
+      setStatus("Branding published to the tenant runtime just now");
+    } catch {
+      setStatus("Branding was not published · review and retry");
+    }
+  }
+
+  function uploadLogo(file?: File) {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setStatus("Logo must be smaller than 2 MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      update("logoDataUrl", typeof reader.result === "string" ? reader.result : null);
+      setStatus("Logo added to draft · publish when ready");
+    };
+    reader.readAsDataURL(file);
   }
 
   function rollback() {
@@ -79,7 +208,7 @@ export default function BrandingStudio() {
       <aside className={styles.nav}>
         <div className={styles.brand}><span>L</span>Learning OS</div>
         <p>Tenant workspace</p>
-        <strong>Atlas Collective</strong>
+        <strong>Northstar Academy</strong>
         <nav aria-label="Settings">
           <a href="/dev/learning">Courses</a>
           <a href="#assistant">Assistant</a>
@@ -87,7 +216,7 @@ export default function BrandingStudio() {
           <a href="#install">Install</a>
           <a href="#settings">Settings</a>
         </nav>
-        <div className={styles.tenant}><span>AC</span><div><b>Atlas Collective</b><small>Creator admin</small></div></div>
+        <div className={styles.tenant}><span>NA</span><div><b>Northstar Academy</b><small>Creator admin</small></div></div>
       </aside>
 
       <section className={styles.workspace}>
@@ -112,8 +241,8 @@ export default function BrandingStudio() {
             <div className={styles.twoColumns}>
               <label className={styles.logoField}>
                 <span>Logo</span>
-                <div><b>{draft.initials || "AG"}</b><p>Square SVG or PNG</p><em>Replace</em></div>
-                <input type="file" accept=".svg,.png,.jpg,.jpeg" />
+                <div>{draft.logoDataUrl ? <img alt="" src={draft.logoDataUrl} /> : <b>{draft.initials || "AG"}</b>}<p>Square SVG or PNG</p><em>Replace</em></div>
+                <input type="file" accept=".svg,.png,.jpg,.jpeg" onChange={(event) => uploadLogo(event.target.files?.[0])} />
               </label>
               <label>
                 <span>Assistant name</span>
@@ -165,20 +294,20 @@ export default function BrandingStudio() {
             <section className={styles.preview}>
               <div className={styles.previewTop}><div><p className={styles.eyebrow}>Live companion preview</p><h2>Lesson page</h2></div><span>Desktop · 100%</span></div>
               <div className={styles.browser}>
-                <div className={styles.browserBar}><i /><i /><i /><span>atlas.co/learn/module-2/lesson-3</span></div>
-                <article><small>Module 2 · Lesson 3</small><h3>Build a movement map</h3><div className={styles.fakeLine} /><div className={styles.fakeLine} /><div className={styles.fakeLineShort} /></article>
+                <div className={styles.browserBar}><i /><i /><i /><span>northstar.academy/learn/minimum-day</span></div>
+                <article><small>Build Your Rhythm · Lesson 2.3</small><h3>Minimum Day</h3><div className={styles.fakeLine} /><div className={styles.fakeLine} /><div className={styles.fakeLineShort} /></article>
                 <button
                   className={`${styles.launcher} ${draft.launcherStyle === "Circle" ? styles.circle : ""} ${draft.launcherStyle === "Minimal" ? styles.minimal : ""} ${draft.position === "Bottom left" ? styles.left : ""}`}
                   style={{ background: draft.primary, color: draft.surface }}
                   onClick={() => setPreviewOpen((open) => !open)}
                 >
-                  <b>{draft.initials}</b>{draft.launcherStyle === "Pill" && <span>Ask {draft.assistantName}</span>}
+                  {draft.logoDataUrl ? <img alt="" src={draft.logoDataUrl} /> : <b>{draft.initials}</b>}{draft.launcherStyle === "Pill" && <span>Ask {draft.assistantName}</span>}
                 </button>
                 {previewOpen && (
                   <div className={`${styles.companion} ${draft.position === "Bottom left" ? styles.panelLeft : ""}`} style={{ background: draft.surface }}>
-                    <header style={{ background: draft.primary, color: draft.surface }}><b>{draft.initials}</b><div><strong>{draft.assistantName}</strong><small>Course companion</small></div><button onClick={() => setPreviewOpen(false)}>×</button></header>
+                    <header style={{ background: draft.primary, color: draft.surface }}>{draft.logoDataUrl ? <img alt="" src={draft.logoDataUrl} /> : <b>{draft.initials}</b>}<div><strong>{draft.assistantName}</strong><small>Course companion</small></div><button onClick={() => setPreviewOpen(false)}>×</button></header>
                     <div className={styles.message} style={{ borderColor: draft.accent }}>{draft.welcome}</div>
-                    <div className={styles.contextChip}>◎ Lesson 3 context connected</div>
+                    <div className={styles.contextChip}>◎ Minimum Day context connected</div>
                     <div className={styles.composer}>Ask, attach or talk… <span>＋　◉　↑</span></div>
                     {(draft.privacyLink || draft.attribution) && <footer>{draft.privacyLink && "Privacy"}{draft.privacyLink && draft.attribution && " · "}{draft.attribution && "Powered by Learning OS"}</footer>}
                   </div>
@@ -187,13 +316,13 @@ export default function BrandingStudio() {
             </section>
 
             <section className={styles.mapping}>
-              <div className={styles.mappingHead}><div><p className={styles.eyebrow}>Learning context mapping</p><h2>URL rule preview</h2></div><span>Matched</span></div>
+              <div className={styles.mappingHead}><div><p className={styles.eyebrow}>Learning context mapping</p><h2>Verified URL rule</h2></div><span>{resolvedContext?.source === "url_mapping" ? "Matched" : "Unresolved"}</span></div>
               <label><span>Test a learning URL</span><input value={contextUrl} onChange={(event) => setContextUrl(event.target.value)} /></label>
               <div className={styles.contextRows}>
-                <div><span>Course</span><b>{contextUrl.includes("sustainable-motion") ? "Sustainable Motion Systems" : "No match"}</b></div>
-                <div><span>Module</span><b>{contextUrl.includes("module-2") ? "02 · Design the system" : "Unknown"}</b></div>
-                <div><span>Lesson</span><b>{contextUrl.includes("lesson-3") ? "03 · Build a movement map" : "Unknown"}</b></div>
-                <div><span>Progress</span><b>{contextUrl.includes("progress=") ? `${contextUrl.split("progress=")[1]?.split("&")[0]}% complete` : "Not provided"}</b></div>
+                <div><span>Course</span><b>{resolvedContext?.course ?? "No verified match"}</b></div>
+                <div><span>Module</span><b>{resolvedContext?.module ?? "Unknown"}</b></div>
+                <div><span>Lesson</span><b>{resolvedContext?.lesson ?? "Unknown"}</b></div>
+                <div><span>Progress</span><b>{resolvedContext?.progress ? `${resolvedContext.progress.coursePercentComplete}% complete` : "Not available"}</b></div>
               </div>
               <p className={styles.mappingNote}>Derived server-side from the verified host URL and tenant rule. Students cannot override mapped course identity.</p>
             </section>

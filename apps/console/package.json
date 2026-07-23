@@ -5,11 +5,19 @@
   "scripts": {
     "build": "next build --webpack",
     "dev": "next dev --webpack --hostname 127.0.0.1",
+    "smoke:authoring": "node src/app/api/dev/authoring/smoke.mjs",
     "start": "next start --hostname 127.0.0.1",
+    "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@course-ai/application-services": "workspace:*",
     "@course-ai/contracts": "workspace:*",
+    "@course-ai/course-authoring": "workspace:*",
+    "@course-ai/identity-access": "workspace:*",
+    "@course-ai/learning-pipeline": "workspace:*",
+    "@course-ai/provider-router": "workspace:*",
+    "@course-ai/realtime-voice": "workspace:*",
     "next": "^16.2.11",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
@@ -17,6 +25,7 @@
   "devDependencies": {
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3"
+    "@types/react-dom": "^19.2.3",
+    "tsx": "^4.23.1"
   }
 }

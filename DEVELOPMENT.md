@@ -23,42 +23,40 @@ Planned additions are one local Edge API and one shared fake/provider/data proce
 
 One file has one owner at a time. A lane requests shared-contract changes from the root integrator instead of editing across boundaries.
 
-## Four-day acceleration target
+## Implemented vertical slice
 
-This is a vertical-slice sprint, not an enterprise-production claim.
+The repository now includes:
 
-### Day 1 — shared contracts and interactive surfaces
-
-- tenant/request/provider/conversation/attachment/learning/MCP/Event/cost contracts;
-- live console with unified Student conversation and fast course workspace;
-- deterministic fake tenant/course/provider data;
-- route-level responsive and keyboard checks.
-
-### Day 2 — application-service spine
-
-- in-memory/fake application services behind the real contracts;
-- upload intent → scan/extract stage simulation → draft knowledge version;
-- unified chat request using draft/active retrieval fixtures;
-- read-only management MCP resources and job status.
-
-### Day 3 — first real vertical path
-
-- local persistence or approved Supabase development project;
-- tenant isolation/RLS migrations and negative tests;
-- one real text/embedding/storage adapter behind routers;
-- file upload, selective re-ingest, publish/rollback and audit/cost traces.
-
-### Day 4 — integration and handoff
-
-- Creator/Admin route integration;
-- error/degraded/permission states;
-- browser checks for desktop/mobile/keyboard;
-- serialized typecheck/build/test;
-- evidence ledger, blockers and next sprint.
+- tenant/request/provider/conversation/attachment/learning/MCP/event/cost contracts;
+- one Student conversation for streamed text, browser speech, files and verified
+  current-learning context;
+- a dedicated realtime voice canvas driven by live Web Audio energy and spectral
+  input, with tenant tinting, barge-in, cancellation-safe handoff and text
+  continuity;
+- Creator, Teacher, branding, learning-version and Platform Admin surfaces;
+- course authoring with sanitized rich blocks, optimistic versions, validation,
+  immutable revisions, publishing and rollback;
+- membership-derived development sessions, tenant-match guards and
+  actor-bound Student/voice ownership;
+- tenant-safe in-memory application services used by UI, APIs and MCP;
+- deterministic staged ingestion, selective reprocessing, atomic publish and
+  rollback;
+- provider-neutral routing with tenant policy, deadlines, compatible fallback,
+  circuit state and attempt/cost telemetry;
+- a management MCP whose mutations deny by default and require exact
+  tenant/actor/grant/idempotency context;
+- six Supabase migrations with 25 tenant-scoped tables, forced RLS, private
+  storage policies and executable SQL negative tests.
 
 ## Honest delivery boundary
 
-Four days can produce a convincing, testable end-to-end development slice. It cannot honestly produce the enterprise-ready system described in the acceptance contract. Production multi-tenancy, voice provider hardening, full diagrams, all connectors, billing, retention/export/delete, load/recovery evidence and pilot remediation remain subsequent parallel milestones.
+The current build is an evidence-backed development slice, not a production
+certification. PostgreSQL security tests require Docker or an approved Supabase
+development project. Production realtime transport/IdP adapters, durable
+identity and replay repositories, durable queues and
+outboxes, object storage, secret management, billing reconciliation,
+retention/export/delete execution, load/recovery evidence and deployment
+remediation remain explicit production milestones.
 
 ## Agent completion contract
 
