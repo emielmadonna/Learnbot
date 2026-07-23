@@ -25,6 +25,9 @@
 | L-12 | All variable cost is attributable from the first implementation phase. BYOK and platform-funded usage are distinct funding sources. |
 | L-13 | Design system and approved mockups precede completion of dashboard UI. Every screen has the complete state/behavior matrix. |
 | L-14 | No agent may weaken security, consent, accessibility or tenant isolation for speed. |
+| L-15 | Text, voice and file attachments share one composer, ordered conversation and context model; voice is not a separate product or history. |
+| L-16 | UI, API and first-party management MCP use the same tenant-aware application services, validation, job/version model and audit path. MCP is never a database/Vault bypass. |
+| L-17 | Ordinary Creator/Teacher course create, edit, clean, selective re-ingest, preview, publish and rollback require no SQL or code. |
 
 ## Open decisions
 
@@ -44,6 +47,7 @@
 | O-12 | Initial MCP servers/tools and creator permissions | Tools pilot | Registry, deny-by-default policy and fake server tests |
 | O-13 | Data retention by record class and region | Production privacy review | Minimize collection; configuration schema; deletion workflow |
 | O-14 | Whether the legacy Estie code/assets are copied, archived, or migrated in place | Phase 0 migration | Treat `/Users/emielmadonna/Estie Starr` as read-only input |
+| O-15 | Initial chat attachment types, per-file/conversation limits and attachment retention | Unified runtime implementation | Build validation/scanning/extraction contracts; use conservative configurable test limits and no silent KB promotion |
 
 ## Assumptions
 
@@ -54,6 +58,7 @@
 | A-03 | Circle behavior recorded in v3 remains accurate enough for planning. | Revalidate in a staging community before implementation; do not silently rewrite the historical v3 source. |
 | A-04 | Text chat is the baseline degraded mode for all voice failures. | Validate in voice prototypes and acceptance tests. |
 | A-05 | Opportunity recommendations are human-assistive and never autonomous outreach. | Product/privacy review before release. |
+| A-06 | The 14–18 week enterprise-beta range assumes three experienced full-time implementation lanes, timely decisions/accounts and no unknown legacy-data migration. | Reforecast after the first two-week contract/prototype gate and then at each vertical-slice gate. |
 
 ## Blockers
 
@@ -80,4 +85,7 @@
 | White-label theme harms accessibility | Semantic tokens, contrast checks, safe fallback theme, no arbitrary CSS/JS |
 | Missing events appear as low engagement | Data-health/freshness flags; “unknown” instead of zero when integration is degraded |
 | One-person operations overload | Idempotent jobs, loud queues, runbooks, auditability, bounded workstreams |
+| Parallel lanes drift into three implementations of the same rule | One tenant-aware application-service layer; contract owner; UI/API/MCP parity fixtures at every integration gate |
+| File upload becomes an injection, malware or data-leak path | Signed tenant-bound upload, validation/quarantine/extraction gate, content-as-data boundary, retention/deletion and negative isolation tests |
+| “Fast ingestion” causes silent content corruption | Draft/active versions, low-confidence review queue, scope/diff preview, selective retry, atomic publish and rollback |
 | Legacy secret or personal data migration | Inventory, secret scanning, explicit migration allowlist, never commit `.env`, recordings or raw private assets |

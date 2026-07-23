@@ -1,0 +1,20 @@
+{
+  "name": "course-ai-platform",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Enterprise multi-tenant course intelligence and assistant platform",
+  "packageManager": "pnpm@10.13.1",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "check": "pnpm docs:check && pnpm typecheck && pnpm test",
+    "docs:check": "node scripts/validate-docs.mjs",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

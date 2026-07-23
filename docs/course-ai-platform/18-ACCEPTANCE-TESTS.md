@@ -44,6 +44,13 @@ No phase or screen is complete until its applicable rows pass with retained evid
 | WID-02 | Launcher/panel/expanded/mobile, resize persistence, page navigation and reload resume work. |
 | WID-03 | Streaming sanitized Markdown, sources, approved diagrams, rating and telemetry work keyboard/touch/screen reader. |
 | WID-04 | Anonymous/self-reported/verified flows show correct capability and never overstate identity. |
+| WID-05 | Text, voice, attachments, transcripts, sources and diagrams remain in one ordered thread across modality, presentation and reconnect changes. |
+| WID-06 | Published tenant branding updates the logo/avatar, assistant name, semantic colors, launcher and welcome copy at runtime without rebuilding the Widget. |
+| WID-07 | “Currently learning” resolves from the verified page/course/module/lesson and learner progress context; ambiguous or stale mappings are disclosed instead of guessed. |
+| WID-08 | Desktop drag, bounded resize, expand and restore work by pointer and keyboard without losing conversation state; mobile uses the safe-area sheet contract. |
+| ATT-01 | Upload type/size validation, signed transport, malware quarantine and extraction complete before attachment retrieval; failed files never enter model context. |
+| ATT-02 | Tenant A cannot address Tenant B attachment/object/extraction; attachment removal and retention follow policy. |
+| ATT-03 | Chat attachments remain conversation-scoped unless an authorized Creator explicitly promotes them into a new course knowledge version. |
 | VOI-01 | Push-to-talk, tap-to-start, partial/final captions, streaming speech and barge-in satisfy state contract. |
 | VOI-02 | Permission/STT/TTS/realtime/network failures preserve input/history and continue in text. |
 | VOI-03 | Privacy/capture/recording indicators are accurate; raw audio retention follows policy. |
@@ -68,6 +75,9 @@ No phase or screen is complete until its applicable rows pass with retained evid
 |---|---|
 | ING-01 | Zero-to-themed assistant completes through UI in <1 owner-day; killed jobs resume idempotently; errors appear <1 minute. |
 | ING-02 | Legacy chunk algorithm preserves 1.8s pause, ~220-word target, 40-word overlap, wording and timestamps. |
+| ING-03 | In usability tests, a Creator starts a first course upload within five minutes, publishes a small lesson correction within two minutes hands-on, and starts selective re-ingest within three deliberate actions. |
+| ING-04 | Edit/clean/replace/re-ingest previews exact scope and downstream impact; only affected stages rerun; active retrieval remains on the last good version until atomic publish. |
+| ING-05 | UI, API and management MCP report the same job/stage/version state and typed failure reason for identical operations. |
 | DIA-01 | Full-course test yields approved assets; SVG validates; raster fallback works; unapproved assets are impossible to serve. |
 | UX-01 | All 12 required prototype groups are approved before corresponding UI completion. |
 | UX-02 | Every screen passes empty/loading/populated/error/degraded/permission, responsive, keyboard, motion, success and recovery review. |
@@ -83,6 +93,9 @@ No phase or screen is complete until its applicable rows pass with retained evid
 | MCP-03 | Output is bounded/untrusted and cannot cause chained unauthorized invocation. |
 | MCP-04 | Invocation authorization, risk, hashes/refs, status, latency, cost and trace are audited without secrets. |
 | MCP-05 | Remote failure degrades safely; a new adapter/server requires no core chat modification. |
+| MCP-06 | First-party management MCP can list/create/edit/clean/validate/re-ingest/preview/publish permitted course resources through the same application services as UI, with idempotency and dry-run where applicable. |
+| MCP-07 | Equivalent UI and MCP actions produce the same version/job result and policy/audit evidence; MCP has no database, object-store or Vault bypass. |
+| MCP-08 | An agent without an explicit tenant-scoped capability, budget and unexpired grant cannot discover or invoke the corresponding operation. |
 
 ## Evidence format
 

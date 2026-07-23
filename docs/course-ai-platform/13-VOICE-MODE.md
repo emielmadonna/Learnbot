@@ -2,6 +2,10 @@
 
 Voice is an optional modality of the Student Widget, not a separate product. Text and voice write into the same conversation and message history.
 
+**Locked definition:** conversational voice is a realtime, bidirectional,
+streaming session. Capturing a complete recording and uploading it as one
+message is an attachment feature, not Voice Mode.
+
 ## Session contract
 
 ```ts
@@ -26,6 +30,8 @@ interface RealtimeVoiceSession {
 - Push-to-talk: audio is sent while pressed; release commits turn.
 - Tap-to-start: explicit start opens a conversational session; tap/end closes.
 - Barge-in: detected Student speech cancels current generation/playback, records interruption and starts a new turn.
+- Turn state is explicit: `connecting → listening → thinking → speaking`, with
+  `listening` reachable directly from `speaking` through barge-in.
 - Partial transcripts are captions, not durable messages; final transcript becomes the user message.
 - Assistant text is persisted even when spoken; partial unplayed output is marked interrupted.
 

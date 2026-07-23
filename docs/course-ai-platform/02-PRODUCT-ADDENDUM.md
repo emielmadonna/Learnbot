@@ -90,13 +90,26 @@ White labeling is per Tenant and MUST cover:
 
 Tenant branding MUST NOT alter security boundaries, hide mandatory AI/recording/privacy indicators, or inject executable code.
 
+The published branding response drives the Widget at runtime: logo/avatar,
+assistant name, semantic colors, typography, greeting, voice and launcher
+presentation. No Creator-specific brand value may be compiled into the bundle.
+The companion supports launcher, panel and expanded presentations; on desktop
+it is draggable and resizable within safe viewport bounds, while mobile uses a
+full-screen sheet.
+
 ## 7. Seamless Student experience
 
 The Widget MUST:
 
 - load without breaking or materially slowing the host;
-- preserve one conversation across text/voice, panel/expanded/mobile, and page navigation where the host permits;
+- present text, voice and file attachment as controls in one composer, not separate products, pages or conversation histories;
+- preserve one conversation across text/voice, attachments, panel/expanded/mobile, and page navigation where the host permits;
+- allow a Student to move from typing to speaking and back during the same turn without losing transcript, sources, attachments or context;
+- implement conversational voice as a realtime streaming session with partial transcription, streaming response/audio and interruption/barge-in; a record-and-send voice note is not sufficient;
+- show attachment upload, scanning, extraction and failure status in the conversation; quarantined or unsupported files MUST never enter retrieval;
+- treat conversational attachments as tenant-scoped, conversation-scoped evidence by default. Promoting one into reusable course knowledge requires an explicit authorized action and a new knowledge version;
 - understand current page/course/module/lesson context;
+- display “Currently learning” only from resolved host page, verified context mapping or Student progress data, including confidence/fallback behavior; it MUST NOT be a hardcoded label;
 - stream useful feedback promptly;
 - make sources and diagrams understandable and accessible;
 - recover from refresh, network interruption, provider failure and permission denial;
@@ -118,6 +131,8 @@ The Creator surface MUST:
 - expose permission and integration limitations honestly;
 - preserve context and filters across navigation;
 - never require SQL or code for ordinary tenant operation.
+
+Creating, editing, cleaning and re-ingesting learning content are ordinary tenant operations. The Creator MUST be able to create a course shell, add one or many sources, inspect extraction/chunk/diagram results, correct content, preview the assistant, publish an atomic version and roll back without leaving the product. Small edits support selective reprocessing; a full rebuild is never the only option.
 
 ## 9. Provider-neutral architecture
 
@@ -154,6 +169,8 @@ Voice cloning MUST NOT be assumed. It is optional and requires explicit document
 
 MCP servers are centrally registered. Tool access is scoped by Tenant and role; permissions and risk are declared; secrets remain in Vault. Students receive no tools by default. Creator tools require explicit enablement. Every invocation is authorized, rate-limited, logged, costed and auditable. Tool output is untrusted. Models cannot select tools outside the allowed set. Remote failures degrade safely. Adapters add servers without modifying chat logic.
 
+The platform MUST also expose its own management MCP server so authorized Codex instances and other agents can perform the same course, source, ingestion, curation, assistant-draft and job-status operations available in the UI. UI and MCP call the same tenant-aware application services and policy checks; MCP is not a privileged database bypass. All mutating tools support dry-run where meaningful, idempotency keys, structured results and asynchronous job handles.
+
 See [MCP and Tools Architecture](14-MCP-AND-TOOLS-ARCHITECTURE.md).
 
 ## 12. Required mockups before dashboard implementation
@@ -185,10 +202,14 @@ See [Parallel Workstreams](17-PARALLEL-WORKSTREAMS.md).
 
 This addendum is satisfied only when:
 
+- text, voice and file upload operate inside one continuous conversation UI;
+- uploaded files are scanned, tenant-isolated, status-visible and never silently promoted into course knowledge;
+- a Creator can add, edit, clean, selectively re-ingest, preview, publish and roll back course knowledge without SQL or code;
 - all capability categories have provider-neutral contracts;
 - tenant selection/BYOK/fallback/telemetry are acceptance-tested;
 - voice text-fallback, privacy and consent paths are tested;
 - tools cannot escape Tenant/role/capability policy;
+- management MCP tools and the UI produce equivalent authorized outcomes through the same service layer;
 - Student Opportunities cite evidence and disclose confidence/freshness;
 - COGS reconciles usage to costs and separates estimates from invoices;
 - white-label themes pass accessibility and cannot inject code;
