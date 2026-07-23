@@ -1,6 +1,12 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 export const WRITE_PERMISSIONS = [
+  "course.create",
+  "course.update",
+  "course.authoring.edit",
+  "course.authoring.diagram.approve",
+  "course.authoring.publish",
+  "course.authoring.rollback",
   "learning.ingestion.start",
   "learning.version.publish",
   "branding.publish",
@@ -23,6 +29,9 @@ export interface McpGrant {
   actorId: string;
   tokenSha256: string;
   permissions: readonly WritePermission[];
+  expiresAt: string;
+  budgetUsd: number;
+  maxRequestsPerMinute: number;
 }
 
 export type SafeErrorCode =
@@ -82,6 +91,7 @@ function isWritePermission(value: unknown): value is WritePermission {
 function parseGrant(value: unknown): McpGrant | undefined {
   if (!isRecord(value)) return undefined;
   const { grantId, tenantId, actorId, tokenSha256, permissions } = value;
+  const { expiresAt, budgetUsd, maxRequestsPerMinute } = value;
   if (
     typeof grantId !== "string" ||
     grantId.length === 0 ||
@@ -93,7 +103,16 @@ function parseGrant(value: unknown): McpGrant | undefined {
     !/^[0-9a-f]{64}$/i.test(tokenSha256) ||
     !Array.isArray(permissions) ||
     permissions.length === 0 ||
-    !permissions.every(isWritePermission)
+    !permissions.every(isWritePermission) ||
+    typeof expiresAt !== "string" ||
+    !Number.isFinite(Date.parse(expiresAt)) ||
+    typeof budgetUsd !== "number" ||
+    !Number.isFinite(budgetUsd) ||
+    budgetUsd <= 0 ||
+    typeof maxRequestsPerMinute !== "number" ||
+    !Number.isInteger(maxRequestsPerMinute) ||
+    maxRequestsPerMinute <= 0 ||
+    maxRequestsPerMinute > 10_000
   ) {
     return undefined;
   }
@@ -103,6 +122,9 @@ function parseGrant(value: unknown): McpGrant | undefined {
     actorId,
     tokenSha256: tokenSha256.toLowerCase(),
     permissions,
+    expiresAt,
+    budgetUsd,
+    maxRequestsPerMinute,
   };
 }
 
@@ -129,6 +151,9 @@ export class GrantAuthorizer {
   readonly configuredGrantCount: number;
   readonly configurationValid: boolean;
   readonly #grants: ReadonlyMap<string, McpGrant>;
+  readonly #reservations = new Map<string, number>();
+  readonly #reservedByGrant = new Map<string, number>();
+  readonly #requestTimesByGrant = new Map<string, number[]>();
 
   constructor(configuration: GrantConfiguration) {
     this.configurationValid = configuration.valid;
@@ -138,7 +163,15 @@ export class GrantAuthorizer {
     );
   }
 
-  authorize(context: MutationContext, permission: WritePermission): void {
+  authorize(
+    context: MutationContext,
+    permission: WritePermission,
+    options: {
+      readonly operation?: string;
+      readonly estimatedCostUsd?: number;
+      readonly nowMs?: number;
+    } = {},
+  ): void {
     if (!this.configurationValid) {
       throw new McpSafeError({
         code: "MCP_INVALID_CONFIGURATION",
@@ -154,12 +187,20 @@ export class GrantAuthorizer {
     const configuredTokenHash =
       grant === undefined ? Buffer.alloc(32) : Buffer.from(grant.tokenSha256, "hex");
     const tokenMatches = timingSafeEqual(suppliedTokenHash, configuredTokenHash);
+    const nowMs = options.nowMs ?? Date.now();
+    const expiresAtMs =
+      grant === undefined ? Number.NEGATIVE_INFINITY : Date.parse(grant.expiresAt);
+    const estimatedCostUsd = options.estimatedCostUsd ?? 0;
+    const validEstimate =
+      Number.isFinite(estimatedCostUsd) && estimatedCostUsd >= 0;
     const permitted =
       grant !== undefined &&
       tokenMatches &&
       grant.tenantId === context.tenantId &&
       grant.actorId === context.actorId &&
-      grant.permissions.includes(permission);
+      grant.permissions.includes(permission) &&
+      expiresAtMs > nowMs &&
+      validEstimate;
     if (!permitted) {
       throw new McpSafeError({
         code: "MCP_ACCESS_DENIED",
@@ -168,6 +209,57 @@ export class GrantAuthorizer {
         requestId: context.requestId,
       });
     }
+    const authorizedGrant = grant as McpGrant;
+
+    const reservationKey = [
+      context.grantId,
+      options.operation ?? permission,
+      context.idempotencyKey,
+    ].join(":");
+    const existingReservation = this.#reservations.get(reservationKey);
+    if (
+      existingReservation !== undefined &&
+      existingReservation !== estimatedCostUsd
+    ) {
+      throw new McpSafeError({
+        code: "MCP_ACCESS_DENIED",
+        message: "The MCP budget reservation does not match the original request.",
+        retryable: false,
+        requestId: context.requestId,
+      });
+    }
+    if (existingReservation !== undefined) return;
+
+    const recentRequestTimes = (
+      this.#requestTimesByGrant.get(context.grantId) ?? []
+    ).filter((timestamp) => timestamp > nowMs - 60_000);
+    if (recentRequestTimes.length >= authorizedGrant.maxRequestsPerMinute) {
+      throw new McpSafeError({
+        code: "MCP_ACCESS_DENIED",
+        message: "The MCP grant rate limit has been reached.",
+        retryable: true,
+        requestId: context.requestId,
+      });
+    }
+
+    const alreadyReserved = this.#reservedByGrant.get(context.grantId) ?? 0;
+    if (alreadyReserved + estimatedCostUsd > authorizedGrant.budgetUsd) {
+      throw new McpSafeError({
+        code: "MCP_ACCESS_DENIED",
+        message: "The MCP grant budget is insufficient for this operation.",
+        retryable: false,
+        requestId: context.requestId,
+      });
+    }
+    this.#reservations.set(reservationKey, estimatedCostUsd);
+    this.#reservedByGrant.set(
+      context.grantId,
+      alreadyReserved + estimatedCostUsd,
+    );
+    this.#requestTimesByGrant.set(context.grantId, [
+      ...recentRequestTimes,
+      nowMs,
+    ]);
   }
 }
 
@@ -262,10 +354,16 @@ type FetchLike = (
 export class ConsoleApiClient {
   readonly #baseUrl: string;
   readonly #fetch: FetchLike;
+  readonly #maximumResponseBytes: number;
 
-  constructor(baseUrl: string, fetchImplementation: FetchLike = fetch) {
+  constructor(
+    baseUrl: string,
+    fetchImplementation: FetchLike = fetch,
+    maximumResponseBytes = 1_000_000,
+  ) {
     this.#baseUrl = baseUrl.replace(/\/$/, "");
     this.#fetch = fetchImplementation;
+    this.#maximumResponseBytes = maximumResponseBytes;
   }
 
   async request<T>(
@@ -292,10 +390,37 @@ export class ConsoleApiClient {
       });
     }
 
+    const declaredLength = Number(response.headers.get("content-length"));
+    if (
+      Number.isFinite(declaredLength) &&
+      declaredLength > this.#maximumResponseBytes
+    ) {
+      throw new McpSafeError({
+        code: "MCP_UPSTREAM_REJECTED",
+        message: "The Course AI control plane response exceeded the safe limit.",
+        retryable: false,
+        ...(requestId ? { requestId } : {}),
+      });
+    }
+
     let payload: unknown;
     try {
-      payload = await response.json();
-    } catch {
+      const serialized = await response.text();
+      if (
+        new TextEncoder().encode(serialized).byteLength >
+        this.#maximumResponseBytes
+      ) {
+        throw new McpSafeError({
+          code: "MCP_UPSTREAM_REJECTED",
+          message:
+            "The Course AI control plane response exceeded the safe limit.",
+          retryable: false,
+          ...(requestId ? { requestId } : {}),
+        });
+      }
+      payload = JSON.parse(serialized);
+    } catch (error: unknown) {
+      if (error instanceof McpSafeError) throw error;
       throw new McpSafeError({
         code: "MCP_UPSTREAM_REJECTED",
         message: "The Course AI control plane returned an invalid response.",

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 300" role="img" aria-labelledby="title desc">
+  <title id="title">Momentum loop</title>
+  <desc id="desc">Disruption leads to a Minimum Day, then visible evidence, then renewed momentum.</desc>
+  <rect width="720" height="300" rx="28" fill="#f4f8f5"/>
+  <g font-family="system-ui, sans-serif" text-anchor="middle">
+    <g fill="#fff" stroke="#cddbd4" stroke-width="2">
+      <rect x="28" y="105" width="144" height="84" rx="18"/>
+      <rect x="200" y="105" width="144" height="84" rx="18"/>
+      <rect x="372" y="105" width="144" height="84" rx="18"/>
+      <rect x="544" y="105" width="148" height="84" rx="18"/>
+    </g>
+    <g fill="#173f34" font-size="18" font-weight="650">
+      <text x="100" y="154">Disruption</text>
+      <text x="272" y="143">Minimum</text><text x="272" y="166">Day</text>
+      <text x="444" y="154">Evidence</text>
+      <text x="618" y="154">Momentum</text>
+    </g>
+    <g fill="none" stroke="#b3914f" stroke-linecap="round" stroke-width="4">
+      <path d="M174 147h18"/><path d="M188 140l8 7-8 7"/>
+      <path d="M346 147h18"/><path d="M360 140l8 7-8 7"/>
+      <path d="M518 147h18"/><path d="M532 140l8 7-8 7"/>
+      <path d="M622 202c-14 54-500 54-520 0"/>
+      <path d="M101 211l1-9 9 3"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,29 @@
+{
+  "name": "@course-ai/widget-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": true,
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/widget.iife.js",
+  "module": "./dist/widget.esm.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/widget.esm.js",
+      "default": "./dist/widget.iife.js"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "pnpm build && node --test tests/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "size": "node scripts/check-size.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

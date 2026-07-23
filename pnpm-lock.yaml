@@ -88,6 +88,15 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/intelligence-core:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/learning-pipeline:
     dependencies:
       '@course-ai/contracts':
@@ -126,6 +135,15 @@ importers:
         specifier: ^4.23.1
         version: 4.23.1
 
+  packages/privacy-lifecycle:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/provider-router:
     dependencies:
       '@course-ai/contracts':
@@ -148,6 +166,12 @@ importers:
       '@types/node':
         specifier: ^26.1.1
         version: 26.1.1
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/widget-runtime:
+    devDependencies:
       typescript:
         specifier: 5.9.3
         version: 5.9.3

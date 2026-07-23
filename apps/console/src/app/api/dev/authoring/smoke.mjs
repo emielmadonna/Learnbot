@@ -1,7 +1,10 @@
 const baseUrl = process.env.COURSE_AI_CONSOLE_URL ?? "http://127.0.0.1:3100";
 
 async function request(path, init) {
-  const response = await fetch(`${baseUrl}${path}`, init);
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...init,
+    signal: AbortSignal.timeout(20_000),
+  });
   const payload = await response.json();
   if (!response.ok) {
     throw new Error(`${response.status} ${payload.code ?? payload.message}`);
@@ -41,6 +44,7 @@ const unsafe = await fetch(`${baseUrl}/api/dev/authoring`, {
     url: "javascript:alert(1)",
     idempotencyKey: `smoke-unsafe-${Date.now()}`,
   }),
+  signal: AbortSignal.timeout(20_000),
 });
 const unsafePayload = await unsafe.json();
 if (unsafe.status !== 422 || unsafePayload.code !== "authoring.invalid_input") {

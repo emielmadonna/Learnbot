@@ -184,8 +184,8 @@ export default function AdminConsole() {
             <div className={styles.cardHeading}><div><p className={styles.eyebrow}>Agent access</p><h2>Management MCP</h2></div><span className={styles.good}>Package verified</span></div>
             <div className={styles.mcpIdentity}><span>M</span><div><b>course-ai-management</b><small>stdio · v0.1.0 · tenant scoped</small></div></div>
             <dl className={styles.toolList}>
-              <div><dt>Registered tools</dt><dd>10 shared-service tools</dd></div>
-              <div><dt>Mutation tools</dt><dd>{toolsEnabled ? "Development grant" : "Denied by default"}</dd></div>
+              <div><dt>Registered tools</dt><dd>20 shared-service tools</dd></div>
+              <div><dt>Mutation tools</dt><dd>{toolsEnabled ? "Expiry + budget grant" : "Denied by default"}</dd></div>
               <div><dt>Student tools</dt><dd>0</dd></div>
               <div><dt>Provider attempts</dt><dd>{platform?.providers.attempts.length ?? 0} recorded</dd></div>
             </dl>

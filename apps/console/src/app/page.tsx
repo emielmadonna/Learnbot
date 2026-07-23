@@ -40,7 +40,7 @@ const modules = [
   {
     name: "MCP Control Plane",
     description: "The same safe operations for Codex and authorized agents.",
-    status: "10 tools verified",
+    status: "20 tools verified",
     href: "/dev/admin#mcp"
   }
 ];

@@ -14,7 +14,8 @@
     "smoke:dev": "node scripts/smoke-dev-api.mjs",
     "supabase:verify": "node infra/supabase/scripts/verify-structure.mjs",
     "test": "pnpm -r --if-present test",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "typecheck": "pnpm -r --if-present typecheck",
+    "verify:dev": "pnpm smoke:dev && pnpm --filter @course-ai/console smoke:authoring && pnpm --filter @course-ai/console smoke:widget && pnpm --filter @course-ai/mcp-server smoke && pnpm supabase:verify"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

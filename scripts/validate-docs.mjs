@@ -24,6 +24,7 @@ const expectedFiles = [
   "17-PARALLEL-WORKSTREAMS.md",
   "18-ACCEPTANCE-TESTS.md",
   "19-RISKS-AND-DECISIONS.md",
+  "20-IMPLEMENTATION-EVIDENCE.md",
   "HANDOFF-PROMPT.md"
 ];
 const preservedSpecificationSha256 =

@@ -1,0 +1,5 @@
+@media (min-width: 1181px) {
+  .workspace {
+    grid-template-columns: 220px minmax(500px, 1fr) 220px;
+  }
+}

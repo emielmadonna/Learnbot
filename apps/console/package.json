@@ -6,6 +6,7 @@
     "build": "next build --webpack",
     "dev": "next dev --webpack --hostname 127.0.0.1",
     "smoke:authoring": "node src/app/api/dev/authoring/smoke.mjs",
+    "smoke:widget": "node src/app/dev/widget/smoke.mjs",
     "start": "next start --hostname 127.0.0.1",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"

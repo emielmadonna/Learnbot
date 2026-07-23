@@ -38,6 +38,7 @@ The separate full-form addendum referenced by the task was not found on disk. Th
 | [17 Parallel Workstreams](17-PARALLEL-WORKSTREAMS.md) | Three bounded workstreams and RAM-safe coordination |
 | [18 Acceptance Tests](18-ACCEPTANCE-TESTS.md) | Traceable product, security, resilience and UX acceptance |
 | [19 Risks and Decisions](19-RISKS-AND-DECISIONS.md) | Locked/open decisions, assumptions, blockers and risks |
+| [20 Implementation Evidence](20-IMPLEMENTATION-EVIDENCE.md) | Graded local evidence and explicit live/production gaps |
 | [Handoff Prompt](HANDOFF-PROMPT.md) | Copy-ready instructions for future engineering agents |
 
 ## Requirement language

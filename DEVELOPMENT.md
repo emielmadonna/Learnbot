@@ -43,8 +43,17 @@ The repository now includes:
   rollback;
 - provider-neutral routing with tenant policy, deadlines, compatible fallback,
   circuit state and attempt/cost telemetry;
-- a management MCP whose mutations deny by default and require exact
-  tenant/actor/grant/idempotency context;
+- a framework-free Shadow-DOM Widget runtime with dynamic branding, honest
+  identity/context states, one multimodal thread, resumable layout and bounded
+  browser-safe distribution;
+- a closed intelligence event taxonomy, source-health states, deterministic
+  confusion/content-gap/stall/velocity metrics and human-reviewed Opportunity
+  lifecycle without autonomous outreach;
+- policy-driven, resumable privacy access/export/delete/retention workflows
+  with exact grants, legal holds, deletion tombstones, manifest integrity and
+  explicit partial/blocked states;
+- a 20-tool management MCP whose mutations deny by default and require exact
+  tenant/actor/grant/idempotency context plus expiry, budget and rate controls;
 - six Supabase migrations with 25 tenant-scoped tables, forced RLS, private
   storage policies and executable SQL negative tests.
 
@@ -55,7 +64,8 @@ certification. PostgreSQL security tests require Docker or an approved Supabase
 development project. Production realtime transport/IdP adapters, durable
 identity and replay repositories, durable queues and
 outboxes, object storage, secret management, billing reconciliation,
-retention/export/delete execution, load/recovery evidence and deployment
+approved privacy policies and production retention/export/delete adapters,
+load/recovery evidence and deployment
 remediation remain explicit production milestones.
 
 ## Agent completion contract
