@@ -1,13 +1,15 @@
 import Link from "next/link";
 import styles from "./circle.module.css";
 
-const snippet = `<script
-  src="https://clone.stack-labs.ai/integrations/circle-learningbot.js"
-  data-app-url="https://clone.stack-labs.ai/app/conversation"
-  data-label="Ask Estie"
-  data-primary="#205B46"
-  defer
-></script>`;
+const snippet = `(() => {
+  const script = document.createElement("script");
+  script.src = "https://clone.stack-labs.ai/integrations/circle-learningbot.js";
+  script.dataset.appUrl = "https://clone.stack-labs.ai/app/conversation";
+  script.dataset.label = "Ask Estie";
+  script.dataset.primary = "#205B46";
+  script.defer = true;
+  document.head.append(script);
+})();`;
 
 export default function CircleInstallPage() {
   return (
@@ -43,8 +45,9 @@ export default function CircleInstallPage() {
           <div>
             <h2>Add the launcher to Circle</h2>
             <p>
-              In Circle, open Website → Code snippets and paste this into the
-              footer/body code area.
+              In Circle, open Site → Code snippets → JavaScript and paste this
+              raw JavaScript. Do not add another script tag; Circle wraps the
+              JavaScript field for you.
             </p>
             <pre>
               <code>{snippet}</code>
