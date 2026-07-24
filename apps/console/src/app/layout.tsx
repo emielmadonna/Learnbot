@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import { PreviewNavigator } from "./preview-navigator";
 
 export const metadata: Metadata = {
   title: "Course AI Platform",
@@ -10,7 +11,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <PreviewNavigator />
+      </body>
     </html>
   );
 }

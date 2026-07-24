@@ -9,3 +9,4 @@ export * from "./outbox.js";
 export * from "./router.js";
 export * from "./fakes.js";
 export * from "./openai-responses.js";
+export * from "./openai-embeddings.js";

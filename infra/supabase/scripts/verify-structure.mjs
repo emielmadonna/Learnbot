@@ -29,6 +29,10 @@ const identityProvisioningTests = await readFile(
   resolve(root, "tests", "identity_provisioning_verification.sql"),
   "utf8",
 );
+const durableUploadTests = await readFile(
+  resolve(root, "tests", "durable_upload_intents_verification.sql"),
+  "utf8",
+);
 
 const manifestTables = [
   "tenants",
@@ -72,11 +76,16 @@ const identityTenantTables = [
   "identity_scim_receipts",
 ];
 const globalIdentityTables = ["identity_principals"];
+const durableUploadTables = [
+  "upload_intents",
+  "upload_callback_receipts",
+];
 const expectedTables = [
   ...manifestTables,
   ...durableExecutionTables,
   ...identityTenantTables,
   ...globalIdentityTables,
+  ...durableUploadTables,
 ];
 
 function fail(message) {
@@ -150,6 +159,17 @@ for (const table of [...identityTenantTables, ...globalIdentityTables]) {
   }
 }
 
+for (const table of durableUploadTables) {
+  for (const control of [
+    `alter table public.${table} enable row level security`,
+    `alter table public.${table} force row level security`,
+  ]) {
+    if (!sql.includes(control)) {
+      fail(`${table} is missing required upload control: ${control}`);
+    }
+  }
+}
+
 for (const required of [
   "enable row level security",
   "force row level security",
@@ -189,6 +209,12 @@ for (const acceptanceId of ["IAM-01", "IAM-02", "IAM-03"]) {
   }
 }
 
+for (const acceptanceId of ["UPL-01", "UPL-02", "UPL-03"]) {
+  if (!durableUploadTests.includes(acceptanceId)) {
+    fail(`missing upload verification coverage marker ${acceptanceId}`);
+  }
+}
+
 for (const required of [
   "list_active_identity_memberships",
   "resolve_identity_invitation_tenant",
@@ -199,6 +225,17 @@ for (const required of [
 ]) {
   if (!sql.includes(required)) {
     fail(`missing required identity control: ${required}`);
+  }
+}
+
+for (const required of [
+  "upload_intents_deny_authenticated",
+  "upload_callback_receipts_deny_authenticated",
+  "upload_intents_protect_update",
+  "upload_callback_receipts_reject_update",
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing required upload control: ${required}`);
   }
 }
 
@@ -238,5 +275,5 @@ for (const pattern of forbiddenCredentialAssignments) {
 }
 
 console.log(
-  `Verified ${migrationNames.length} ordered migrations, ${expectedTables.length} tables, 6 security controls, 3 durable execution controls and 3 identity controls.`,
+  `Verified ${migrationNames.length} ordered migrations, ${expectedTables.length} tables, 6 security controls, 3 durable execution controls, 3 identity controls and 3 upload controls.`,
 );

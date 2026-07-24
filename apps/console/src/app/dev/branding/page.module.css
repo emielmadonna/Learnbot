@@ -14,7 +14,7 @@
 }
 
 .nav { position: sticky; top: 0; display: flex; height: 100vh; flex-direction: column; padding: 23px 14px 17px; background: #15231d; color: white; }
-.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; padding: 0 9px; font-size: 14px; font-weight: 760; }
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; padding: 0 9px; color: inherit; font-size: 14px; font-weight: 760; text-decoration: none; }
 .brand > span { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: #dce8d8; color: #183a2c; }
 .nav > p { margin: 0 12px 4px; color: #7e9287; font-size: 9px; letter-spacing: .09em; text-transform: uppercase; }
 .nav > strong { margin: 0 12px 20px; font-size: 12px; }

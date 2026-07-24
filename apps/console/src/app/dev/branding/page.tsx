@@ -206,15 +206,15 @@ export default function BrandingStudio() {
   return (
     <main className={styles.shell}>
       <aside className={styles.nav}>
-        <div className={styles.brand}><span>L</span>Learning OS</div>
+        <a className={styles.brand} href="/"><span>L</span>Learning OS</a>
         <p>Tenant workspace</p>
         <strong>Northstar Academy</strong>
         <nav aria-label="Settings">
           <a href="/dev/learning">Courses</a>
-          <a href="#assistant">Assistant</a>
+          <a href="/dev/chat">Assistant</a>
           <a className={styles.active} href="/dev/branding">Branding</a>
-          <a href="#install">Install</a>
-          <a href="#settings">Settings</a>
+          <a href="/dev/widget">Install</a>
+          <a href="/dev/admin">Settings</a>
         </nav>
         <div className={styles.tenant}><span>NA</span><div><b>Northstar Academy</b><small>Creator admin</small></div></div>
       </aside>

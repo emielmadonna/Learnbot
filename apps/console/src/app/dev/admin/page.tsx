@@ -125,6 +125,9 @@ export default function AdminConsole() {
           <a href="#cost">Usage & cost</a>
           <a href="#mcp">MCP registry</a>
           <a href="#audit">Audit</a>
+          <a href="/dev/privacy">Privacy</a>
+          <a href="/dev/branding">Branding</a>
+          <a href="/dev/widget">Widget Lab</a>
         </nav>
         <div className={styles.system}><span /><div><b>Development</b><small>Local contracts active</small></div></div>
       </aside>
@@ -138,8 +141,8 @@ export default function AdminConsole() {
         <div className={styles.notice}><span />{notice}</div>
 
         <section className={styles.healthGrid}>
-          <article><span className={styles.good}>Integrated</span><strong>7</strong><p>Workspace packages</p></article>
-          <article><span className={styles.good}>Structurally verified</span><strong>25</strong><p>Tenant-scoped DB tables</p></article>
+          <article><span className={styles.good}>Integrated</span><strong>12</strong><p>Workspace packages</p></article>
+          <article><span className={styles.good}>Structurally verified</span><strong>38</strong><p>Schema tables</p></article>
           <article><span className={styles.good}>Development seed</span><strong>1</strong><p>Loaded tenant</p></article>
           <article><span className={styles.good}>Recorded</span><strong>${tenant.spend.toFixed(4)}</strong><p>Development ledger</p></article>
         </section>

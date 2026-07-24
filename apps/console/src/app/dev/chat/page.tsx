@@ -1770,7 +1770,7 @@ export default function StudentChatPrototype() {
         >
           <a
             className={styles.brand}
-            href="#"
+            href="/"
             aria-label={`${demoTenant.name} learning home`}
           >
             <span className={styles.brandMark} aria-hidden="true">

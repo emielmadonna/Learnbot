@@ -5,3 +5,4 @@ export * from "./errors.js";
 export * from "./identity.js";
 export * from "./json.js";
 export * from "./telemetry-outbox.js";
+export * from "./upload-intents.js";

@@ -57,10 +57,13 @@ With the shared server running, the current integrated development slice is at:
 - Student chat, realtime voice and files: `http://127.0.0.1:3100/dev/chat`
 - Learning ingestion and knowledge versions: `http://127.0.0.1:3100/dev/learning`
 - Creator workspace: `http://127.0.0.1:3100/dev/creator`
+- Creator intelligence: `http://127.0.0.1:3100/dev/intelligence`
 - Teacher workspace: `http://127.0.0.1:3100/dev/teacher`
 - Tenant branding: `http://127.0.0.1:3100/dev/branding`
 - Platform administration: `http://127.0.0.1:3100/dev/admin`
+- Privacy operations: `http://127.0.0.1:3100/dev/privacy`
 - Embeddable Widget host simulator: `http://127.0.0.1:3100/dev/widget`
+- Embedded course experience: `http://127.0.0.1:3100/dev/widget/host`
 
 The UI, development APIs and management MCP share the same tenant-aware
 application services. The chat API also runs through the provider router, so
@@ -96,8 +99,8 @@ the intelligence core validates versioned events and produces evidence-backed,
 explicitly known/partial/unknown advisory metrics. The privacy lifecycle adds
 tenant-safe, resumable access/export/delete/retention contracts with live
 legal-hold suppression, deletion tombstones and export integrity without
-inventing unresolved retention periods. Supabase has eight ordered migrations,
-36 schema tables, forced RLS/storage policies and SQL security acceptance
+inventing unresolved retention periods. Supabase has nine ordered migrations,
+38 schema tables, forced RLS/storage policies and SQL security acceptance
 tests. The PostgreSQL adapter package now provides transactional fingerprinted
 command receipts, immutable course revisions with compare-and-swap heads, and a
 leased telemetry outbox without a memory fallback. This machine does not have a
@@ -112,11 +115,13 @@ Postgres repositories now cover exact verified-principal registration,
 membership resolution, tenant context, service principals, invitations and
 SCIM replay without a memory fallback. Application wiring and an outer
 unit-of-work for workflow-level invitation/SCIM atomicity remain explicit
-follow-up work. The learning pipeline
-also exposes an injected durable-repository boundary for short-lived signed
-quarantine uploads, atomic scan callback receipts, magic-byte and malware
-results, and clean-only idempotent promotion; no production storage or scanner
-is claimed. Named production provider credentials, durable multi-replica
+follow-up work. The learning pipeline exposes an injected durable-repository
+boundary for short-lived signed quarantine uploads, atomic scan callback
+receipts, magic-byte and malware results, and clean-only idempotent promotion.
+The Postgres adapter now persists upload intents and immutable callback receipts
+with tenant/actor row locking and terminal-state protection; its SQL policy
+suite is authored but still needs an approved live database. No production
+object storage or scanner is claimed. Named production provider credentials, durable multi-replica
 outboxes/idempotency stores, production object storage, deployment secrets and
 live Widget/Circle installation evidence, approved retention/region policies,
 privacy lifecycle production adapters and UI, and load/recovery evidence remain

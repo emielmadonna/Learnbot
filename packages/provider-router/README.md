@@ -89,6 +89,32 @@ routing, and model policy remain router responsibilities. The current adapter
 intentionally supports text messages only and rejects tools, structured output,
 and other unsupported features instead of silently changing their semantics.
 
+## OpenAI Embeddings adapter
+
+`OpenAIEmbeddingsAdapter` implements the provider-neutral `EmbeddingProvider`
+contract for batched text embeddings:
+
+```ts
+const adapter = new OpenAIEmbeddingsAdapter({
+  id: "openai-embeddings",
+  credentialResolver: async (context) =>
+    vault.resolveOpenAIAccessToken(context.tenantId),
+});
+```
+
+The adapter requires request-scoped model selection and always asks OpenAI for
+float vectors. It validates non-empty bounded batches, HTTPS transport, the
+shared absolute deadline, bounded request/response bodies, exact response model,
+unique and complete input indexes, consistent finite vector dimensions, and
+token usage. Provider error bodies and credentials never enter returned errors.
+It does not retry or select a fallback; those decisions stay in the router.
+
+The default batch cap is 256 inputs, below OpenAI's API maximum, to bound memory
+use. Configure `maxInputs` explicitly when a reviewed workload requires a
+different cap. Token limits remain model/provider constraints, so callers must
+chunk inputs before this boundary and treat provider validation failures as
+closed failures rather than silently dropping input.
+
 ## Scoped validation
 
 ```sh

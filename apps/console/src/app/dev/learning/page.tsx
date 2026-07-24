@@ -624,8 +624,8 @@ export default function LearningWorkspace() {
           <a href="/">Overview</a>
           <a className={styles.active} href="/dev/learning">Courses</a>
           <a href="#sources">Sources</a>
-          <a href="#assistant">Assistant</a>
-          <a href="#students">Students</a>
+          <a href="/dev/chat">Assistant</a>
+          <a href="/dev/teacher">Students</a>
         </nav>
         <div className={styles.tenant}>
           <span>NA</span>
@@ -671,7 +671,7 @@ export default function LearningWorkspace() {
           </section>
         ) : null}
 
-        <section className={styles.pipeline} aria-label="Ingestion pipeline">
+        <section className={styles.pipeline} id="sources" aria-label="Ingestion pipeline">
           <div className={styles.pipelineHeading}>
             <div><p className={styles.eyebrow}>Learning pipeline</p><h2>Course knowledge</h2></div>
             <div className={styles.headerActions}>

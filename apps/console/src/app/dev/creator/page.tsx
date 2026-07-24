@@ -62,6 +62,7 @@ export default function CreatorConsole() {
           <a href="/dev/learning">Courses</a>
           <a href="#questions">Questions</a>
           <a href="#learners">Learners</a>
+          <a href="/dev/intelligence">Intelligence</a>
           <a href="/dev/branding">Assistant</a>
         </nav>
         <div className={styles.profile}><span>EM</span><div><b>Emiel</b><small>Owner</small></div></div>

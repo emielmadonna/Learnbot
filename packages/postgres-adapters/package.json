@@ -23,6 +23,7 @@
   "dependencies": {
     "@course-ai/application-services": "workspace:*",
     "@course-ai/contracts": "workspace:*",
-    "@course-ai/identity-access": "workspace:*"
+    "@course-ai/identity-access": "workspace:*",
+    "@course-ai/learning-pipeline": "workspace:*"
   }
 }

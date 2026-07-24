@@ -205,7 +205,7 @@ export default function WidgetDevelopmentHost() {
   return (
     <div className={styles.host}>
       <header className={styles.courseHeader}>
-        <a href="#" aria-label="Northstar learning home">
+        <a href="/" aria-label="Northstar learning home">
           <img src="/widget/northstar-mark.svg" alt="" />
           <span>Northstar</span>
         </a>
