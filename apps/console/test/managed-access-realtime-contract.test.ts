@@ -18,6 +18,7 @@ const conversation = source(
   "../src/app/app/conversation/conversation-client.tsx",
 );
 const adminRoute = source("../src/app/api/admin/users/route.ts");
+const learningRoute = source("../src/lib/supabase/learning-route.ts");
 
 test("production access is admin-created password access without public signup", () => {
   assert.match(signIn, /signInWithPassword/);
@@ -26,6 +27,8 @@ test("production access is admin-created password access without public signup",
   assert.match(passwordChange, /auth_complete_password_change/);
   assert.match(proxy, /must_change_password/);
   assert.match(proxy, /\/auth\/change-password/);
+  assert.match(learningRoute, /getManagedAccessState/);
+  assert.match(learningRoute, /auth\.password_change_required/);
   assert.match(adminRoute, /learning-admin-users/);
 });
 

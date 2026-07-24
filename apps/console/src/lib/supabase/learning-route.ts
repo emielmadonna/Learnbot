@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  AuthenticationBoundaryError,
   assertSameOrigin,
+  getManagedAccessState,
   requireVerifiedUser,
 } from "./auth-boundary";
 import {
@@ -31,6 +33,13 @@ export async function authenticatedLearningClient(
   if (options.mutation && requestClient === null) assertSameOrigin(request);
   const supabase = requestClient ?? (await createServerSupabaseClient());
   await requireVerifiedUser(supabase);
+  const access = await getManagedAccessState(supabase);
+  if (access.managed && access.mustChangePassword) {
+    throw new AuthenticationBoundaryError(
+      "auth.password_change_required",
+      "The temporary password must be replaced before using this account.",
+    );
+  }
   return supabase;
 }
 
