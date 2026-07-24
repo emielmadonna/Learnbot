@@ -123,6 +123,12 @@ endpoint; it exposes no tenant or dependency details. This preview is not a
 substitute for production identity, durable application wiring or executed RLS
 evidence.
 
+The current protected preview is:
+[learningbot-estie-preview](https://learningbot-estie-preview-lnp7tiixp-emiel-madonnas-projects.vercel.app).
+Vercel Authentication is required; access is limited to authorized Vercel
+project users. The branch-scoped fixture variables apply only to
+`codex/platform-foundations` preview deployments.
+
 ## Legacy input
 
 `/Users/emielmadonna/Estie Starr` is read-only legacy input until an explicit migration plan is approved. Never commit its `.env`, recordings, provider credentials, private course media or generated vector artifacts.

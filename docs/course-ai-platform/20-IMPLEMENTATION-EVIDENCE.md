@@ -48,7 +48,7 @@ assistive-technology matrix, load test, restore, or legal policy.
 | Build/runtime isolation | B / partial | Next.js development output is isolated in `.next-dev` while optimized production output remains in `.next`, preventing a parallel production build from replacing the running development server manifests. This is local integration evidence only; production deployment, CI/CD, migration gates, and live-host operational evidence remain pending. | `apps/console/next.config.ts`; local development and production build verification |
 | Durable execution | C / partial | Fingerprinted command receipts replay the same normalized JSON result or reject conflicting reuse; course revisions use a locked compare-and-swap head; telemetry uses tenant-scoped dedupe and bounded leases. The adapters require an injected transaction and have no process-memory fallback. They are not yet wired into every application service. | `pnpm --filter @course-ai/postgres-adapters test`; `packages/postgres-adapters` |
 | Durable schema | C / partial | Migration 0007 defines four tenant-scoped durable-execution tables with forced RLS, immutable facts and a course/revision-number/ID head constraint. Structural verification covers 7 migrations and 29 tables. The SQL negative test exists but has not run against PostgreSQL on this machine because Docker is unavailable. | `pnpm supabase:verify`; `infra/supabase/migrations/0007_durable_execution_primitives.sql`; `infra/supabase/tests/durable_execution_primitives_verification.sql` |
-| Private fixture preview | C / partial | Production builds deny fixture APIs by default. Two exact opt-in values are required to enable a non-production fixture preview; `/api/health` provides dependency-free liveness and the server binds on all interfaces. A hosting project, host-level private access and live deployment evidence remain pending. | `apps/console/test/deployment-mode.test.ts`; local production-mode start/curl checks; `.github/workflows/ci.yml` |
+| Private fixture preview | A / non-production | Production builds deny fixture APIs by default. The Vercel Preview deployment requires Vercel Authentication, uses two exact branch-scoped fixture values, and exposes dependency-free `/api/health`. Unauthenticated health access redirects to login; authenticated health, fixture health and Student chat checks pass. This is live-host evidence for the protected preview boundary only, not production identity/data/provider evidence. | Vercel deployment `dpl_FcTh71b8KCq4WrrvVhhHuaS5QUpb`; GitHub Preview deployment `5583998909`; `apps/console/test/deployment-mode.test.ts` |
 
 ## Whole-repository gate
 
@@ -115,6 +115,17 @@ suite.
   `pnpm build`; `COURSE_AI_CONSOLE_URL=http://127.0.0.1:3100 pnpm verify:dev`;
   and `git diff --check`. The shared development server remained healthy after
   the isolated production build.
+- GitHub clean-runner CI for commit `a64bd5b` **passed** frozen install, full
+  checks, Supabase structural verification and the optimized production build.
+  Run `30067837040` retained the clean-workspace evidence that local generated
+  declarations had previously masked.
+- Protected Vercel Preview deployment `dpl_FcTh71b8KCq4WrrvVhhHuaS5QUpb`
+  **reached Ready**. An unauthenticated `/api/health` request redirected to
+  Vercel Authentication; authenticated checks returned healthy liveness,
+  `mode: fixture-preview`, and HTTP 200 for `/dev/chat`. GitHub deployment
+  `5583998909` records the Preview environment as successful. The earlier
+  app-only host build failed before becoming usable and produced no positive
+  evidence.
 
 ## Explicitly unproven
 
