@@ -15,6 +15,9 @@ const durableTools = [
   "get_authenticated_learning_conversations",
   "start_authenticated_learning_conversation",
   "respond_in_authenticated_learning_conversation",
+  "list_authenticated_quarantine_uploads",
+  "create_authenticated_course_draft",
+  "publish_authenticated_course",
 ].sort();
 
 async function inspectServer(fixtureMode?: string) {
@@ -85,7 +88,7 @@ test("default production discovery exposes only health and durable tools", async
 
 test("exact fixture opt-in exposes the legacy development tools", async () => {
   const discovered = await inspectServer("enabled");
-  assert.equal(discovered.names.length, 33);
+  assert.equal(discovered.names.length, 36);
   assert.ok(discovered.names.includes("get_build_plan"));
   assert.ok(discovered.names.includes("list_courses"));
   assert.ok(discovered.names.includes("publish_tenant_branding"));

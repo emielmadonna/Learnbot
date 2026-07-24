@@ -509,6 +509,35 @@
   text-align: center;
 }
 
+.learningModes {
+  display: flex;
+  width: min(720px, 100%);
+  gap: 5px;
+  margin: 0 auto 8px;
+}
+
+.learningModes button {
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 12%, transparent);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 72%);
+  color: color-mix(in srgb, var(--brand-text) 62%, transparent);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.learningModes button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--brand-primary) 32%, transparent);
+  background: color-mix(in srgb, var(--brand-primary) 9%, white);
+  color: var(--brand-primary);
+}
+
+.learningModes button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .composer {
   display: grid;
   width: min(720px, 100%);
@@ -530,6 +559,7 @@
   box-sizing: border-box;
   padding: 8px 0;
   border: 0;
+  overflow-y: hidden;
   resize: none;
   background: transparent;
   color: var(--brand-text);
@@ -585,10 +615,15 @@
 .voiceNotice {
   display: grid;
   min-height: calc(100vh - 72px);
+  min-height: calc(100svh - 72px);
   box-sizing: border-box;
   place-items: center;
   align-content: center;
-  padding: 54px 30px 80px;
+  padding:
+    54px
+    max(30px, env(safe-area-inset-right))
+    calc(80px + env(safe-area-inset-bottom))
+    max(30px, env(safe-area-inset-left));
   text-align: center;
 }
 
@@ -756,6 +791,24 @@
   line-height: 1.5;
 }
 
+.playAnswer,
+.retryVoice {
+  margin-top: 16px;
+  padding: 10px 15px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--brand-primary);
+  color: #fff;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 760;
+}
+
+.retryVoice {
+  background: color-mix(in srgb, var(--brand-primary) 9%, white);
+  color: var(--brand-primary);
+}
+
 .continueText {
   margin-top: 14px;
   padding: 9px 13px;
@@ -917,7 +970,12 @@
 
   .voiceNotice {
     min-height: calc(100vh - 64px);
-    padding: 45px 22px 72px;
+    min-height: calc(100svh - 64px);
+    padding:
+      45px
+      max(22px, env(safe-area-inset-right))
+      calc(72px + env(safe-area-inset-bottom))
+      max(22px, env(safe-area-inset-left));
   }
 
   .voiceOrb {

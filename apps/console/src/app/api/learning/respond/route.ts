@@ -4,9 +4,11 @@ import {
   LearningProviderError,
   type ConversationHistoryItem,
   type GroundingSource,
+  type LearningIntent,
 } from "../../../../lib/learning-provider";
 import {
   AuthenticationBoundaryError,
+  getCurrentTenantContext,
   requireVerifiedUser,
 } from "../../../../lib/supabase/auth-boundary";
 import {
@@ -14,6 +16,7 @@ import {
   executeLearningRpc,
 } from "../../../../lib/supabase/learning-route";
 import { LearningRpcError } from "../../../../lib/supabase/learning-rpc";
+import { searchPublishedLearning } from "../../../../lib/semantic-learning-search";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -89,11 +92,39 @@ function normalizeSources(value: unknown): GroundingSource[] {
         documentTitle,
         contentHash,
         excerpt,
+        lessonId: stringValue(source.lessonId),
         lessonTitle: stringValue(source.lessonName),
         sectionName: stringValue(source.sectionName),
       },
     ];
   });
+}
+
+function learningIntent(value: unknown): LearningIntent {
+  return value === "practice" || value === "check" ? value : "explain";
+}
+
+function selectedLessonLabel(workspace: unknown, lessonId: string | null) {
+  if (!lessonId || !isRecord(workspace) || !Array.isArray(workspace.courses)) {
+    return null;
+  }
+  for (const course of workspace.courses) {
+    if (!isRecord(course) || !Array.isArray(course.modules)) continue;
+    for (const module of course.modules) {
+      if (!isRecord(module) || !Array.isArray(module.lessons)) continue;
+      for (const lesson of module.lessons) {
+        if (
+          isRecord(lesson) &&
+          stringValue(lesson.lessonId) === lessonId
+        ) {
+          const lessonTitle = stringValue(lesson.title);
+          const courseTitle = stringValue(course.title);
+          return [courseTitle, lessonTitle].filter(Boolean).join(" · ");
+        }
+      }
+    }
+  }
+  return null;
 }
 
 function normalizeHistory(value: unknown): ConversationHistoryItem[] {
@@ -160,19 +191,25 @@ function errorResponse(error: unknown) {
 
 export async function POST(request: Request) {
   try {
+    const supabase = await authenticatedLearningClient(request, {
+      mutation: true,
+    });
+    const user = await requireVerifiedUser(supabase);
+    const tenantContext = await getCurrentTenantContext(supabase);
+    if (!tenantContext.selected || !tenantContext.tenantId) {
+      throw new LearningRpcError("tenant_selection_required");
+    }
     const operationToken =
       process.env.LEARNINGBOT_CONVERSATION_OPERATION_TOKEN?.trim();
     if (!operationToken || operationToken.length < 32) {
       throw new LearningProviderError("provider_not_configured", false);
     }
-    const supabase = await authenticatedLearningClient(request, {
-      mutation: true,
-    });
-    const user = await requireVerifiedUser(supabase);
     const input = (await request.json()) as unknown;
     if (!isRecord(input)) throw new LearningRpcError("invalid_request");
     const conversationId = requiredUuid(input.conversationId);
     const courseId = optionalUuid(input.courseId);
+    const lessonId = optionalUuid(input.lessonId);
+    const intent = learningIntent(input.intent);
     const message = stringValue(input.message)?.trim() ?? "";
     if (message.length < 2 || message.length > 8_000) {
       throw new LearningRpcError("invalid_request");
@@ -216,17 +253,22 @@ export async function POST(request: Request) {
     });
 
     const [searchResult, transcript, workspace] = await Promise.all([
-      executeLearningRpc(supabase, "learning_search_chunks", {
-        search_query: message,
-        target_course_id: courseId,
-        match_limit: 6,
+      searchPublishedLearning({
+        request,
+        supabase,
+        query: message,
+        courseId,
+        limit: lessonId ? 12 : 6,
       }),
       executeLearningRpc(supabase, "learning_get_conversations", {
         target_conversation_id: conversationId,
       }),
       executeLearningRpc(supabase, "learning_get_workspace"),
     ]);
-    const sources = normalizeSources(searchResult);
+    const retrievedSources = normalizeSources(searchResult);
+    const sources = lessonId
+      ? retrievedSources.filter((source) => source.lessonId === lessonId)
+      : retrievedSources;
     const history = normalizeHistory(transcript);
     if (
       history.length &&
@@ -250,6 +292,8 @@ export async function POST(request: Request) {
       traceId,
       idempotencyKey: baseKey,
       question: message,
+      intent,
+      scopeLabel: selectedLessonLabel(workspace, lessonId),
       history,
       sources,
     });
@@ -286,6 +330,9 @@ export async function POST(request: Request) {
           provider: answer.provider,
           adapterId: answer.adapterId,
           model: answer.model,
+          retrievalMode: stringValue(searchResult.retrievalMode),
+          embeddingProvider: stringValue(searchResult.embeddingProvider),
+          embeddingModel: stringValue(searchResult.embeddingModel),
         },
       },
       { headers: { "Cache-Control": "no-store" } },

@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { AuthenticationBoundaryError } from "../../../../lib/supabase/auth-boundary";
 import {
   authenticatedLearningClient,
-  executeLearningRpc,
 } from "../../../../lib/supabase/learning-route";
 import { LearningRpcError } from "../../../../lib/supabase/learning-rpc";
+import { searchPublishedLearning } from "../../../../lib/semantic-learning-search";
 
 function optionalUuid(value: string | null) {
   if (!value) return null;
@@ -34,15 +34,13 @@ export async function GET(request: Request) {
       throw new LearningRpcError("invalid_request");
     }
     const supabase = await authenticatedLearningClient(request);
-    const result = await executeLearningRpc(
+    const result = await searchPublishedLearning({
+      request,
       supabase,
-      "learning_search_chunks",
-      {
-        search_query: query,
-        target_course_id: courseId,
-        match_limit: rawLimit,
-      },
-    );
+      query,
+      courseId,
+      limit: rawLimit,
+    });
     return NextResponse.json(result, {
       headers: { "Cache-Control": "private, no-store" },
     });

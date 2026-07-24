@@ -11,6 +11,7 @@ import {
 } from "../../lib/supabase/learning-rpc";
 import { createServerSupabaseClient } from "../../lib/supabase/server";
 import styles from "./workspace.module.css";
+import UploadLearning from "./upload-learning";
 
 const statusMessages: Record<string, string> = {
   course_created: "Draft created. Review it below, then publish when ready.",
@@ -420,6 +421,23 @@ export default async function AuthenticatedAppPage({
                   <button type="submit">Create draft</button>
                 </footer>
               </form>
+              <div className={styles.uploadSection}>
+                <div>
+                  <p className={styles.eyebrow}>Secure import</p>
+                  <h3>Upload an existing source</h3>
+                  <p>
+                    The file is signed directly into this tenant’s private
+                    quarantine. It cannot become learning until the security
+                    and extraction pipeline clears it.
+                  </p>
+                </div>
+                <UploadLearning
+                  courses={workspace.courses.map((course) => ({
+                    courseId: course.courseId,
+                    title: course.title,
+                  }))}
+                />
+              </div>
             </section>
           ) : null}
         </div>

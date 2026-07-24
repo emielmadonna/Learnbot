@@ -66,3 +66,6 @@ verify_enabled = true
 [auth.hook.custom_access_token]
 enabled = true
 uri = "pg-functions://postgres/public/learningbot_custom_access_token_hook"
+
+[functions.learning-embeddings]
+verify_jwt = true

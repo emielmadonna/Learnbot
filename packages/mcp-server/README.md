@@ -4,20 +4,24 @@ Provider-agnostic management control surface over MCP stdio. It uses the same
 tenant-aware console APIs as the user interfaces; it never reads a database,
 provider credential, or Vault directly.
 
-The server now exposes five production-data learning tools:
+The server now exposes eight production-data learning tools:
 
 - `get_authenticated_learning_workspace`
 - `search_authenticated_learning`
 - `get_authenticated_learning_conversations`
 - `start_authenticated_learning_conversation`
 - `respond_in_authenticated_learning_conversation`
+- `list_authenticated_quarantine_uploads`
+- `create_authenticated_course_draft`
+- `publish_authenticated_course`
 
 They call authenticated `/api/learning/*` services with a standard bearer
-credential. The tools can read the durable workspace, search published source
-evidence, list or start persisted conversations, and record a grounded exchange
-through the configured provider adapter. The control plane resolves the active
-tenant from the verified principal; the MCP caller cannot submit or override a
-tenant identifier.
+credential. The tools can read the durable workspace, hybrid-search published
+source evidence, list or start persisted conversations, record a grounded
+exchange through the configured provider adapter, inspect private quarantine
+jobs, create a private course draft, and publish an authorized course. The
+control plane resolves the active tenant from the verified principal; the MCP
+caller cannot submit or override a tenant identifier.
 
 The 27 fixture-only tools from the original development set are hidden by
 default. This includes `get_build_plan` and every tool bound to the fixed
@@ -37,6 +41,7 @@ Read tools:
 - `get_authenticated_learning_workspace` (durable, authenticated)
 - `search_authenticated_learning` (durable, authenticated)
 - `get_authenticated_learning_conversations` (durable, authenticated)
+- `list_authenticated_quarantine_uploads` (durable, authenticated)
 - `list_platform_capabilities`
 - `list_courses`
 - `get_ingestion_job`
@@ -51,6 +56,8 @@ Mutation tools:
 
 - `start_authenticated_learning_conversation` (durable bearer identity)
 - `respond_in_authenticated_learning_conversation` (durable bearer identity)
+- `create_authenticated_course_draft` (durable bearer identity)
+- `publish_authenticated_course` (durable bearer identity)
 - `create_course_shell`
 - `update_course_shell`
 - `add_course_lesson`
@@ -99,7 +106,7 @@ authorize fixture operations only.
 
 ## Fixture compatibility mode
 
-Production discovery exposes exactly six tools: general health plus the five
+Production discovery exposes exactly nine tools: general health plus the eight
 durable authenticated learning tools. To run the legacy development fixture
 surface intentionally:
 
@@ -193,7 +200,7 @@ The fixture smoke test expects the shared console API at
 deny-by-default authorization, cross-tenant and cross-actor denial, malformed
 grant configuration, expiry and budget denial, idempotent reservation and
 rate enforcement, mutation replay/conflicts, bounded output, audit metadata,
-and safe upstream failures. The stdio smoke verifies discovery of all 33 tools.
+and safe upstream failures. The stdio smoke verifies discovery of all 36 tools.
 When a durable bearer is provided, it also reads the authenticated workspace,
 searches published learning, and reads persisted conversations. The fixture
 portion continues to verify shared authoring, intelligence, and privacy

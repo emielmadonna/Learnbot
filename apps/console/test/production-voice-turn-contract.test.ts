@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import {
+  acceptedAudioType,
+  MAX_MULTIPART_BYTES,
+  multipartHeaderError,
+  validDeclaredDuration,
+} from "../src/app/api/learning/voice/policy";
+import {
+  consumeVoiceQuota,
+  resetVoiceQuotaForTests,
+} from "../src/app/api/learning/voice/rate-limit";
 
 const client = readFileSync(
   new URL(
@@ -25,11 +35,11 @@ const speechRoute = readFileSync(
 );
 
 test("production voice uses bounded ephemeral WebM transcription", () => {
-  assert.match(transcriptionRoute, /MAX_AUDIO_BYTES = 10 \* 1024 \* 1024/);
   assert.match(transcriptionRoute, /"gpt-4o-mini-transcribe"/);
-  assert.match(transcriptionRoute, /"audio\/webm"/);
   assert.match(transcriptionRoute, /rawAudioStored: false/);
-  assert.match(transcriptionRoute, /authenticatedLearningClient\(request, \{ mutation: true \}\)/);
+  assert.match(transcriptionRoute, /voiceTenantContext\(request, true\)/);
+  assert.match(transcriptionRoute, /context\.membershipId/);
+  assert.match(transcriptionRoute, /validDeclaredDuration/);
   assert.doesNotMatch(transcriptionRoute, /\.from\(|storage\.|writeFile|appendFile/);
 });
 
@@ -39,6 +49,8 @@ test("voice transcript follows the durable grounded response path", () => {
   assert.match(client, /"\/api\/learning\/respond"/);
   assert.match(client, /modality,/);
   assert.match(client, /MAX_VOICE_TURN_MS = 45_000/);
+  assert.match(client, /"\/api\/learning\/voice\/transcribe"[\s\S]*cache: "no-store"/);
+  assert.match(client, /voiceReadiness !== "ready"/);
 });
 
 test("speech reads a tenant-authorized saved answer with disclosed synthetic voice", () => {
@@ -56,4 +68,76 @@ test("voice lifecycle stops microphone, requests, playback, and object URLs", ()
   assert.match(client, /playbackRef\.current\?\.pause\(\)/);
   assert.match(client, /URL\.revokeObjectURL/);
   assert.match(client, /discardRecordingRef\.current = true/);
+  assert.match(client, /resetConversationContext\(\)[\s\S]*voiceGenerationRef\.current \+= 1/);
+  assert.match(client, /Play \{assistantName\}/);
+});
+
+test("voice media policy accepts browser WebM and MP4 families", () => {
+  assert.deepEqual(acceptedAudioType("audio/webm;codecs=opus"), {
+    extension: "webm",
+    providerType: "audio/webm",
+  });
+  assert.deepEqual(acceptedAudioType("audio/mp4;codecs=mp4a.40.2"), {
+    extension: "m4a",
+    providerType: "audio/mp4",
+  });
+  assert.deepEqual(acceptedAudioType("audio/x-m4a"), {
+    extension: "m4a",
+    providerType: "audio/mp4",
+  });
+  assert.deepEqual(acceptedAudioType("audio/aac"), {
+    extension: "aac",
+    providerType: "audio/aac",
+  });
+  assert.equal(acceptedAudioType("application/octet-stream"), null);
+});
+
+test("voice media policy rejects missing bounds and overlong turns", () => {
+  assert.equal(validDeclaredDuration("100"), 100);
+  assert.equal(validDeclaredDuration("45000"), 45_000);
+  assert.equal(validDeclaredDuration("45001"), null);
+  assert.equal(validDeclaredDuration(null), null);
+
+  assert.equal(multipartHeaderError(new Headers()), "invalid_content_type");
+  const noLength = new Headers({
+    "content-type": "multipart/form-data; boundary=test",
+  });
+  assert.equal(multipartHeaderError(noLength), "length_required");
+  const oversized = new Headers({
+    "content-type": "multipart/form-data; boundary=test",
+    "content-length": String(MAX_MULTIPART_BYTES + 1),
+  });
+  assert.equal(multipartHeaderError(oversized), "audio_too_large");
+  const accepted = new Headers({
+    "content-type": "multipart/form-data; boundary=test",
+    "content-length": "1024",
+  });
+  assert.equal(multipartHeaderError(accepted), null);
+});
+
+test("process voice quota is bounded per tenant principal and resets", () => {
+  resetVoiceQuotaForTests();
+  for (let index = 0; index < 8; index += 1) {
+    assert.equal(
+      consumeVoiceQuota("transcribe", "tenant-a:principal-a", 1_000).allowed,
+      true,
+    );
+  }
+  const denied = consumeVoiceQuota(
+    "transcribe",
+    "tenant-a:principal-a",
+    1_000,
+  );
+  assert.equal(denied.allowed, false);
+  assert.equal(denied.scope, "process-instance");
+  assert.equal(denied.retryAfterSeconds, 60);
+  assert.equal(
+    consumeVoiceQuota("transcribe", "tenant-a:principal-b", 1_000).allowed,
+    true,
+  );
+  assert.equal(
+    consumeVoiceQuota("transcribe", "tenant-a:principal-a", 61_000).allowed,
+    true,
+  );
+  resetVoiceQuotaForTests();
 });

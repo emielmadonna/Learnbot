@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
-import { AuthenticationBoundaryError } from "../../../../../lib/supabase/auth-boundary";
+import {
+  AuthenticationBoundaryError,
+  getCurrentTenantContext,
+} from "../../../../../lib/supabase/auth-boundary";
 import {
   authenticatedLearningClient,
   executeLearningRpc,
 } from "../../../../../lib/supabase/learning-route";
+import { consumeVoiceQuota } from "../rate-limit";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -31,10 +35,11 @@ function jsonError(
   status: number,
   message: string,
   retryable = false,
+  headers: Record<string, string> = {},
 ) {
   return NextResponse.json(
     { ok: false, code, message, retryable },
-    { status, headers: { "Cache-Control": "no-store" } },
+    { status, headers: { "Cache-Control": "no-store", ...headers } },
   );
 }
 
@@ -63,12 +68,41 @@ export async function POST(request: Request) {
     const supabase = await authenticatedLearningClient(request, {
       mutation: true,
     });
+    const context = await getCurrentTenantContext(supabase);
+    if (
+      !context.selected ||
+      !context.tenantId ||
+      !context.membershipId ||
+      !context.principalId
+    ) {
+      return jsonError(
+        "tenant_selection_required",
+        409,
+        "Select a workspace before using voice.",
+      );
+    }
     const credential = process.env.OPENAI_API_KEY?.trim();
     if (!credential || credential.length < 20) {
       return jsonError(
         "voice_provider_not_configured",
         503,
         "Synthetic speech is not configured.",
+      );
+    }
+    const quota = consumeVoiceQuota(
+      "speak",
+      `${context.tenantId}:${context.principalId}`,
+    );
+    if (!quota.allowed) {
+      return jsonError(
+        "voice_rate_limited",
+        429,
+        "Too many spoken answers. Wait briefly before trying again.",
+        true,
+        {
+          "Retry-After": String(quota.retryAfterSeconds),
+          "X-Voice-RateLimit-Scope": quota.scope,
+        },
       );
     }
 
@@ -141,6 +175,7 @@ export async function POST(request: Request) {
         "Content-Disposition": 'inline; filename="assistant-answer.mp3"',
         "X-AI-Generated-Voice": "true",
         "X-Content-Type-Options": "nosniff",
+        "X-Voice-RateLimit-Scope": quota.scope,
       },
     });
   } catch (error) {

@@ -72,7 +72,7 @@ const modules = [
   {
     name: "MCP Control Plane",
     description: "The same safe operations for Codex and authorized agents.",
-    status: "33 fixture tools verified",
+    status: "36 fixture tools verified",
     href: "/dev/admin#mcp"
   }
 ];
@@ -186,7 +186,7 @@ export default function HomePage() {
 
       <section className="launchStrip" aria-label="Launch inventory">
         <article><strong>11</strong><span>visual product surfaces</span></article>
-        <article><strong>33</strong><span>fixture-enabled MCP tools</span></article>
+        <article><strong>36</strong><span>fixture-enabled MCP tools</span></article>
         <article><strong>42</strong><span>RLS-enabled tenant tables</span></article>
         <article>
           <strong>{isFixturePreview ? "Protected" : "Durable Auth"}</strong>

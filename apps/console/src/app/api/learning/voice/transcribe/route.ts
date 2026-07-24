@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
-import { AuthenticationBoundaryError } from "../../../../../lib/supabase/auth-boundary";
+import {
+  AuthenticationBoundaryError,
+  getCurrentTenantContext,
+} from "../../../../../lib/supabase/auth-boundary";
 import { authenticatedLearningClient } from "../../../../../lib/supabase/learning-route";
+import {
+  acceptedAudioType,
+  acceptedBrowserAudioTypes,
+  MAX_AUDIO_BYTES,
+  MAX_VOICE_TURN_MS,
+  multipartHeaderError,
+  validDeclaredDuration,
+} from "../policy";
+import { consumeVoiceQuota } from "../rate-limit";
 
-const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 const OPENAI_TRANSCRIPTION_URL =
   "https://api.openai.com/v1/audio/transcriptions";
 const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
@@ -13,10 +24,11 @@ function jsonError(
   status: number,
   message: string,
   retryable = false,
+  headers: Record<string, string> = {},
 ) {
   return NextResponse.json(
     { ok: false, code, message, retryable },
-    { status, headers: { "Cache-Control": "no-store" } },
+    { status, headers: { "Cache-Control": "no-store", ...headers } },
   );
 }
 
@@ -25,9 +37,81 @@ function providerCredential() {
   return credential && credential.length >= 20 ? credential : null;
 }
 
+async function voiceTenantContext(request: Request, mutation: boolean) {
+  const supabase = await authenticatedLearningClient(request, { mutation });
+  const context = await getCurrentTenantContext(supabase);
+  if (
+    !context.selected ||
+    !context.tenantId ||
+    !context.membershipId ||
+    !context.principalId
+  ) {
+    return null;
+  }
+  return {
+    quotaSubject: `${context.tenantId}:${context.principalId}`,
+    tenantId: context.tenantId,
+  };
+}
+
+export async function GET(request: Request) {
+  try {
+    const context = await voiceTenantContext(request, false);
+    if (!context) {
+      return jsonError(
+        "tenant_selection_required",
+        409,
+        "Select a workspace before using voice.",
+      );
+    }
+    if (!providerCredential()) {
+      return jsonError(
+        "voice_provider_not_configured",
+        503,
+        "Voice is not configured for this environment.",
+      );
+    }
+    return NextResponse.json(
+      {
+        ok: true,
+        configured: true,
+        maxDurationMs: MAX_VOICE_TURN_MS,
+        acceptedAudioTypes: acceptedBrowserAudioTypes(),
+        rateLimitScope: "process-instance",
+      },
+      {
+        headers: {
+          "Cache-Control": "private, no-store",
+          "X-Voice-RateLimit-Scope": "process-instance",
+        },
+      },
+    );
+  } catch (error) {
+    if (error instanceof AuthenticationBoundaryError) {
+      return jsonError(
+        "authentication_required",
+        401,
+        "Your session has expired.",
+      );
+    }
+    return jsonError(
+      "request_denied",
+      400,
+      "Voice readiness could not be verified.",
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
-    await authenticatedLearningClient(request, { mutation: true });
+    const context = await voiceTenantContext(request, true);
+    if (!context) {
+      return jsonError(
+        "tenant_selection_required",
+        409,
+        "Select a workspace before using voice.",
+      );
+    }
     const credential = providerCredential();
     if (!credential) {
       return jsonError(
@@ -37,36 +121,68 @@ export async function POST(request: Request) {
       );
     }
 
-    const contentLength = Number(request.headers.get("content-length") ?? "0");
-    if (Number.isFinite(contentLength) && contentLength > MAX_AUDIO_BYTES + 64_000) {
+    const headerError = multipartHeaderError(request.headers);
+    if (headerError === "invalid_content_type") {
+      return jsonError(
+        headerError,
+        415,
+        "A multipart microphone recording is required.",
+      );
+    }
+    if (headerError === "length_required") {
+      return jsonError(
+        headerError,
+        411,
+        "A bounded Content-Length is required for voice turns.",
+      );
+    }
+    if (headerError === "audio_too_large") {
       return jsonError(
         "audio_too_large",
         413,
-        "Keep each voice turn under 45 seconds.",
+        "Voice turns are limited to 45 seconds and 10 MB.",
+      );
+    }
+
+    const quota = consumeVoiceQuota("transcribe", context.quotaSubject);
+    if (!quota.allowed) {
+      return jsonError(
+        "voice_rate_limited",
+        429,
+        "Too many voice turns. Wait briefly before trying again.",
+        true,
+        {
+          "Retry-After": String(quota.retryAfterSeconds),
+          "X-Voice-RateLimit-Scope": quota.scope,
+        },
       );
     }
 
     const input = await request.formData();
     const audio = input.get("audio");
+    const durationMs = validDeclaredDuration(input.get("durationMs"));
+    const mediaType =
+      audio instanceof File ? acceptedAudioType(audio.type) : null;
     if (
       !(audio instanceof File) ||
       audio.size < 64 ||
       audio.size > MAX_AUDIO_BYTES ||
-      !["audio/webm", "video/webm"].includes(
-        audio.type.toLowerCase().split(";")[0] ?? "",
-      )
+      !mediaType ||
+      durationMs === null
     ) {
       return jsonError(
         "invalid_audio",
         400,
-        "A bounded WebM microphone recording is required.",
+        "A supported microphone recording of 45 seconds or less is required.",
       );
     }
 
     const body = new FormData();
     body.set(
       "file",
-      new File([audio], "voice-turn.webm", { type: "audio/webm" }),
+      new File([audio], `voice-turn.${mediaType.extension}`, {
+        type: mediaType.providerType,
+      }),
     );
     body.set("model", TRANSCRIPTION_MODEL);
     body.set("response_format", "json");
@@ -108,8 +224,14 @@ export async function POST(request: Request) {
         transcript,
         model: TRANSCRIPTION_MODEL,
         rawAudioStored: false,
+        durationPolicyMs: MAX_VOICE_TURN_MS,
       },
-      { headers: { "Cache-Control": "no-store" } },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+          "X-Voice-RateLimit-Scope": quota.scope,
+        },
+      },
     );
   } catch (error) {
     if (error instanceof AuthenticationBoundaryError) {

@@ -40,7 +40,7 @@ const authorizer = new GrantAuthorizer(
   parseGrantConfiguration(process.env.COURSE_AI_MCP_GRANTS)
 );
 const idempotencyStore = new IdempotencyStore();
-const durableLearningToolCount = 5;
+const durableLearningToolCount = 8;
 const fixtureToolCount = 27;
 
 async function consoleRequest<T>(
@@ -249,7 +249,7 @@ server.registerTool(
       durableLearning: z.object({
         dataMode: z.literal("durable"),
         endpoints: z.array(z.string()),
-        toolCount: z.literal(5),
+        toolCount: z.literal(8),
         authorization: z.literal("process-bound bearer"),
         credentialConfigured: z.boolean(),
         configurationValid: z.boolean(),
@@ -298,9 +298,11 @@ server.registerTool(
           "/api/learning/workspace",
           "/api/learning/search",
           "/api/learning/conversations",
-          "/api/learning/respond"
+          "/api/learning/respond",
+          "/api/learning/courses",
+          "/api/learning/uploads"
         ],
-        toolCount: durableLearningToolCount as 5,
+        toolCount: durableLearningToolCount as 8,
         authorization: "process-bound bearer" as const,
         credentialConfigured: durableLearningCredential.configured,
         configurationValid: durableLearningCredential.configurationValid,
@@ -484,6 +486,9 @@ server.registerTool(
       message: z.string().trim().min(2).max(8_000),
       courseId: z.string().uuid().optional(),
       lessonId: z.string().uuid().optional(),
+      intent: z
+        .enum(["explain", "practice", "check"])
+        .default("explain"),
       idempotencyKey: z
         .string()
         .min(8)
@@ -505,6 +510,7 @@ server.registerTool(
     message,
     courseId,
     lessonId,
+    intent,
     idempotencyKey
   }) => {
     try {
@@ -517,11 +523,123 @@ server.registerTool(
             message,
             courseId: courseId ?? null,
             lessonId: lessonId ?? null,
+            intent,
             idempotencyKey
           })
         }
       );
       return result({ response });
+    } catch (error: unknown) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "list_authenticated_quarantine_uploads",
+  {
+    title: "List authenticated durable uploads",
+    description:
+      "List tenant-private upload intents and their resumable ingestion checkpoint for the verified user. Signed upload credentials and object keys are never returned.",
+    inputSchema: {},
+    outputSchema: {
+      uploads: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false
+    }
+  },
+  async () => {
+    try {
+      const uploads = await durableLearningRequest<Record<string, unknown>>(
+        "/api/learning/uploads"
+      );
+      return result({ uploads });
+    } catch (error: unknown) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "create_authenticated_course_draft",
+  {
+    title: "Create authenticated durable course draft",
+    description:
+      "Create one tenant-bound private course, module, lesson, and initial content block for the verified author represented by this connection-bound bearer. The database role and selected tenant are authoritative.",
+    inputSchema: {
+      title: z.string().trim().min(3).max(160),
+      description: z.string().trim().min(3).max(2_000),
+      moduleTitle: z.string().trim().min(3).max(160),
+      lessonTitle: z.string().trim().min(3).max(160),
+      lessonContent: z.string().trim().min(20).max(50_000),
+      idempotencyKey: z
+        .string()
+        .min(8)
+        .max(200)
+        .regex(/^[A-Za-z0-9:_-]+$/u)
+    },
+    outputSchema: {
+      course: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    }
+  },
+  async (input) => {
+    try {
+      const course = await durableLearningRequest<Record<string, unknown>>(
+        "/api/learning/courses",
+        {
+          method: "POST",
+          body: JSON.stringify(input)
+        }
+      );
+      return result({ course });
+    } catch (error: unknown) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "publish_authenticated_course",
+  {
+    title: "Publish authenticated durable course",
+    description:
+      "Publish an existing tenant-bound course for the verified author after database validation. The operation is replay-safe and cannot override the selected tenant.",
+    inputSchema: {
+      courseId: z.string().uuid(),
+      idempotencyKey: z
+        .string()
+        .min(8)
+        .max(200)
+        .regex(/^[A-Za-z0-9:_-]+$/u)
+    },
+    outputSchema: {
+      course: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    }
+  },
+  async ({ courseId, idempotencyKey }) => {
+    try {
+      const course = await durableLearningRequest<Record<string, unknown>>(
+        `/api/learning/courses/${courseId}/publish`,
+        {
+          method: "POST",
+          body: JSON.stringify({ idempotencyKey })
+        }
+      );
+      return result({ course });
     } catch (error: unknown) {
       return errorResult(error);
     }
