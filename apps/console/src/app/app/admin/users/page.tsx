@@ -10,7 +10,14 @@ import { UserAccessManager } from "./user-access-manager";
 import styles from "./users.module.css";
 
 export default async function UserAccessPage() {
-  const supabase = await createServerSupabaseClient();
+  let supabase;
+  try {
+    supabase = await createServerSupabaseClient();
+  } catch {
+    redirect(
+      "/auth/sign-in?error=authentication_required&next=/app/admin/users",
+    );
+  }
   try {
     await requireVerifiedUser(supabase);
   } catch {
