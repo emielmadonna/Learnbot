@@ -73,11 +73,14 @@ export function UserAccessManager() {
       });
       const payload = (await response.json()) as Record<string, unknown>;
       if (!response.ok || payload.ok !== true) {
-        throw new Error(
-          payload.code === "account_exists"
-            ? "An account already exists for that email."
-            : "The account could not be created.",
-        );
+        const messages: Record<string, string> = {
+          account_exists: "An account already exists for that email.",
+          account_provisioning_failed: "The account was created but could not be connected to this workspace. Nothing was kept.",
+          auth_user_unavailable: "The managed identity could not be linked to this workspace. Nothing was kept.",
+          provider_not_configured: "Managed access is not configured on the server yet.",
+          access_denied: "Your role cannot create managed access.",
+        };
+        throw new Error(messages[String(payload.code)] ?? "The account could not be created.");
       }
       const password =
         typeof payload.temporaryPassword === "string"
