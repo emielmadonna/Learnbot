@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   useEffect,
   useMemo,
   useRef,
@@ -37,7 +38,22 @@ type ConversationMessage = {
   content: string;
   createdAt: string | null;
   sources: SourceEvidence[];
+  richParts: RichMessagePart[];
 };
+
+type RichMessagePart =
+  | {
+      type: "attachment";
+      id: string;
+      label: string;
+      caption: string | null;
+    }
+  | {
+      type: "diagram";
+      id: string;
+      caption: string;
+      altText: string;
+    };
 
 type ConversationPayload = {
   conversationId: string | null;
@@ -79,6 +95,181 @@ function stringValue(value: unknown) {
   return typeof value === "string" ? value : null;
 }
 
+function normalizeRichParts(
+  value: unknown,
+  structuredContent: JsonRecord | null,
+): RichMessagePart[] {
+  const candidateParts = isRecord(value) && Array.isArray(value.parts)
+    ? value.parts
+    : Array.isArray(structuredContent?.parts)
+      ? structuredContent.parts
+      : [];
+  return candidateParts
+    .slice(0, 24)
+    .flatMap<RichMessagePart>((candidate, index): RichMessagePart[] => {
+    if (!isRecord(candidate)) return [];
+    if (candidate.type === "attachment") {
+      const id =
+        stringValue(candidate.attachmentId) ??
+        stringValue(candidate.id) ??
+        `attachment-${index}`;
+      return [
+        {
+          type: "attachment" as const,
+          id,
+          label:
+            stringValue(candidate.fileName) ??
+            stringValue(candidate.label) ??
+            "Conversation file",
+          caption: stringValue(candidate.caption),
+        },
+      ];
+    }
+    if (candidate.type === "diagram") {
+      const caption = stringValue(candidate.caption);
+      const altText = stringValue(candidate.altText);
+      if (!caption || !altText) return [];
+      return [
+        {
+          type: "diagram" as const,
+          id:
+            stringValue(candidate.assetId) ??
+            stringValue(candidate.id) ??
+            `diagram-${index}`,
+          caption,
+          altText,
+        },
+      ];
+    }
+    return [];
+    });
+}
+
+function textFromStructuredParts(
+  value: unknown,
+  structuredContent: JsonRecord | null,
+) {
+  const candidateParts = isRecord(value) && Array.isArray(value.parts)
+    ? value.parts
+    : Array.isArray(structuredContent?.parts)
+      ? structuredContent.parts
+      : [];
+  const text = candidateParts.flatMap((candidate) =>
+    isRecord(candidate) &&
+    candidate.type === "text" &&
+    typeof candidate.text === "string"
+      ? [candidate.text]
+      : [],
+  );
+  return text.length ? text.join("\n\n") : null;
+}
+
+function isRichLine(line: string) {
+  return (
+    /^#{1,3}\s+/u.test(line) ||
+    /^[-*]\s+/u.test(line) ||
+    /^\d+\.\s+/u.test(line) ||
+    /^>\s?/u.test(line) ||
+    /^```/u.test(line)
+  );
+}
+
+function RichMessageBody({ content }: { content: string }) {
+  const lines = content.replace(/\r\n?/gu, "\n").split("\n");
+  const blocks: ReactNode[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+    if (/^```/u.test(line)) {
+      const language = line.replace(/^```/u, "").trim();
+      const code: string[] = [];
+      index += 1;
+      while (index < lines.length && !/^```/u.test(lines[index] ?? "")) {
+        code.push(lines[index] ?? "");
+        index += 1;
+      }
+      if (index < lines.length) index += 1;
+      blocks.push(
+        <pre key={`code-${index}`} data-language={language || undefined}>
+          <code>{code.join("\n")}</code>
+        </pre>,
+      );
+      continue;
+    }
+    const heading = line.match(/^(#{1,3})\s+(.+)$/u);
+    if (heading) {
+      blocks.push(<h3 key={`heading-${index}`}>{heading[2]}</h3>);
+      index += 1;
+      continue;
+    }
+    if (/^[-*]\s+/u.test(line)) {
+      const items: string[] = [];
+      while (
+        index < lines.length &&
+        /^[-*]\s+/u.test(lines[index] ?? "")
+      ) {
+        items.push((lines[index] ?? "").replace(/^[-*]\s+/u, ""));
+        index += 1;
+      }
+      blocks.push(
+        <ul key={`list-${index}`}>
+          {items.map((item, itemIndex) => (
+            <li key={`${itemIndex}-${item}`}>{item}</li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+    if (/^\d+\.\s+/u.test(line)) {
+      const items: string[] = [];
+      while (
+        index < lines.length &&
+        /^\d+\.\s+/u.test(lines[index] ?? "")
+      ) {
+        items.push((lines[index] ?? "").replace(/^\d+\.\s+/u, ""));
+        index += 1;
+      }
+      blocks.push(
+        <ol key={`ordered-${index}`}>
+          {items.map((item, itemIndex) => (
+            <li key={`${itemIndex}-${item}`}>{item}</li>
+          ))}
+        </ol>,
+      );
+      continue;
+    }
+    if (/^>\s?/u.test(line)) {
+      const quote: string[] = [];
+      while (index < lines.length && /^>\s?/u.test(lines[index] ?? "")) {
+        quote.push((lines[index] ?? "").replace(/^>\s?/u, ""));
+        index += 1;
+      }
+      blocks.push(
+        <blockquote key={`quote-${index}`}>{quote.join(" ")}</blockquote>,
+      );
+      continue;
+    }
+    const paragraph: string[] = [line];
+    index += 1;
+    while (
+      index < lines.length &&
+      (lines[index] ?? "").trim() &&
+      !isRichLine(lines[index] ?? "")
+    ) {
+      paragraph.push(lines[index] ?? "");
+      index += 1;
+    }
+    blocks.push(<p key={`paragraph-${index}`}>{paragraph.join(" ")}</p>);
+  }
+
+  return <div className={styles.messageContent}>{blocks}</div>;
+}
+
 function normalizeSource(value: unknown, index: number): SourceEvidence | null {
   if (!isRecord(value)) return null;
   const excerpt =
@@ -117,14 +308,15 @@ function normalizeMessage(
           roleValue === "creator"
         ? "user"
         : null;
-  const content =
-    stringValue(value.content) ??
-    stringValue(value.text) ??
-    stringValue(value.body);
-  if (!role || !content) return null;
   const structuredContent = isRecord(value.structuredContent)
     ? value.structuredContent
     : null;
+  const content =
+    stringValue(value.content) ??
+    stringValue(value.text) ??
+    stringValue(value.body) ??
+    textFromStructuredParts(value, structuredContent);
+  if (!role || !content) return null;
   const sourceValue = Array.isArray(value.sources)
     ? value.sources
     : Array.isArray(structuredContent?.sources)
@@ -145,6 +337,7 @@ function normalizeMessage(
     createdAt:
       stringValue(value.createdAt) ?? stringValue(value.created_at) ?? null,
     sources,
+    richParts: normalizeRichParts(value, structuredContent),
   };
 }
 
@@ -204,6 +397,7 @@ function normalizeResponse(
         content,
         createdAt: new Date().toISOString(),
         sources,
+        richParts: [],
       };
     }
   } else if (!message.sources.length && Array.isArray(data.sources)) {
@@ -488,6 +682,7 @@ export default function ConversationClient({
       content,
       createdAt: new Date().toISOString(),
       sources: [],
+      richParts: [],
     };
     setMessages((current) => [...current, optimisticMessage]);
     setSending(true);
@@ -1384,24 +1579,47 @@ export default function ConversationClient({
     (mode === "voice" &&
       (voiceReadiness === "checking" ||
         !["idle", "error"].includes(voicePhase)));
+  const intelligenceActive =
+    sending ||
+    (mode === "voice" &&
+      (realtimeActive ||
+        ["requesting", "recording", "transcribing", "thinking", "speaking"].includes(
+          voicePhase,
+        )));
+  const voiceActionLabel = realtimeAvailable
+    ? !realtimeActive
+      ? "Start"
+      : realtimeMuted
+        ? "Unmute"
+        : "Mute"
+    : voicePhase === "recording"
+      ? "Done"
+      : voicePhase === "speaking"
+        ? "Interrupt"
+        : "Speak";
 
   return (
-    <div className={styles.workspace}>
-      <aside className={styles.contextRail}>
-        <Link className={styles.brand} href="/app">
-          <span className={styles.brandMark}>E</span>
-          <span>
+    <div className={styles.workspace} data-mode={mode}>
+      <div
+        className={`${styles.spectralEdge} ${
+          intelligenceActive ? styles.spectralEdgeActive : ""
+        }`}
+        aria-hidden="true"
+      />
+      <header className={styles.floatingNav}>
+        <Link className={styles.brand} href="/app" aria-label="Learning home">
+          <span className={styles.brandMark} aria-hidden="true">
+            E
+          </span>
+          <span className={styles.brandCopy}>
             <b>{assistantName}</b>
             <small>{tenantName}</small>
           </span>
         </Link>
-        <Link className={styles.backLink} href="/app">
-          <span aria-hidden="true">←</span> Learning home
-        </Link>
-        <section className={styles.contextCard}>
-          <p>Ground this conversation</p>
+
+        <div className={styles.contextBar}>
           <label>
-            <span>Course</span>
+            <span className={styles.srOnly}>Course grounding</span>
             <select
               value={selectedCourseId}
               onChange={(event) => {
@@ -1410,8 +1628,9 @@ export default function ConversationClient({
                 setSelectedLessonId("");
               }}
               disabled={voiceContextLocked}
+              aria-label="Course grounding"
             >
-              <option value="">All published learning</option>
+              <option value="">All learning</option>
               {courses.map((course) => (
                 <option key={course.courseId} value={course.courseId}>
                   {course.title}
@@ -1420,58 +1639,40 @@ export default function ConversationClient({
             </select>
           </label>
           {selectedCourse ? (
-            <label>
-              <span>Lesson</span>
-              <select
-                value={selectedLessonId}
-                onChange={(event) => {
-                  resetConversationContext();
-                  setSelectedLessonId(event.target.value);
-                }}
-                disabled={voiceContextLocked}
-              >
-                <option value="">Entire course</option>
-                {lessons.map((lesson) => (
-                  <option key={lesson.lessonId} value={lesson.lessonId}>
-                    {lesson.title}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <>
+              <span className={styles.contextSeparator} aria-hidden="true">
+                /
+              </span>
+              <label>
+                <span className={styles.srOnly}>Lesson grounding</span>
+                <select
+                  value={selectedLessonId}
+                  onChange={(event) => {
+                    resetConversationContext();
+                    setSelectedLessonId(event.target.value);
+                  }}
+                  disabled={voiceContextLocked}
+                  aria-label="Lesson grounding"
+                >
+                  <option value="">Entire course</option>
+                  {lessons.map((lesson) => (
+                    <option key={lesson.lessonId} value={lesson.lessonId}>
+                      {lesson.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
           ) : null}
-          <small>
-            Answers use only learning that is published for this workspace.
-          </small>
-        </section>
-        <div className={styles.identity}>
-          <span>{role.slice(0, 2).toUpperCase()}</span>
-          <div>
-            <b>Private workspace</b>
-            <small>Signed in · {tenantName}</small>
-          </div>
         </div>
-      </aside>
 
-      <section className={styles.conversation}>
-        <header className={styles.header}>
-          <Link href="/app" className={styles.mobileBack} aria-label="Back">
-            ←
-          </Link>
-          <div className={styles.assistantIdentity}>
-            <span
-              className={`${styles.orb} ${sending ? styles.orbThinking : ""}`}
-              aria-hidden="true"
-            />
-            <span>
-              <b>{assistantName}</b>
-              <small>{sending ? "Thinking with your learning…" : "Learning companion"}</small>
-            </span>
-          </div>
+        <div className={styles.navActions}>
           <div className={styles.modeSwitch} aria-label="Conversation mode">
             <button
               className={mode === "text" ? styles.modeActive : ""}
               type="button"
               onClick={leaveVoiceMode}
+              aria-label="Use text conversation"
             >
               Text
             </button>
@@ -1479,33 +1680,45 @@ export default function ConversationClient({
               className={mode === "voice" ? styles.modeActive : ""}
               type="button"
               onClick={enterVoiceMode}
+              aria-label="Use voice conversation"
             >
               <span aria-hidden="true">●</span> Voice
             </button>
           </div>
-        </header>
+          <span className={styles.identity} title={`Signed in to ${tenantName}`}>
+            {role.slice(0, 2).toUpperCase()}
+          </span>
+        </div>
+      </header>
 
+      <section className={styles.conversation}>
         {mode === "voice" ? (
-          <section className={styles.voiceNotice} aria-labelledby="voice-heading">
-            <span
-              className={`${styles.voiceOrb} ${styles[`voiceOrb_${voicePhase}`]}`}
-              style={
-                {
-                  "--voice-energy": voiceLevel,
-                } as CSSProperties
-              }
-              aria-hidden="true"
-            >
-              <i />
-              <i />
-              <i />
-            </span>
-            <div aria-live="polite">
+          <section
+            className={`${styles.voiceNotice} ${
+              realtimeActive ? styles.voiceContinuous : ""
+            }`}
+            aria-labelledby="voice-heading"
+          >
+            <div className={styles.voiceAtmosphere} aria-hidden="true" />
+            <div className={styles.cloudStage} aria-hidden="true">
+              <span
+                className={`${styles.voiceOrb} ${styles[`voiceOrb_${voicePhase}`]}`}
+                style={
+                  {
+                    "--voice-energy": voiceLevel,
+                  } as CSSProperties
+                }
+              >
+                <i />
+                <i />
+                <i />
+                <em />
+              </span>
+            </div>
+            <div className={styles.voiceStatus} aria-live="polite">
               <p>{currentVoiceCopy.eyebrow}</p>
               <h1 id="voice-heading">{currentVoiceCopy.heading}</h1>
-              <span>
-                {currentVoiceCopy.description}
-              </span>
+              <span>{currentVoiceCopy.description}</span>
             </div>
             {voiceTranscript ? (
               <div className={styles.voiceTurn}>
@@ -1542,54 +1755,70 @@ export default function ConversationClient({
                 Retry voice check
               </button>
             ) : null}
-            <button
-              className={`${styles.voiceButton} ${
-                voicePhase === "recording" ? styles.voiceButtonRecording : ""
-              }`}
-              type="button"
-              onClick={() => {
-                if (realtimeAvailable) {
-                  if (realtimeActive) toggleRealtimeMute();
-                  else void startRealtimeSession();
-                } else {
-                  void startVoiceRecording();
+            <div className={styles.voiceControls}>
+              <button
+                className={`${styles.voiceButton} ${
+                  voicePhase === "recording" ? styles.voiceButtonRecording : ""
+                }`}
+                type="button"
+                onClick={() => {
+                  if (realtimeAvailable) {
+                    if (realtimeActive) toggleRealtimeMute();
+                    else void startRealtimeSession();
+                  } else {
+                    void startVoiceRecording();
+                  }
+                }}
+                disabled={
+                  voiceReadiness !== "ready" ||
+                  (!realtimeAvailable &&
+                    ["requesting", "transcribing", "thinking"].includes(
+                      voicePhase,
+                    ))
                 }
-              }}
-              disabled={
-                voiceReadiness !== "ready" ||
-                (!realtimeAvailable &&
-                  ["requesting", "transcribing", "thinking"].includes(
-                    voicePhase,
-                  ))
-              }
-              aria-label={voiceButtonLabel}
-            >
-              <span aria-hidden="true">●</span>
-            </button>
+                aria-label={voiceButtonLabel}
+                aria-pressed={realtimeActive ? realtimeMuted : undefined}
+              >
+                <span className={styles.voiceControlIcon} aria-hidden="true">
+                  {realtimeMuted ? "×" : "●"}
+                </span>
+                <span>{voiceActionLabel}</span>
+              </button>
+              {realtimeActive ? (
+                <button
+                  className={styles.endVoice}
+                  type="button"
+                  onClick={stopRealtimeSession}
+                  aria-label="End voice session"
+                >
+                  <span aria-hidden="true">■</span>
+                  <span>End</span>
+                </button>
+              ) : null}
+              <button
+                className={styles.continueText}
+                type="button"
+                onClick={leaveVoiceMode}
+                aria-label="Continue in text"
+              >
+                <span aria-hidden="true">⌨</span>
+                <span>Text</span>
+              </button>
+            </div>
             <small className={styles.voiceDisclosure}>
               {realtimeAvailable
                 ? "Continuous WebRTC voice · automatic turn detection · AI-generated voice · raw audio is not retained"
                 : "Secure push-to-talk fallback · AI-generated voice · raw audio is not retained"}
             </small>
-            {realtimeActive ? (
-              <button
-                className={styles.endVoice}
-                type="button"
-                onClick={stopRealtimeSession}
-              >
-                End voice session
-              </button>
-            ) : null}
-            <button
-              className={styles.continueText}
-              type="button"
-              onClick={leaveVoiceMode}
-            >
-              Continue in text
-            </button>
           </section>
-        ) : (
-          <>
+        ) : null}
+        <div
+          className={`${styles.textCanvas} ${
+            mode === "voice" ? styles.textCanvasUnderVoice : ""
+          }`}
+          aria-hidden={mode === "voice" ? true : undefined}
+          inert={mode === "voice" ? true : undefined}
+        >
             <div className={styles.feed} aria-live="polite">
               {loadingHistory ? (
                 <div className={styles.loading}>
@@ -1610,7 +1839,40 @@ export default function ConversationClient({
                       <span className={styles.messageOrb} aria-hidden="true" />
                     ) : null}
                     <div>
-                      <p>{message.content}</p>
+                      <RichMessageBody content={message.content} />
+                      {message.richParts.length ? (
+                        <div className={styles.richParts}>
+                          {message.richParts.map((part) =>
+                            part.type === "attachment" ? (
+                              <article
+                                className={styles.attachmentPart}
+                                key={`${part.type}-${part.id}`}
+                              >
+                                <span aria-hidden="true">↥</span>
+                                <div>
+                                  <b>{part.label}</b>
+                                  {part.caption ? <small>{part.caption}</small> : null}
+                                </div>
+                              </article>
+                            ) : (
+                              <figure
+                                className={styles.diagramPart}
+                                key={`${part.type}-${part.id}`}
+                                aria-label={part.altText}
+                              >
+                                <div>
+                                  <span aria-hidden="true">◇</span>
+                                  <b>Grounded diagram</b>
+                                </div>
+                                <figcaption>
+                                  {part.caption}
+                                  <small>{part.altText}</small>
+                                </figcaption>
+                              </figure>
+                            ),
+                          )}
+                        </div>
+                      ) : null}
                       {message.sources.length ? (
                         <details className={styles.sources}>
                           <summary>
@@ -1744,8 +2006,7 @@ export default function ConversationClient({
                 Check the cited source when accuracy matters.
               </p>
             </footer>
-          </>
-        )}
+        </div>
       </section>
     </div>
   );

@@ -220,6 +220,35 @@ suite.
   Fast Refresh reload caused by editing during the check, not a production
   runtime warning. Live SQL/provider evidence remains unclaimed.
 
+### 2026-07-24 Native Learning Canvas integration
+
+- The production learner home, managed sign-in, mandatory password change,
+  durable onboarding, People administration, unified conversation, continuous
+  voice and embeddable Widget now share the approved Native Learning Canvas
+  visual system. The redesign preserves the existing durable authorization,
+  tenancy, learning, source, privacy and voice boundaries rather than replacing
+  them with visual fixtures.
+- The production conversation retains its unified thread, course and lesson
+  grounding, Explain/Practice/Check modes, sources, draft/scroll/focus state,
+  WebRTC voice, push-to-talk fallback, barge-in, mute/end and cancellation. It
+  now renders bounded safe rich response structures for paragraphs, headings,
+  lists, quotes, code, attachments and diagrams without injecting raw HTML.
+- The Widget runtime retains Shadow DOM isolation, persistence, drag, resize,
+  expansion, tenant switching, host events, context truthfulness, source and
+  diagram events, and mobile-sheet behavior. Its redesigned ESM and IIFE
+  bundles pass **10/10** tests at **13,098 bytes** and **13,197 bytes** gzip,
+  respectively, below the 50 KB budget.
+- The integrated repository gate passed `pnpm check`; the optimized
+  `pnpm build` compiled **62 generated pages**; and
+  `COURSE_AI_CONSOLE_URL=http://127.0.0.1:3100 pnpm verify:dev` passed the
+  development API, authoring, intelligence, privacy, Widget, **36-tool MCP**
+  and Supabase structural smoke suites. `git diff --check` also passed.
+- Browser review confirmed the redesigned public entry, managed sign-in and
+  embedded host/widget at desktop geometry. Focused lane review also covered
+  390px sign-in geometry. These are local visual and integration results; they
+  do not establish the live-provider, browser-matrix or screen-reader evidence
+  listed below.
+
 ## Explicitly unproven
 
 The repository does not yet claim grade-A evidence for:

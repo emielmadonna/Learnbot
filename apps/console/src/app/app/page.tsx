@@ -62,8 +62,9 @@ export default async function AuthenticatedAppPage({
     );
   }
 
+  let user;
   try {
-    await requireVerifiedUser(supabase);
+    user = await requireVerifiedUser(supabase);
   } catch {
     redirect("/auth/sign-in?error=authentication_required&next=/app");
   }
@@ -94,11 +95,17 @@ export default async function AuthenticatedAppPage({
   const firstLesson = firstCourse?.modules
     .flatMap((module) => module.lessons)
     .find((lesson) => lesson.progressState !== "completed");
+  const accountName =
+    (typeof user.user_metadata?.full_name === "string"
+      ? user.user_metadata.full_name.trim().split(/\s+/u)[0]
+      : "") ||
+    user.email?.split("@")[0] ||
+    "there";
 
   return (
     <main className={styles.shell} style={theme}>
       <UsageSignal eventName="learning.workspace_opened" />
-      <aside className={styles.rail}>
+      <header className={styles.topbar}>
         <Link className={styles.brand} href="/app">
           <span className={styles.logo}>E</span>
           <span>
@@ -106,68 +113,49 @@ export default async function AuthenticatedAppPage({
             <small>{workspace.tenant.displayName}</small>
           </span>
         </Link>
-        <nav aria-label="Learning workspace">
+        <nav className={styles.floatingNav} aria-label="Learning workspace">
           <a className={styles.activeNav} href="#today">
-            <span>⌂</span> Today
+            Home
           </a>
           <a href="#courses">
-            <span>◫</span> My learning
+            Learning
           </a>
           {workspace.identity.canAuthor ? (
             <a href="#create-course">
-              <span>＋</span> Add learning
+              Create
             </a>
           ) : null}
           {["tenant_owner", "tenant_admin"].includes(
             workspace.identity.role,
           ) ? (
             <Link href="/app/admin/users">
-              <span>◉</span> People & access
+              People
             </Link>
           ) : null}
           <Link href="/onboarding">
-            <span>◎</span> Workspace
+            Settings
           </Link>
         </nav>
-        <div className={styles.railFooter}>
-          <Link className={styles.askButton} href="/app/conversation">
-            <span className={styles.orb} aria-hidden="true" />
-            <span>
-              <b>Ask {assistantName}</b>
-              <small>Text or voice</small>
-            </span>
-            <span aria-hidden="true">⌁</span>
+        <div className={styles.accountActions}>
+          <Link
+            className={styles.voiceButton}
+            href="/app/conversation?mode=voice"
+          >
+            <span aria-hidden="true">●</span>
+            Voice
+          </Link>
+          <Link className={styles.avatar} href="/onboarding" aria-label="Account">
+            {workspace.identity.role.slice(0, 2).toUpperCase()}
           </Link>
           <form action="/auth/sign-out" method="post">
-            <button type="submit">Sign out</button>
+            <button type="submit" aria-label="Sign out">
+              Sign out
+            </button>
           </form>
         </div>
-      </aside>
+      </header>
 
       <section className={styles.content}>
-        <header className={styles.topbar}>
-          <div>
-            <p>Learning workspace</p>
-            <strong>{workspace.tenant.displayName}</strong>
-          </div>
-          <div className={styles.topActions}>
-            {workspace.identity.canAuthor ? (
-              <a className={styles.addButton} href="#create-course">
-                <span aria-hidden="true">＋</span> Add learning
-              </a>
-            ) : null}
-            <Link
-              className={styles.voiceButton}
-              href="/app/conversation?mode=voice"
-            >
-              <span aria-hidden="true">●</span> Start voice
-            </Link>
-            <Link className={styles.avatar} href="/onboarding" aria-label="Account">
-              {workspace.identity.role.slice(0, 2).toUpperCase()}
-            </Link>
-          </div>
-        </header>
-
         <div className={styles.body}>
           {statusMessages[status] ? (
             <p className={styles.success} role="status">
@@ -182,10 +170,13 @@ export default async function AuthenticatedAppPage({
 
           <section className={styles.hero} id="today">
             <div>
-              <p className={styles.eyebrow}>Your next step</p>
+              <p className={styles.greeting}>Welcome back, {accountName}</p>
+              <p className={styles.eyebrow}>
+                {firstCourse?.title ?? "Your learning workspace"}
+              </p>
               <h1>
                 {firstLesson
-                  ? `Continue with ${firstLesson.title}`
+                  ? firstLesson.title
                   : firstCourse
                     ? "You’re all caught up."
                     : "Build the first learning journey."}
@@ -208,10 +199,6 @@ export default async function AuthenticatedAppPage({
                     Ask {assistantName} <span aria-hidden="true">→</span>
                   </Link>
                 )}
-                <Link className={styles.secondaryAction} href="/app/conversation">
-                  <span className={styles.miniOrb} aria-hidden="true" />
-                  Ask a question
-                </Link>
               </div>
             </div>
             <div className={styles.heroProgress}>
@@ -234,6 +221,17 @@ export default async function AuthenticatedAppPage({
                   : "No published lessons yet"}
               </p>
             </div>
+            <Link className={styles.assistantDock} href="/app/conversation">
+              <span className={styles.miniOrb} aria-hidden="true" />
+              <span>
+                <b>Ask {assistantName}</b>
+                <small>Grounded in your published learning</small>
+              </span>
+              <span className={styles.dockVoice} aria-hidden="true">
+                ●
+              </span>
+              <strong>Speak</strong>
+            </Link>
           </section>
 
           <section className={styles.courseSection} id="courses">

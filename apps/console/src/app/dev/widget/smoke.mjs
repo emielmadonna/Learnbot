@@ -25,7 +25,7 @@ const [lab, host, mark, diagram] = await Promise.all([
 ]);
 
 assert.match(lab.body, /Widget Lab/);
-assert.match(lab.body, /Test the companion where it actually lives/);
+assert.match(lab.body, /A quiet learning canvas, inside any course/);
 assert.match(host.body, /Your Minimum Day/);
 assert.match(host.body, /Loading isolated widget runtime/);
 assert.match(mark.contentType, /image\/svg\+xml/);

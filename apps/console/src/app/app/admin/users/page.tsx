@@ -23,16 +23,29 @@ export default async function UserAccessPage() {
 
   return (
     <main className={styles.shell}>
-      <header className={styles.header}>
-        <Link href="/app">← Learning home</Link>
-        <div>
-          <p>Workspace administration</p>
-          <h1>People and access</h1>
+      <nav className={styles.floatingNav} aria-label="Administration">
+        <Link className={styles.brand} href="/app">
+          <span className={styles.brandMark}>E</span>
           <span>
-            Create controlled accounts and see how the learning workspace is
-            being used.
+            <b>Estie</b>
+            <small>Learning workspace</small>
           </span>
+        </Link>
+        <div className={styles.navContext}>
+          <span className={styles.liveDot} aria-hidden="true" />
+          Secure administration
         </div>
+        <Link className={styles.backLink} href="/app">
+          Learning home
+        </Link>
+      </nav>
+      <header className={styles.header}>
+        <p>People</p>
+        <h1>A calm view of your team.</h1>
+        <span>
+          Create controlled access, understand adoption, and keep every person
+          inside the right workspace boundary.
+        </span>
       </header>
       <UserAccessManager />
     </main>

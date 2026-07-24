@@ -144,11 +144,30 @@ export default async function OnboardingPage({
   return (
     <main className={styles.shell}>
       <div className={styles.frame}>
-        <Link className={styles.brand} href="/">
-          <span className={styles.brandMark}>E</span>
-          Estie learning
-        </Link>
+        <nav className={styles.floatingNav} aria-label="Workspace setup">
+          <Link className={styles.brand} href="/">
+            <span className={styles.brandMark}>E</span>
+            <span>
+              <b>Estie</b>
+              <small>Native learning</small>
+            </span>
+          </Link>
+          <span className={styles.secureLabel}>Private workspace setup</span>
+        </nav>
         <section className={styles.wideCard}>
+          <div className={styles.progress} aria-label="First sign-in progress">
+            <span data-complete="true">
+              <b>✓</b> Sign in
+            </span>
+            <i data-complete="true" />
+            <span data-complete="true">
+              <b>✓</b> Secure
+            </span>
+            <i data-complete="true" />
+            <span data-active="true">
+              <b>3</b> Enter
+            </span>
+          </div>
           <p className={styles.eyebrow}>Workspace setup</p>
           <h1 className={styles.title}>
             {memberships.length === 0

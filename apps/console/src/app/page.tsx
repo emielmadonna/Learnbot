@@ -90,7 +90,7 @@ export default function HomePage() {
 
   if (isProduction) {
     return (
-      <main>
+      <main className="launchPage">
         <header className="topbar">
           <div className="brandMark">E</div>
           <div>
@@ -148,7 +148,7 @@ export default function HomePage() {
   }
 
   return (
-    <main>
+    <main className="launchPage">
       <header className="topbar">
         <div className="brandMark">L</div>
         <div>

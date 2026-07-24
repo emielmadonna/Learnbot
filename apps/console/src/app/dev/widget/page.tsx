@@ -165,7 +165,7 @@ export default function WidgetLabPage() {
           <span>W</span>
           <div>
             <strong>Widget Lab</strong>
-            <small>Real embed runtime</small>
+            <small>Native learning canvas</small>
           </div>
         </a>
         <div className={styles.runtimePill}>
@@ -181,17 +181,17 @@ export default function WidgetLabPage() {
 
       <section className={styles.intro}>
         <div>
-          <p className={styles.eyebrow}>EMBED EXPERIENCE · DEVELOPMENT HOST</p>
-          <h1>Test the companion where it actually lives.</h1>
+          <p className={styles.eyebrow}>EMBED EXPERIENCE · LIVE CONTRACT HARNESS</p>
+          <h1>A quiet learning canvas, inside any course.</h1>
           <p>
-            This is the framework-free workspace bundle mounted inside a real host
-            viewport. Change tenant data, resize the host, switch modalities, and
-            observe one conversation survive every presentation change.
+            Exercise the same isolated runtime a customer embeds: change tenant
+            identity and learning context, cross desktop and mobile, speak or type,
+            and watch one sourced conversation remain continuous.
           </p>
         </div>
         <dl className={styles.gates}>
           <div><dt>Distribution</dt><dd>ESM + IIFE</dd></div>
-          <div><dt>IIFE gzip</dt><dd>11.6 KB</dd></div>
+          <div><dt>Bundle gate</dt><dd>&lt; 50 KB gzip</dd></div>
           <div><dt>Isolation</dt><dd>Shadow DOM</dd></div>
         </dl>
       </section>
@@ -307,7 +307,7 @@ export default function WidgetLabPage() {
 
           <div className={styles.toggleRows}>
             <label>
-              <span><b>Voice control</b><small>Typed adapter events only</small></span>
+              <span><b>Hands-free voice</b><small>One continuous conversation</small></span>
               <input
                 type="checkbox"
                 checked={configuration.branding.voiceEnabled}
@@ -352,7 +352,7 @@ export default function WidgetLabPage() {
                 disabled={!configuration.branding.voiceEnabled}
                 onClick={() => send({ source: "widget-lab", type: "start-voice" })}
               >
-                Voice event
+                Start voice
               </button>
             </div>
           </div>

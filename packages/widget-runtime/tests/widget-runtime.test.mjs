@@ -63,6 +63,15 @@ function descendantText(element) {
   return [element.textContent, ...element.children.flatMap((child) => descendantText(child))].join(" ");
 }
 
+function findDescendant(element, predicate) {
+  if (predicate(element)) return element;
+  for (const child of element.children) {
+    const match = findDescendant(child, predicate);
+    if (match) return match;
+  }
+  return undefined;
+}
+
 function keyboardEvent(key, { shiftKey = false } = {}) {
   const event = new Event("keydown", { cancelable: true });
   Object.defineProperties(event, {
@@ -365,6 +374,60 @@ test("WID-05: text, voice, attachment, source, and diagram events stay in one or
   await widget.endVoice();
   assert.equal(stopped, true);
   assert.equal(widget.getSnapshot().modality, "text");
+});
+
+test("WID-05: native learning canvas exposes voice, source, orb, and active-edge states", async () => {
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_canvas",
+    adapter: adapter({
+      async bootstrap() {
+        return {
+          conversation: conversation("conversation-canvas", [
+            {
+              ...textItem("grounded-answer", 1, "assistant", "Use the smallest promise you can keep."),
+              parts: [
+                { kind: "text", text: "Use the smallest promise you can keep." },
+                {
+                  kind: "source",
+                  id: "source-canvas",
+                  title: "Minimum Day",
+                  url: "https://learning.example/minimum-day",
+                },
+              ],
+            },
+          ]),
+        };
+      },
+      async startVoice() {
+        return {
+          async stop() {},
+          async setMuted() {},
+        };
+      },
+    }),
+    branding: { voiceEnabled: true },
+  });
+
+  widget.open();
+  const style = widget.shadowRoot.children[0];
+  const launcher = widget.shadowRoot.children[1];
+  const surface = widget.shadowRoot.children[2];
+  const voice = findDescendant(surface, (element) => element.className.includes("voice"));
+  const source = findDescendant(surface, (element) => element.className === "source");
+
+  assert.match(style.textContent, /orbFloat/);
+  assert.match(style.textContent, /spectralEdge/);
+  assert.equal(launcher.className, "launcher");
+  assert.equal(voice.textContent, "Voice");
+  assert.equal(voice.getAttribute("aria-label"), "Start voice mode");
+  assert.equal(source.textContent, "Source · Minimum Day");
+  assert.equal(surface.dataset.modality, "text");
+
+  await widget.startVoice();
+  assert.equal(surface.dataset.modality, "voice");
+  assert.equal(voice.textContent, "End voice");
+  assert.equal(voice.getAttribute("aria-label"), "End voice mode");
 });
 
 test("tenant persistence is isolated and every send refreshes page context", async () => {

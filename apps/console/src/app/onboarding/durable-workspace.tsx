@@ -34,8 +34,8 @@ function StepCard({
 }) {
   const policyLocked = policySteps.has(step.key);
   return (
-    <article className={styles.stepCard}>
-      <div className={styles.stepHeading}>
+    <details className={styles.stepCard}>
+      <summary className={styles.stepHeading}>
         <div>
           <strong>{stepLabels[step.key] ?? step.key}</strong>
           <span>{step.required ? "Required" : "Optional"}</span>
@@ -43,7 +43,7 @@ function StepCard({
         <span className={styles.statusPill} data-status={step.status}>
           {step.status.replaceAll("_", " ")}
         </span>
-      </div>
+      </summary>
       {policyLocked ? (
         <p className={styles.policyLock}>
           {step.key === "recording_policy" ? "O-07" : "O-13"} requires an
@@ -82,7 +82,7 @@ function StepCard({
           This role has read-only onboarding visibility.
         </p>
       )}
-    </article>
+    </details>
   );
 }
 
@@ -351,13 +351,14 @@ export function DurableWorkspace({
         </div>
       </section>
 
-      <section className={styles.section}>
-        <div className={styles.sectionHeading}>
+      <details className={`${styles.section} ${styles.auditDisclosure}`}>
+        <summary className={styles.sectionHeading}>
           <div>
             <p className={styles.eyebrow}>Safe audit evidence</p>
             <h2>Recent onboarding activity</h2>
           </div>
-        </div>
+          <span className={styles.version}>View activity</span>
+        </summary>
         <div className={styles.auditList}>
           {snapshot.audit.slice(0, 8).map((event) => (
             <div key={event.eventId}>
@@ -368,7 +369,7 @@ export function DurableWorkspace({
             </div>
           ))}
         </div>
-      </section>
+      </details>
     </div>
   );
 }

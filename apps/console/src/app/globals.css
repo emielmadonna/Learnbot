@@ -416,3 +416,197 @@ h1 {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Native Learning Canvas — public entry and preview directory. */
+body {
+  background: #f9f9f8;
+  color: #171918;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter,
+    "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.launchPage {
+  position: relative;
+  width: min(1280px, calc(100% - 48px));
+  min-height: 100vh;
+  padding: 18px 0 64px;
+}
+
+.launchPage::before {
+  position: absolute;
+  z-index: -1;
+  top: 160px;
+  right: -80px;
+  width: 640px;
+  height: 640px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 30%, rgb(74 157 132 / 13%), transparent 54%),
+    radial-gradient(circle at 65% 45%, rgb(100 175 255 / 10%), transparent 52%),
+    radial-gradient(circle at 62% 72%, rgb(232 112 221 / 7%), transparent 47%);
+  filter: blur(34px);
+  content: "";
+}
+
+.launchPage .topbar {
+  position: sticky;
+  top: 10px;
+  z-index: 10;
+  min-height: 58px;
+  padding: 8px 12px;
+  border: 1px solid rgb(229 229 225 / 82%);
+  border-radius: 18px;
+  background: rgb(255 255 255 / 72%);
+  backdrop-filter: blur(28px) saturate(150%);
+}
+
+.launchPage .brandMark {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--accent);
+  font-size: 13px;
+}
+
+.launchPage h1 {
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.launchPage .topbar .eyebrow {
+  display: none;
+}
+
+.launchPage .environment {
+  border: 0;
+  background: transparent;
+  font-size: 10px;
+}
+
+.launchPage .hero {
+  grid-template-columns: minmax(0, 1.65fr) minmax(260px, 0.48fr);
+  gap: 70px;
+  min-height: 610px;
+  align-items: center;
+  padding: 84px 6vw 110px;
+}
+
+.launchPage .hero h2 {
+  max-width: 850px;
+  margin-bottom: 23px;
+  font-family: inherit;
+  font-size: clamp(56px, 7.6vw, 102px);
+  font-weight: 610;
+  letter-spacing: -0.065em;
+  line-height: 0.95;
+}
+
+.launchPage .hero > div > .eyebrow {
+  margin-bottom: 19px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 610;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.launchPage .lede {
+  max-width: 680px;
+  color: #6f716d;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.launchPage .sprint {
+  padding: 24px 0;
+  border: 0;
+  border-top: 1px solid #ddddda;
+  border-bottom: 1px solid #ddddda;
+  border-radius: 0;
+  background: transparent;
+}
+
+.launchPage .sprint .eyebrow {
+  color: #8c8e89;
+}
+
+.launchPage .sprint strong {
+  font-size: 17px;
+  font-weight: 620;
+}
+
+.launchPage .sprint p:last-child {
+  color: #777975;
+  font-size: 12px;
+}
+
+.launchPage .homeActions {
+  margin-top: 31px;
+}
+
+.launchPage .homePrimary,
+.launchPage .homeSecondary {
+  min-height: 47px;
+  padding: 0 21px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.launchPage .homePrimary {
+  box-shadow: 0 9px 24px rgb(34 92 71 / 15%);
+}
+
+.launchPage .launchStrip {
+  border: 0;
+  border-top: 1px solid #e3e3e0;
+  border-bottom: 1px solid #e3e3e0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.launchPage .launchStrip article {
+  border-right-color: #e3e3e0;
+}
+
+.launchPage .launchStrip strong {
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 620;
+}
+
+.launchPage .moduleCard {
+  min-height: 160px;
+  border-color: #e5e5e2;
+  border-radius: 16px;
+  background: rgb(255 255 255 / 70%);
+}
+
+.launchPage .moduleCard h3 {
+  font-size: 18px;
+  font-weight: 630;
+}
+
+.launchPage .status {
+  background: #eeeeeb;
+  color: #696b67;
+}
+
+@media (max-width: 800px) {
+  .launchPage {
+    width: min(100% - 24px, 680px);
+    padding-top: 10px;
+  }
+
+  .launchPage .hero {
+    grid-template-columns: 1fr;
+    gap: 42px;
+    min-height: 0;
+    padding: 76px 12px;
+  }
+
+  .launchPage .hero h2 {
+    font-size: clamp(49px, 14vw, 72px);
+  }
+}
