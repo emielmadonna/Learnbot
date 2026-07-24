@@ -172,6 +172,7 @@ const onboardingTables = [
   "identity_audit_events",
 ];
 const durableLearningTables = ["lesson_progress"];
+const usageTables = ["learning_usage_events"];
 const expectedTables = [
   ...manifestTables,
   ...durableExecutionTables,
@@ -180,6 +181,7 @@ const expectedTables = [
   ...durableUploadTables,
   ...onboardingTables,
   ...durableLearningTables,
+  ...usageTables,
 ];
 
 function fail(message) {
@@ -581,6 +583,19 @@ if (!sql.includes("protect_command_receipt_identity")) {
 }
 if (!sql.includes("protect_telemetry_outbox_payload")) {
   fail("telemetry_outbox lacks immutable payload protection");
+}
+for (const required of [
+  "user_access_accounts",
+  "auth_current_access_state",
+  "auth_complete_password_change",
+  "admin_provision_auth_user",
+  "learning_record_usage_event",
+  "learning_usage_events_reject_update",
+  "learning_usage_events_reject_delete",
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing managed access or usage control: ${required}`);
+  }
 }
 
 const forbiddenCredentialAssignments = [

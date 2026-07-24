@@ -7,6 +7,7 @@ import {
 import { getLearningWorkspace } from "../../../lib/supabase/learning-rpc";
 import { createServerSupabaseClient } from "../../../lib/supabase/server";
 import ConversationClient from "./conversation-client";
+import { UsageSignal } from "../usage-signal";
 import styles from "./conversation.module.css";
 
 export default async function ConversationPage({
@@ -64,6 +65,7 @@ export default async function ConversationPage({
 
   return (
     <main className={styles.shell} style={theme}>
+      <UsageSignal eventName="conversation.started" />
       <ConversationClient
         assistantName={brand?.assistantName ?? "Estie"}
         tenantName={workspace.tenant.displayName}

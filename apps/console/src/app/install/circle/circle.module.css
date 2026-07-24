@@ -1,0 +1,143 @@
+.shell {
+  min-height: 100vh;
+  padding: clamp(24px, 5vw, 72px);
+  background:
+    radial-gradient(circle at 80% 8%, #dcefe5, transparent 30rem),
+    #f5f6f2;
+  color: #17261f;
+}
+
+.hero,
+.steps,
+.note {
+  width: min(940px, 100%);
+  margin-inline: auto;
+}
+
+.mark {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 15px;
+  background: #205b46;
+  color: white;
+  font-weight: 800;
+}
+
+.hero > p {
+  margin: 44px 0 12px;
+  color: #39745b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  max-width: 700px;
+  margin: 0;
+  font-family: Georgia, serif;
+  font-size: clamp(46px, 8vw, 82px);
+  font-weight: 500;
+  letter-spacing: -0.06em;
+  line-height: 0.98;
+}
+
+.hero > span:last-of-type {
+  display: block;
+  max-width: 650px;
+  margin-top: 24px;
+  color: #5f7068;
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.actions a {
+  padding: 13px 18px;
+  border: 1px solid #cbd9d1;
+  border-radius: 999px;
+  color: #24533f;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.actions a:first-child {
+  border-color: #205b46;
+  background: #205b46;
+  color: white;
+}
+
+.steps {
+  display: grid;
+  gap: 1px;
+  margin-top: 72px;
+  overflow: hidden;
+  border: 1px solid #d9e2dc;
+  border-radius: 26px;
+  background: #d9e2dc;
+}
+
+.steps article {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 20px;
+  padding: clamp(22px, 4vw, 36px);
+  background: rgb(255 255 255 / 92%);
+}
+
+.steps article > span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e5f1ea;
+  color: #205b46;
+  font-weight: 800;
+}
+
+.steps h2,
+.steps p {
+  margin: 0;
+}
+
+.steps p {
+  margin-top: 8px;
+  color: #637169;
+  line-height: 1.65;
+}
+
+.steps pre {
+  margin: 18px 0 0;
+  padding: 18px;
+  overflow: auto;
+  border-radius: 15px;
+  background: #17261f;
+  color: #e8f4ed;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.note {
+  box-sizing: border-box;
+  margin-top: 18px;
+  padding: 22px;
+  border: 1px solid #d7e0da;
+  border-radius: 18px;
+  background: #eef4f0;
+}
+
+.note p {
+  margin: 7px 0 0;
+  color: #5d6d65;
+  line-height: 1.6;
+}

@@ -59,7 +59,28 @@ export async function proxy(request: NextRequest) {
 
     // getUser verifies the access token with Supabase Auth. Protected pages
     // repeat this check before loading any tenant context.
-    await supabase.auth.getUser();
+    const identity = await supabase.auth.getUser();
+    const protectedWorkspace =
+      request.nextUrl.pathname.startsWith("/app") ||
+      request.nextUrl.pathname.startsWith("/onboarding");
+    if (identity.data.user && !identity.error && protectedWorkspace) {
+      const access = await supabase.rpc("auth_current_access_state");
+      const row = Array.isArray(access.data) ? access.data[0] : access.data;
+      if (
+        !access.error &&
+        row &&
+        typeof row === "object" &&
+        "must_change_password" in row &&
+        row.must_change_password === true
+      ) {
+        const destination = request.nextUrl.clone();
+        const requestedPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+        destination.pathname = "/auth/change-password";
+        destination.search = "";
+        destination.searchParams.set("next", requestedPath);
+        return NextResponse.redirect(destination);
+      }
+    }
   } catch {
     // Configuration and authentication errors are handled fail-closed by the
     // destination route, which can render a useful recovery state.

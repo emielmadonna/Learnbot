@@ -12,6 +12,7 @@ import {
 import { createServerSupabaseClient } from "../../lib/supabase/server";
 import styles from "./workspace.module.css";
 import UploadLearning from "./upload-learning";
+import { UsageSignal } from "./usage-signal";
 
 const statusMessages: Record<string, string> = {
   course_created: "Draft created. Review it below, then publish when ready.",
@@ -96,6 +97,7 @@ export default async function AuthenticatedAppPage({
 
   return (
     <main className={styles.shell} style={theme}>
+      <UsageSignal eventName="learning.workspace_opened" />
       <aside className={styles.rail}>
         <Link className={styles.brand} href="/app">
           <span className={styles.logo}>E</span>
@@ -115,6 +117,13 @@ export default async function AuthenticatedAppPage({
             <a href="#create-course">
               <span>＋</span> Add learning
             </a>
+          ) : null}
+          {["tenant_owner", "tenant_admin"].includes(
+            workspace.identity.role,
+          ) ? (
+            <Link href="/app/admin/users">
+              <span>◉</span> People & access
+            </Link>
           ) : null}
           <Link href="/onboarding">
             <span>◎</span> Workspace

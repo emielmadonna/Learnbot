@@ -59,7 +59,14 @@ test("speech reads a tenant-authorized saved answer with disclosed synthetic voi
   assert.match(speechRoute, /"gpt-4o-mini-tts"/);
   assert.match(speechRoute, /SPEECH_VOICE = "marin"/);
   assert.match(speechRoute, /"X-AI-Generated-Voice": "true"/);
-  assert.match(client, /Push-to-talk, not realtime · AI-generated voice/);
+  assert.match(
+    client,
+    /Continuous WebRTC voice · automatic turn detection · AI-generated voice · raw audio is not retained/,
+  );
+  assert.match(
+    client,
+    /Secure push-to-talk fallback · AI-generated voice · raw audio is not retained/,
+  );
 });
 
 test("voice lifecycle stops microphone, requests, playback, and object URLs", () => {

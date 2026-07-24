@@ -634,6 +634,7 @@
 }
 
 .voiceOrb {
+  --voice-energy: 0;
   position: relative;
   display: grid;
   width: 136px;
@@ -651,6 +652,8 @@
     0 0 0 18px color-mix(in srgb, var(--brand-primary) 5%, transparent),
     0 28px 70px color-mix(in srgb, var(--brand-primary) 19%, transparent);
   animation: voiceFloat 7s ease-in-out infinite;
+  scale: calc(1 + (var(--voice-energy) * 0.12));
+  transition: scale 80ms linear;
 }
 
 .voiceOrb i {
@@ -819,6 +822,19 @@
   font: inherit;
   font-size: 9px;
   font-weight: 750;
+}
+
+.endVoice {
+  margin-top: 9px;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--brand-text) 52%, transparent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .orbThinking {

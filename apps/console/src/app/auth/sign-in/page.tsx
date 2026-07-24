@@ -8,7 +8,7 @@ import { SignInForm } from "./sign-in-form";
 
 const messages: Record<string, string> = {
   callback_failed:
-    "That sign-in link is invalid or has expired. Request a fresh link.",
+    "That sign-in attempt is invalid or has expired. Try again.",
   authentication_required: "Sign in to continue to your workspace.",
   signed_out: "You have been signed out securely.",
 };
@@ -53,9 +53,9 @@ export default async function SignInPage({
           <p className={styles.eyebrow}>Secure access</p>
           <h1 className={styles.title}>Welcome to your learning workspace.</h1>
           <p className={styles.lede}>
-            Use your work email. We’ll send a secure sign-in link—no password
-            to remember. Owners can connect a prepared workspace and invited
-            learners go straight to their team.
+            Enter the email and password supplied by your administrator.
+            Temporary passwords must be replaced the first time you sign in.
+            There is no public sign-up.
           </p>
           {!configured ? (
             <p className={styles.error} role="alert">
@@ -76,8 +76,8 @@ export default async function SignInPage({
           ) : null}
           <SignInForm configured={configured} nextPath={nextPath} />
           <p className={styles.finePrint}>
-            Your sign-in and workspace access are kept private to your
-            organization.
+            Need access or a new temporary password? Contact your workspace
+            administrator.
           </p>
         </section>
       </div>

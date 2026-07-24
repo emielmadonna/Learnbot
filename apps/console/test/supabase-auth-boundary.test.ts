@@ -176,7 +176,7 @@ test("stale tenant claims trigger and verify one authenticated refresh", async (
   assert.equal(context.identityRole, "tenant_owner");
 });
 
-test("production auth surface uses the four tenant RPCs and no privileged key", () => {
+test("production auth surface uses managed password access and no privileged key", () => {
   const boundary = readFileSync(
     new URL("../src/lib/supabase/auth-boundary.ts", import.meta.url),
     "utf8",
@@ -198,7 +198,8 @@ test("production auth surface uses the four tenant RPCs and no privileged key", 
   ]) {
     assert.match(boundary, new RegExp(rpc));
   }
-  assert.match(signIn, /signInWithOtp/);
+  assert.match(signIn, /signInWithPassword/);
+  assert.doesNotMatch(signIn, /signInWithOtp|signUp/);
   assert.match(callback, /exchangeCodeForSession/);
   assert.doesNotMatch(
     `${boundary}\n${signIn}\n${callback}`,

@@ -139,6 +139,16 @@
   opacity: 0.55;
 }
 
+.textButton {
+  width: 100%;
+  margin-top: 14px;
+  border: 0;
+  background: transparent;
+  color: #60736a;
+  cursor: pointer;
+  font: inherit;
+}
+
 .secondaryButton {
   border: 1px solid #cfdad4;
   background: #f7faf8;

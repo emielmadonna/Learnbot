@@ -12,6 +12,7 @@ export function SignInForm({
   nextPath: string;
 }) {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,24 +25,18 @@ export function SignInForm({
 
     try {
       const supabase = createBrowserSupabaseClient();
-      const callback = new URL("/auth/callback", window.location.origin);
-      callback.searchParams.set("next", nextPath);
-      const result = await supabase.auth.signInWithOtp({
+      const result = await supabase.auth.signInWithPassword({
         email: email.trim(),
-        options: {
-          emailRedirectTo: callback.toString(),
-          shouldCreateUser: true,
-        },
+        password,
       });
       if (result.error) {
         throw result.error;
       }
-      setMessage(
-        "Check your email for a secure sign-in link. You can close this tab after it arrives.",
-      );
+      setMessage("Signed in. Opening your learning workspace…");
+      window.location.assign(nextPath);
     } catch {
       setError(
-        "We could not send a sign-in link. Check the address and try again shortly.",
+        "That email or password was not accepted. Ask your administrator for an account or a fresh temporary password.",
       );
     } finally {
       setPending(false);
@@ -65,12 +60,27 @@ export function SignInForm({
           disabled={!configured || pending}
         />
       </label>
+      <label className={styles.field}>
+        Password
+        <input
+          className={styles.input}
+          type="password"
+          name="password"
+          autoComplete="current-password"
+          minLength={10}
+          required
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="Your password"
+          disabled={!configured || pending}
+        />
+      </label>
       <button
         className={styles.button}
         type="submit"
         disabled={!configured || pending}
       >
-        {pending ? "Sending secure link…" : "Continue with email"}
+        {pending ? "Signing in…" : "Sign in"}
       </button>
       {message ? (
         <p className={styles.notice} role="status">

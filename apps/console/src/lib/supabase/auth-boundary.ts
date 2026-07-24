@@ -42,6 +42,14 @@ export type TenantSelection = {
   reason: string;
 };
 
+export type ManagedAccessState = {
+  managed: boolean;
+  mustChangePassword: boolean;
+  email: string | null;
+  identityRole: string | null;
+  credentialVersion: number | null;
+};
+
 export class AuthenticationBoundaryError extends Error {
   constructor(
     readonly code: string,
@@ -205,6 +213,32 @@ export async function getCurrentTenantContext(
         ? null
         : Number(row.selection_version),
     claimsRefreshRequired: row.claims_refresh_required === true,
+  };
+}
+
+export async function getManagedAccessState(
+  supabase: SupabaseClient,
+): Promise<ManagedAccessState> {
+  const { data, error } = await supabase.rpc("auth_current_access_state");
+  const row = firstRow(
+    data as Array<Record<string, unknown>> | Record<string, unknown> | null,
+  );
+  if (error || !row) {
+    throw new AuthenticationBoundaryError(
+      "auth.access_state_failed",
+      "The managed account state could not be verified.",
+    );
+  }
+  return {
+    managed: row.managed === true,
+    mustChangePassword: row.must_change_password === true,
+    email: row.email_normalized ? String(row.email_normalized) : null,
+    identityRole: row.identity_role ? String(row.identity_role) : null,
+    credentialVersion:
+      row.credential_version === null ||
+      row.credential_version === undefined
+        ? null
+        : Number(row.credential_version),
   };
 }
 

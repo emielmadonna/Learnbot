@@ -1,4 +1,4 @@
-export type VoiceQuotaKind = "transcribe" | "speak";
+export type VoiceQuotaKind = "transcribe" | "speak" | "realtime";
 
 type QuotaEntry = {
   count: number;
@@ -10,6 +10,7 @@ const MAX_ENTRIES = 5_000;
 const limits: Record<VoiceQuotaKind, number> = {
   transcribe: 8,
   speak: 12,
+  realtime: 4,
 };
 
 const rateLimitRuntime = globalThis as typeof globalThis & {
