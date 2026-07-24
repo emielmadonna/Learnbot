@@ -10,9 +10,14 @@ import {
   type LearningBlock,
 } from "../../lib/supabase/learning-rpc";
 import { createServerSupabaseClient } from "../../lib/supabase/server";
+import {
+  getTenantConfiguration,
+  type TenantConfiguration,
+} from "../../lib/tenant-configuration";
 import styles from "./workspace.module.css";
 import UploadLearning from "./upload-learning";
 import { UsageSignal } from "./usage-signal";
+import { ConfigurationSection } from "./configure/configuration-client";
 
 const statusMessages: Record<string, string> = {
   course_created: "Draft created. Review it below, then publish when ready.",
@@ -78,6 +83,17 @@ export default async function AuthenticatedAppPage({
   } catch {
     redirect("/onboarding?error=selection_failed");
   }
+  let configuration: TenantConfiguration | null = null;
+  const canManageConfiguration = ["tenant_owner", "tenant_admin"].includes(
+    workspace.identity.role,
+  );
+  if (canManageConfiguration) {
+    try {
+      configuration = await getTenantConfiguration(supabase, context);
+    } catch {
+      configuration = null;
+    }
+  }
   const platformAuthorization = await supabase.rpc(
     "platform_admin_is_authorized",
   );
@@ -125,6 +141,7 @@ export default async function AuthenticatedAppPage({
           <a href="#courses">
             Learning
           </a>
+          {canManageConfiguration ? <a href="#configuration">Configure</a> : null}
           {workspace.identity.canAuthor ? (
             <a href="#create-course">
               Create
@@ -456,6 +473,7 @@ export default async function AuthenticatedAppPage({
               </div>
             </section>
           ) : null}
+          {canManageConfiguration ? <ConfigurationSection initial={configuration} /> : null}
         </div>
       </section>
 
