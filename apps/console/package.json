@@ -20,9 +20,12 @@
     "@course-ai/identity-access": "workspace:*",
     "@course-ai/intelligence-core": "workspace:*",
     "@course-ai/learning-pipeline": "workspace:*",
+    "@course-ai/onboarding-core": "workspace:*",
     "@course-ai/privacy-lifecycle": "workspace:*",
     "@course-ai/provider-router": "workspace:*",
     "@course-ai/realtime-voice": "workspace:*",
+    "@supabase/ssr": "0.12.3",
+    "@supabase/supabase-js": "2.110.8",
     "next": "^16.2.11",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

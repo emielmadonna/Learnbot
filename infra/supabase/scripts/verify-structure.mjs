@@ -33,6 +33,60 @@ const durableUploadTests = await readFile(
   resolve(root, "tests", "durable_upload_intents_verification.sql"),
   "utf8",
 );
+const onboardingTests = await readFile(
+  resolve(root, "tests", "onboarding_verification.sql"),
+  "utf8",
+);
+const authTenantBridgeTests = await readFile(
+  resolve(root, "tests", "auth_tenant_bridge_verification.sql"),
+  "utf8",
+);
+const authenticatedOnboardingRpcTests = await readFile(
+  resolve(
+    root,
+    "tests",
+    "authenticated_onboarding_rpcs_verification.sql",
+  ),
+  "utf8",
+);
+
+if (
+  !sql.includes(
+    "'public.auth_select_tenant(uuid,text,text)'::regprocedure",
+  ) ||
+  !sql.includes("#variable_conflict use_column")
+) {
+  fail("auth_select_tenant is missing explicit PL/pgSQL name resolution");
+}
+
+if (
+  !sql.includes(
+    "onboarding_update_tenant_profile.idempotency_key",
+  )
+) {
+  fail("onboarding profile idempotency parameter is not qualified");
+}
+
+if (
+  !sql.includes(
+    "'public.onboarding_accept_invitation(' ||",
+  ) ||
+  !sql.includes("#variable_conflict use_variable")
+) {
+  fail(
+    "onboarding_accept_invitation is missing explicit PL/pgSQL name resolution",
+  );
+}
+
+if (
+  !sql.includes(
+    "on conflict on constraint identity_principals_pkey",
+  )
+) {
+  fail(
+    "onboarding_accept_invitation is missing its unambiguous principal conflict target",
+  );
+}
 
 const manifestTables = [
   "tenants",
@@ -80,12 +134,18 @@ const durableUploadTables = [
   "upload_intents",
   "upload_callback_receipts",
 ];
+const onboardingTables = [
+  "onboarding_workspaces",
+  "onboarding_steps",
+  "identity_audit_events",
+];
 const expectedTables = [
   ...manifestTables,
   ...durableExecutionTables,
   ...identityTenantTables,
   ...globalIdentityTables,
   ...durableUploadTables,
+  ...onboardingTables,
 ];
 
 function fail(message) {
@@ -137,6 +197,10 @@ for (const table of expectedTables) {
   }
 }
 
+if (!/\bembedding_dimensions\s+integer\b/.test(tableBody("learning_chunks"))) {
+  fail("learning_chunks is missing embedding_dimensions");
+}
+
 for (const table of durableExecutionTables) {
   for (const control of [
     `alter table public.${table} enable row level security`,
@@ -166,6 +230,17 @@ for (const table of durableUploadTables) {
   ]) {
     if (!sql.includes(control)) {
       fail(`${table} is missing required upload control: ${control}`);
+    }
+  }
+}
+
+for (const table of onboardingTables) {
+  for (const control of [
+    `alter table public.${table} enable row level security`,
+    `alter table public.${table} force row level security`,
+  ]) {
+    if (!sql.includes(control)) {
+      fail(`${table} is missing required onboarding control: ${control}`);
     }
   }
 }
@@ -215,6 +290,36 @@ for (const acceptanceId of ["UPL-01", "UPL-02", "UPL-03"]) {
   }
 }
 
+for (const acceptanceId of ["ONB-01", "ONB-02", "ONB-03"]) {
+  if (!onboardingTests.includes(acceptanceId)) {
+    fail(`missing onboarding verification coverage marker ${acceptanceId}`);
+  }
+}
+
+for (const acceptanceId of [
+  "AUTH-01",
+  "AUTH-02",
+  "AUTH-03",
+  "AUTH-04",
+  "AUTH-05",
+]) {
+  if (!authTenantBridgeTests.includes(acceptanceId)) {
+    fail(`missing auth bridge verification coverage marker ${acceptanceId}`);
+  }
+}
+
+for (const acceptanceId of [
+  "ORPC-01",
+  "ORPC-02",
+  "ORPC-03",
+  "ORPC-04",
+  "ORPC-05",
+]) {
+  if (!authenticatedOnboardingRpcTests.includes(acceptanceId)) {
+    fail(`missing onboarding RPC verification coverage marker ${acceptanceId}`);
+  }
+}
+
 for (const required of [
   "list_active_identity_memberships",
   "resolve_identity_invitation_tenant",
@@ -225,6 +330,87 @@ for (const required of [
 ]) {
   if (!sql.includes(required)) {
     fail(`missing required identity control: ${required}`);
+  }
+}
+
+for (const required of [
+  "supabase_auth_context_for_user",
+  "auth_bootstrap_tenant_owner",
+  "auth_list_tenant_memberships",
+  "auth_select_tenant",
+  "auth_current_tenant_context",
+  "learningbot_custom_access_token_hook",
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing required Supabase Auth bridge control: ${required}`);
+  }
+}
+
+const onboardingRpcFunctions = [
+  "onboarding_get_snapshot",
+  "onboarding_update_tenant_profile",
+  "onboarding_update_step",
+  "onboarding_create_invitation",
+  "onboarding_revoke_invitation",
+  "onboarding_accept_invitation",
+];
+for (const functionName of onboardingRpcFunctions) {
+  const marker = `create or replace function public.${functionName}(`;
+  const start = sql.indexOf(marker);
+  if (start < 0) fail(`missing authenticated onboarding RPC ${functionName}`);
+  const end = sql.indexOf("$$;", start);
+  if (end < 0) fail(`unterminated authenticated onboarding RPC ${functionName}`);
+  const body = sql.slice(start, end);
+  if (!body.includes("security definer")) {
+    fail(`${functionName} must be SECURITY DEFINER`);
+  }
+  if (!body.includes("set search_path = pg_catalog")) {
+    fail(`${functionName} must fix search_path to pg_catalog`);
+  }
+  if (!sql.includes(`grant execute on function public.${functionName}(`)) {
+    fail(`${functionName} is missing its authenticated execute grant`);
+  }
+}
+for (const forbidden of [
+  "grant execute on function public.onboarding_get_snapshot()\n  to service_role",
+  "grant execute on function public.onboarding_update_tenant_profile",
+  "grant execute on function public.onboarding_update_step",
+  "grant execute on function public.onboarding_create_invitation",
+  "grant execute on function public.onboarding_revoke_invitation",
+  "grant execute on function public.onboarding_accept_invitation",
+]) {
+  if (
+    forbidden.includes("get_snapshot")
+      ? sql.includes(forbidden)
+      : sql.includes(`${forbidden}(\n`) &&
+        sql.slice(sql.indexOf(`${forbidden}(\n`), sql.indexOf(`${forbidden}(\n`) + 400)
+          .includes("to service_role")
+  ) {
+    fail("authenticated onboarding RPCs must not grant service_role execution");
+  }
+}
+for (const required of [
+  "onboarding_rpc_context",
+  "onboarding_begin_command",
+  "onboarding_complete_command",
+  "onboarding_append_audit",
+  "onboarding_snapshot_for_tenant",
+  "policy_decision_required",
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing required onboarding RPC control: ${required}`);
+  }
+}
+
+for (const required of [
+  "onboarding_workspaces_deny_authenticated",
+  "onboarding_steps_deny_authenticated",
+  "identity_audit_events_deny_authenticated",
+  "identity_audit_events_reject_update",
+  "identity_audit_events_reject_delete",
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing required onboarding control: ${required}`);
   }
 }
 
@@ -275,5 +461,5 @@ for (const pattern of forbiddenCredentialAssignments) {
 }
 
 console.log(
-  `Verified ${migrationNames.length} ordered migrations, ${expectedTables.length} tables, 6 security controls, 3 durable execution controls, 3 identity controls and 3 upload controls.`,
+  `Verified ${migrationNames.length} ordered migrations, ${expectedTables.length} tables, 6 security controls, 3 durable execution controls, 3 identity controls, 3 upload controls, 3 onboarding controls, 5 auth controls and 5 onboarding RPC controls.`,
 );

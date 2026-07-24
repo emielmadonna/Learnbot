@@ -50,6 +50,7 @@ export default function AdminConsole() {
   const [toolsEnabled, setToolsEnabled] = useState(false);
   const [notice, setNotice] = useState("Loading the shared platform snapshot…");
   const [platform, setPlatform] = useState<PlatformSnapshot | null>(null);
+  const [platformLoading, setPlatformLoading] = useState(true);
   const seededTenant = tenants.find((item) => item.id === selectedTenant) ?? tenants[0]!;
   const tenant = {
     ...seededTenant,
@@ -72,6 +73,7 @@ export default function AdminConsole() {
       .then((snapshot) => {
         if (cancelled) return;
         setPlatform(snapshot);
+        setPlatformLoading(false);
         setBudget(snapshot.tenant.tenant.limits.monthlyBudgetUsd ?? 2500);
         setNotice(
           `Shared snapshot active · ${snapshot.tenant.tenant.policyVersion} · tenant version ${snapshot.tenant.version}`,
@@ -79,6 +81,7 @@ export default function AdminConsole() {
       })
       .catch(() => {
         if (!cancelled) {
+          setPlatformLoading(false);
           setNotice("Shared snapshot unavailable · showing the bounded development seed");
         }
       });
@@ -125,6 +128,7 @@ export default function AdminConsole() {
           <a href="#cost">Usage & cost</a>
           <a href="#mcp">MCP registry</a>
           <a href="#audit">Audit</a>
+          <a href="/dev/onboarding">Onboarding</a>
           <a href="/dev/privacy">Privacy</a>
           <a href="/dev/branding">Branding</a>
           <a href="/dev/widget">Widget Lab</a>
@@ -135,14 +139,14 @@ export default function AdminConsole() {
       <section className={styles.workspace}>
         <header className={styles.header}>
           <div><p className={styles.eyebrow}>Control plane</p><h1>Platform administration</h1><p>Tenant isolation, provider health, budgets, policy and agent access in one place.</p></div>
-          <button onClick={() => setNotice("Provisioning requires an explicit tenant record, owner membership and policy grant")}>＋ Provision tenant</button>
+          <a className={styles.headerAction} href="/dev/onboarding">＋ Provision tenant</a>
         </header>
 
         <div className={styles.notice}><span />{notice}</div>
 
         <section className={styles.healthGrid}>
           <article><span className={styles.good}>Integrated</span><strong>12</strong><p>Workspace packages</p></article>
-          <article><span className={styles.good}>Structurally verified</span><strong>38</strong><p>Schema tables</p></article>
+          <article><span className={styles.good}>Structurally verified</span><strong>41</strong><p>Schema tables</p></article>
           <article><span className={styles.good}>Development seed</span><strong>1</strong><p>Loaded tenant</p></article>
           <article><span className={styles.good}>Recorded</span><strong>${tenant.spend.toFixed(4)}</strong><p>Development ledger</p></article>
         </section>
@@ -206,7 +210,13 @@ export default function AdminConsole() {
                   <em>Allowed</em>
                 </div>
               ))}
-              {!platform?.audit.length ? <p>Loading immutable audit evidence…</p> : null}
+              {platformLoading ? <p>Loading immutable audit evidence…</p> : null}
+              {!platformLoading && platform?.audit.length === 0 ? (
+                <p>No immutable audit events are recorded for this development tenant yet.</p>
+              ) : null}
+              {!platformLoading && !platform ? (
+                <p>Audit evidence is unavailable; no events are being inferred from the development seed.</p>
+              ) : null}
             </div>
           </section>
         </div>

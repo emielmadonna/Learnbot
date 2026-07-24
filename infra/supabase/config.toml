@@ -34,11 +34,34 @@ file_size_limit = "50MiB"
 
 [auth]
 enabled = true
-site_url = "http://127.0.0.1:3100"
-additional_redirect_urls = ["http://127.0.0.1:3100"]
+site_url = "https://learningbot-estie-preview-emiel-madonnas-projects.vercel.app"
+additional_redirect_urls = [
+  "http://127.0.0.1:3100",
+  "http://127.0.0.1:3100/auth/callback",
+  "https://learningbot-estie-preview-emiel-madonnas-projects.vercel.app/auth/callback",
+  "https://learningbot-estie-preview-git-co-984d79-emiel-madonnas-projects.vercel.app/auth/callback",
+  "https://learningbot-estie-preview-h48grnkd8-emiel-madonnas-projects.vercel.app/auth/callback",
+]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
 enable_signup = true
 enable_anonymous_sign_ins = false
 minimum_password_length = 10
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+secure_password_change = false
+max_frequency = "1m"
+otp_length = 8
+otp_expiry = 3600
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/learningbot_custom_access_token_hook"

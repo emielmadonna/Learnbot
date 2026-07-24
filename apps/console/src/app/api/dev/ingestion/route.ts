@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DeterministicKnowledgeQualityService } from "@course-ai/learning-pipeline";
 
 import {
   DEVELOPMENT_COURSE_ID,
@@ -37,13 +38,56 @@ type IngestionRequest =
       expectedActiveVersionId: string;
     };
 
+const knowledgeQuality = new DeterministicKnowledgeQualityService();
+const developmentObjectives = [
+  {
+    objectiveId: "objective_restart",
+    text: "Choose a credible minimum action after disruption",
+    requiredEvidenceTerms: ["minimum day", "disrupted day"],
+  },
+  {
+    objectiveId: "objective_rebuild",
+    text: "Explain when to rebuild the fuller practice",
+    requiredEvidenceTerms: ["rebuild", "fuller practice"],
+  },
+] as const;
+
 function snapshot(session: DevelopmentSession) {
   const runtime = getDevelopmentRuntime();
   const scope = { tenantId: session.context.tenantId };
+  const active = runtime.pipeline.getActiveVersion(scope);
+  const sourceJob =
+    active === undefined
+      ? undefined
+      : runtime.pipeline.getJob(scope, active.sourceJobId);
+  const chunks = active?.chunks ?? [];
+  const expectedEmbeddingDimensions = chunks[0]?.embedding.length ?? 8;
   return {
-    active: runtime.pipeline.getActiveVersion(scope),
+    active,
     versions: runtime.pipeline.listVersions(scope),
     initialJob: runtime.pipeline.getOperationState(scope, runtime.initialJobId),
+    quality: {
+      chunkQuality: knowledgeQuality.assessCleanedChunks(scope, chunks, {
+        minimumTokens: 1,
+        maximumTokens: 1_000,
+      }),
+      objectiveAlignment: knowledgeQuality.assessObjectiveAlignment(
+        scope,
+        developmentObjectives,
+        chunks,
+      ),
+      retrievalReadiness: knowledgeQuality.assessRetrievalReadiness(
+        scope,
+        chunks.map((chunk) => ({
+          chunk,
+          source: {
+            sourceHash: sourceJob?.contentHash ?? "",
+            documentVersion: active?.sequence ?? 0,
+          },
+        })),
+        expectedEmbeddingDimensions,
+      ),
+    },
   };
 }
 

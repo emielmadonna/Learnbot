@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "projectRef": "replace-with-the-approved-20-character-ref",
+  "projectName": "LearningBot Staging",
+  "environment": "staging",
+  "expectedRegion": "us-west-1",
+  "dedicatedForLearningBot": true,
+  "expectedDatabaseName": "postgres",
+  "expectedDatabaseRole": "postgres",
+  "migrationFingerprint": "replace-with-pnpm-supabase-release-fingerprint-output",
+  "allowedActions": ["link", "plan", "apply", "verify"],
+  "approvedBy": "replace-with-authorized-operator",
+  "approvedAt": "2026-07-23T18:00:00.000Z",
+  "expiresAt": "2026-07-24T18:00:00.000Z"
+}

@@ -245,6 +245,8 @@ create table public.learning_chunks (
   embedding extensions.vector,
   embedding_provider_key text,
   embedding_model_key text,
+  embedding_dimensions integer
+    check (embedding_dimensions is null or embedding_dimensions > 0),
   metadata jsonb not null default '{}'::jsonb,
   record_version bigint not null default 1 check (record_version > 0),
   idempotency_key text,

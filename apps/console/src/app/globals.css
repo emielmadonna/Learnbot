@@ -371,6 +371,12 @@ h1 {
   }
 }
 
+@media (max-width: 600px) {
+  .previewNavigator {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

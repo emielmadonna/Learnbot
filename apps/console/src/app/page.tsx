@@ -34,6 +34,12 @@ const modules = [
     href: "/dev/teacher"
   },
   {
+    name: "Owner & Client Onboarding",
+    description: "Organization setup, assistant identity, invitations and client acceptance.",
+    status: "Interactive fixture",
+    href: "/dev/onboarding"
+  },
+  {
     name: "Platform Admin",
     description: "Tenants, providers, budgets, audit, policy and MCP controls.",
     status: "Interactive fixture",
@@ -118,7 +124,7 @@ export default function HomePage() {
       </section>
 
       <section className="launchStrip" aria-label="Launch inventory">
-        <article><strong>10</strong><span>visual product surfaces</span></article>
+        <article><strong>11</strong><span>visual product surfaces</span></article>
         <article><strong>28</strong><span>management MCP tools</span></article>
         <article><strong>38</strong><span>structurally verified tables</span></article>
         <article><strong>Protected</strong><span>preview access boundary</span></article>

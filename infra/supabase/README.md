@@ -1,8 +1,12 @@
 # Supabase persistence and tenancy foundation
 
-This directory contains a production-shaped, provider-neutral PostgreSQL
-foundation for the Course AI Platform. It has not been connected or applied to
-any external Supabase project.
+This directory contains the provider-neutral PostgreSQL foundation for the
+Course AI Platform. On 2026-07-24, all sixteen ordered migrations were applied
+through the guarded hosted release workflow and all seven transactional SQL
+acceptance suites passed against the dedicated LearningBot Supabase project.
+That is hosted database evidence; it is not evidence that the wider
+application, providers, storage pipeline, backup/restore process, or unresolved
+product policies are production-ready.
 
 ## Migration order
 
@@ -16,6 +20,14 @@ Apply the numbered files exactly once, in lexical order:
 6. `0006_rls_policies_and_storage.sql`
 7. `0007_durable_execution_primitives.sql`
 8. `0008_identity_and_provisioning.sql`
+9. `0009_durable_upload_intents.sql`
+10. `0010_onboarding_control_plane.sql`
+11. `0011_supabase_auth_tenant_bridge.sql`
+12. `0012_authenticated_onboarding_rpcs.sql`
+13. `0013_auth_select_tenant_ambiguity_fix.sql`
+14. `0014_onboarding_profile_parameter_qualification.sql`
+15. `0015_onboarding_invitation_name_resolution.sql`
+16. `0016_onboarding_invitation_conflict_constraint.sql`
 
 With a disposable local Supabase instance:
 
@@ -31,6 +43,18 @@ psql "$LOCAL_DATABASE_URL" \
 psql "$LOCAL_DATABASE_URL" \
   --set ON_ERROR_STOP=1 \
   --file infra/supabase/tests/identity_provisioning_verification.sql
+psql "$LOCAL_DATABASE_URL" \
+  --set ON_ERROR_STOP=1 \
+  --file infra/supabase/tests/durable_upload_intents_verification.sql
+psql "$LOCAL_DATABASE_URL" \
+  --set ON_ERROR_STOP=1 \
+  --file infra/supabase/tests/onboarding_verification.sql
+psql "$LOCAL_DATABASE_URL" \
+  --set ON_ERROR_STOP=1 \
+  --file infra/supabase/tests/auth_tenant_bridge_verification.sql
+psql "$LOCAL_DATABASE_URL" \
+  --set ON_ERROR_STOP=1 \
+  --file infra/supabase/tests/authenticated_onboarding_rpcs_verification.sql
 node infra/supabase/scripts/verify-structure.mjs
 ```
 
@@ -44,6 +68,25 @@ facts and protected command/outbox identity. Structural verification does not
 substitute for executing the SQL suites against PostgreSQL. The identity suite
 covers direct-client denial, exact server-only membership bootstrap, the
 tenant-role boundary and immutable invitation/SCIM provisioning facts.
+The upload suite covers callback replay isolation, promotion prerequisites and
+terminal-state protection.
+The onboarding suites cover trusted checklist storage, verified Auth
+tenant selection, optimistic/idempotent profile and step mutation, masked
+invitations, exact confirmed-email acceptance, O-07/O-13 fail-closed gates and
+authenticated-only RPC privileges. RPCs derive tenant and actor from the
+durable Auth selection; they never accept a tenant or actor identifier.
+
+## Hosted release
+
+Hosted linking and migration application must use the guarded release runner
+described in [HOSTED_RELEASE.md](./HOSTED_RELEASE.md). It requires a short-lived,
+human-approved file bound to the exact LearningBot project name, project ref,
+approved region/data-residency choice, database role and migration fingerprint.
+It refuses HookLab and Midway by name, checks the authenticated Supabase project
+catalog, verifies the linked ref and database session identity, plans before
+apply, never applies seed data and captures sanitized local evidence. Local CLI
+link state and release evidence are ignored; a fresh checkout is not implicitly
+authorized or linked to a hosted project.
 
 ## Tenant and role trust boundary
 
@@ -116,8 +159,11 @@ audit or cost ledgers as a rollback technique.
 
 ## Explicit limitations before production
 
-- The SQL has been structurally checked only; run it against the pinned local
-  Supabase/PostgreSQL version before merge and against staging before release.
+- Structural verification passes for 16 migrations and 41 tables, and all seven
+  transactional SQL suites passed together on the dedicated hosted LearningBot
+  project on 2026-07-24. Repeat the guarded release and acceptance process in
+  every promoted environment; this hosted acceptance run does not replace
+  staging, backup/PITR restore, load, failover or incident-response exercises.
 - JWT issuance, membership-revocation propagation and owner impersonation
   sessions are application/auth-service responsibilities.
 - Retention durations, legal hold, residency and voice-recording policy remain

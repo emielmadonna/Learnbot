@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  LEGACY_OVERLAP_WORDS,
+  LEGACY_TARGET_WORDS,
+} from "@course-ai/learning-pipeline";
 
 import styles from "./page.module.css";
 
@@ -59,6 +63,37 @@ type AuthoringSnapshot = {
 
 type NoticeTone = "neutral" | "success" | "error";
 
+type LearningObjective = {
+  id: string;
+  text: string;
+  covered: boolean;
+};
+
+type MasteryCheck = {
+  id: string;
+  prompt: string;
+  evidence: "draft" | "reviewed";
+};
+
+type EvidenceState = "known" | "partial" | "blocked";
+
+type KnowledgeQualitySnapshot = {
+  chunkQuality: {
+    state: EvidenceState;
+    chunkCount: number;
+    usableChunkCount: number;
+  };
+  objectiveAlignment: {
+    state: EvidenceState;
+    objectives: Array<{ state: EvidenceState }>;
+  };
+  retrievalReadiness: {
+    state: EvidenceState;
+    readyChunkCount: number;
+    chunks: readonly unknown[];
+  };
+};
+
 const initialContent =
   "A Minimum Day is the smallest credible version of your practice.\n\nOn a disrupted day, open your plan, choose one priority, and stop after two intentional minutes. This protects the restart loop without turning the minimum into the permanent target.\n\nAfter two consistent days, rebuild the fuller practice. Diagram: Disruption -> Minimum Day -> Evidence -> Momentum.";
 
@@ -89,6 +124,37 @@ export default function LearningWorkspace() {
   const [previousActiveVersionId, setPreviousActiveVersionId] =
     useState<string>();
   const [draftVersionId, setDraftVersionId] = useState<string>();
+  const [objectiveDraft, setObjectiveDraft] = useState("");
+  const [checkDraft, setCheckDraft] = useState("");
+  const [retrievalQuery, setRetrievalQuery] = useState(
+    "What should I do when my normal routine is disrupted?",
+  );
+  const [pipelineQuality, setPipelineQuality] =
+    useState<KnowledgeQualitySnapshot>();
+  const [objectives, setObjectives] = useState<LearningObjective[]>([
+    {
+      id: "objective_restart",
+      text: "Choose a credible minimum action after disruption",
+      covered: true,
+    },
+    {
+      id: "objective_rebuild",
+      text: "Explain when to rebuild the fuller practice",
+      covered: true,
+    },
+  ]);
+  const [masteryChecks, setMasteryChecks] = useState<MasteryCheck[]>([
+    {
+      id: "check_scenario",
+      prompt: "Apply the Minimum Day to a disrupted-day scenario",
+      evidence: "reviewed",
+    },
+    {
+      id: "check_explain",
+      prompt: "Explain why the minimum must not become the permanent target",
+      evidence: "draft",
+    },
+  ]);
 
   const allLessons = useMemo(
     () =>
@@ -111,6 +177,97 @@ export default function LearningWorkspace() {
   const errors = issues.filter((issue) => issue.severity === "error");
   const warnings = issues.filter((issue) => issue.severity === "warning");
   const dirty = content !== serverContent;
+  const words = useMemo(
+    () => content.trim().split(/\s+/u).filter(Boolean),
+    [content],
+  );
+  const previewChunkCount =
+    words.length <= LEGACY_TARGET_WORDS
+      ? 1
+      : 1 +
+        Math.ceil(
+          (words.length - LEGACY_TARGET_WORDS) /
+            (LEGACY_TARGET_WORDS - LEGACY_OVERLAP_WORDS),
+        );
+  const coveredObjectives = objectives.filter((objective) => objective.covered).length;
+  const reviewedChecks = masteryChecks.filter(
+    (check) => check.evidence === "reviewed",
+  ).length;
+  const readinessChecks = [
+    {
+      label: "Knowledge",
+      detail: pipelineQuality
+        ? `${pipelineQuality.chunkQuality.usableChunkCount}/${pipelineQuality.chunkQuality.chunkCount} usable · ${pipelineQuality.chunkQuality.state}`
+        : "Measuring active chunks",
+      ready: pipelineQuality?.chunkQuality.state === "known",
+    },
+    {
+      label: "Retrieval",
+      detail: pipelineQuality
+        ? `${pipelineQuality.retrievalReadiness.readyChunkCount}/${pipelineQuality.retrievalReadiness.chunks.length} ready · ${pipelineQuality.retrievalReadiness.state}`
+        : "Checking provenance",
+      ready: pipelineQuality?.retrievalReadiness.state === "known",
+    },
+    {
+      label: "Grounding",
+      detail: pipelineQuality
+        ? `${pipelineQuality.objectiveAlignment.objectives.filter((objective) => objective.state === "known").length}/${pipelineQuality.objectiveAlignment.objectives.length} evidenced · ${pipelineQuality.objectiveAlignment.state}`
+        : "Checking objective evidence",
+      ready: pipelineQuality?.objectiveAlignment.state === "known",
+    },
+    {
+      label: "Objectives",
+      detail: `${coveredObjectives}/${objectives.length} mapped`,
+      ready: objectives.length > 0 && coveredObjectives === objectives.length,
+    },
+    {
+      label: "Mastery",
+      detail: `${reviewedChecks}/${masteryChecks.length} reviewed`,
+      ready:
+        masteryChecks.length > 0 && reviewedChecks === masteryChecks.length,
+    },
+    {
+      label: "Validation",
+      detail: errors.length === 0 ? "No blockers" : `${errors.length} blocker(s)`,
+      ready: errors.length === 0,
+    },
+  ];
+  const readyCount = readinessChecks.filter((check) => check.ready).length;
+
+  const previewChunks = useMemo(() => {
+    const chunkSize = LEGACY_TARGET_WORDS;
+    const overlap = LEGACY_OVERLAP_WORDS;
+    const chunks: string[] = [];
+    for (let start = 0; start < words.length && chunks.length < 3; start += chunkSize - overlap) {
+      chunks.push(words.slice(start, start + chunkSize).join(" "));
+    }
+    return chunks.length > 0 ? chunks : ["No lesson text is available to preview."];
+  }, [content]);
+
+  const queryTerms = useMemo(
+    () =>
+      new Set(
+        retrievalQuery
+          .toLocaleLowerCase()
+          .match(/[\p{L}\p{N}]+/gu)
+          ?.filter((term) => term.length > 3) ?? [],
+      ),
+    [retrievalQuery],
+  );
+
+  const rankedPreviewChunks = useMemo(
+    () =>
+      previewChunks
+        .map((chunk, index) => {
+          const chunkTerms = new Set(
+            chunk.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [],
+          );
+          const matched = [...queryTerms].filter((term) => chunkTerms.has(term));
+          return { chunk, index, matched };
+        })
+        .sort((a, b) => b.matched.length - a.matched.length),
+    [previewChunks, queryTerms],
+  );
 
   function applySnapshot(snapshot: AuthoringSnapshot, replaceEditor = true) {
     setAuthoring(snapshot);
@@ -130,6 +287,28 @@ export default function LearningWorkspace() {
   function showNotice(message: string, tone: NoticeTone = "neutral") {
     setNotice(message);
     setNoticeTone(tone);
+  }
+
+  function addObjective() {
+    const text = objectiveDraft.trim();
+    if (!text) return;
+    setObjectives((current) => [
+      ...current,
+      { id: `objective_${crypto.randomUUID()}`, text, covered: false },
+    ]);
+    setObjectiveDraft("");
+    showNotice("Objective added to this local review draft.");
+  }
+
+  function addMasteryCheck() {
+    const prompt = checkDraft.trim();
+    if (!prompt) return;
+    setMasteryChecks((current) => [
+      ...current,
+      { id: `check_${crypto.randomUUID()}`, prompt, evidence: "draft" },
+    ]);
+    setCheckDraft("");
+    showNotice("Mastery check added to this local review draft.");
   }
 
   async function parseAuthoringResponse(
@@ -182,11 +361,13 @@ export default function LearningWorkspace() {
             chunks: readonly unknown[];
             diagrams: readonly unknown[];
           };
+          quality?: KnowledgeQualitySnapshot;
         };
         const tenant = platform as { tenant: { displayName: string } };
         setTenantName(tenant.tenant.displayName);
         applySnapshot(authoringSnapshot);
         setActiveVersionId(ingestion.active?.versionId);
+        setPipelineQuality(ingestion.quality);
         if (ingestion.active) {
           setDocumentCount(ingestion.active.documents.length);
           setSourceCount(ingestion.active.documents.length);
@@ -523,10 +704,12 @@ export default function LearningWorkspace() {
         }
         const result = (await response.json()) as {
           published: { versionId: string; sequence: number };
+          quality?: KnowledgeQualitySnapshot;
         };
         setPreviousActiveVersionId(activeVersionId);
         setActiveVersionId(result.published.versionId);
         setDraftVersionId(undefined);
+        setPipelineQuality(result.quality);
         showNotice(
           `Course v${published.course.version} and knowledge v${result.published.sequence} published`,
           "success",
@@ -587,9 +770,11 @@ export default function LearningWorkspace() {
         if (response.ok) {
           const result = (await response.json()) as {
             rolledBack: { versionId: string };
+            quality?: KnowledgeQualitySnapshot;
           };
           setActiveVersionId(result.rolledBack.versionId);
           setPreviousActiveVersionId(undefined);
+          setPipelineQuality(result.quality);
         }
       } catch {
         showNotice(
@@ -601,16 +786,17 @@ export default function LearningWorkspace() {
   }
 
   const stages = [
-    ["Received", `${sourceCount} source${sourceCount === 1 ? "" : "s"}`],
+    ["Sources", `${sourceCount} accepted`],
+    ["Safety", "Fixture boundary"],
     ["Extracted", `${documentCount} document${documentCount === 1 ? "" : "s"}`],
-    ["Structured", `${authoring?.course.modules.length ?? 1} module`],
     [
-      "Indexed",
+      "Chunked",
       job === "running"
         ? "Updating…"
         : `${chunkCount} chunk${chunkCount === 1 ? "" : "s"}`,
     ],
-    ["Ready", `Course v${authoring?.course.version ?? 12}`],
+    ["Retrieval", draftVersionId ? "Draft to review" : "Active version"],
+    ["Learning", `${coveredObjectives}/${objectives.length} objectives`],
   ];
 
   return (
@@ -662,6 +848,27 @@ export default function LearningWorkspace() {
           <span>{warnings.length} warnings</span>
         </div>
 
+        <section className={styles.readiness} aria-label="Learning readiness">
+          <div className={styles.readinessIntro}>
+            <div>
+              <p className={styles.eyebrow}>Evidence review · local fixture</p>
+              <h2>{readyCount === readinessChecks.length ? "Ready for human publish review" : "Learning review in progress"}</h2>
+            </div>
+            <strong>{readyCount}/{readinessChecks.length}</strong>
+          </div>
+          <div className={styles.readinessChecks}>
+            {readinessChecks.map((check) => (
+              <div className={check.ready ? styles.readinessReady : styles.readinessPending} key={check.label}>
+                <span aria-hidden="true">{check.ready ? "✓" : "○"}</span>
+                <div><strong>{check.label}</strong><small>{check.detail}</small></div>
+              </div>
+            ))}
+          </div>
+          <p className={styles.fixtureNote}>
+            This workspace uses tenant-scoped development fixtures. Readiness reflects the loaded fixture and local review state, not live learner outcomes or production vector evaluation.
+          </p>
+        </section>
+
         {showNewCourse ? (
           <section className={styles.quickCreate} aria-label="Create course">
             <div><p className={styles.eyebrow}>Private by default</p><h2>Create a course draft</h2></div>
@@ -673,7 +880,11 @@ export default function LearningWorkspace() {
 
         <section className={styles.pipeline} id="sources" aria-label="Ingestion pipeline">
           <div className={styles.pipelineHeading}>
-            <div><p className={styles.eyebrow}>Learning pipeline</p><h2>Course knowledge</h2></div>
+            <div>
+              <p className={styles.eyebrow}>Source → knowledge → training</p>
+              <h2>Course knowledge pipeline</h2>
+              <p className={styles.sectionCopy}>Active retrieval stays on the last published version while changes are cleaned, chunked and reviewed.</p>
+            </div>
             <div className={styles.headerActions}>
               <button className={styles.secondary} onClick={() => setShowNewCourse(true)}>＋ New course</button>
               <button className={styles.add} onClick={() => void addLearning()}>＋ Add learning</button>
@@ -690,6 +901,128 @@ export default function LearningWorkspace() {
               </div>
             ))}
           </div>
+        </section>
+
+        <section className={styles.knowledgeLab} aria-label="Knowledge and training review">
+          <article className={styles.objectivesPanel}>
+            <div className={styles.labHeading}>
+              <div><p className={styles.eyebrow}>Teach with intent</p><h2>Objectives &amp; mastery</h2></div>
+              <span>{coveredObjectives}/{objectives.length} review-mapped</span>
+            </div>
+            <p className={styles.sectionCopy}>Every lesson should state what changes for the learner and how a reviewer can verify it.</p>
+
+            <div className={styles.learningColumns}>
+              <div>
+                <h3>Learning objectives</h3>
+                <div className={styles.reviewList}>
+                  {objectives.map((objective) => (
+                    <label key={objective.id}>
+                      <input
+                        type="checkbox"
+                        checked={objective.covered}
+                        onChange={() =>
+                          setObjectives((current) =>
+                            current.map((item) =>
+                              item.id === objective.id
+                                ? { ...item, covered: !item.covered }
+                                : item,
+                            ),
+                          )
+                        }
+                      />
+                      <span>{objective.text}<small>{objective.covered ? "Mapped to lesson evidence" : "Needs lesson evidence"}</small></span>
+                    </label>
+                  ))}
+                </div>
+                <div className={styles.compactComposer}>
+                  <input
+                    aria-label="New learning objective"
+                    placeholder="Learner can…"
+                    value={objectiveDraft}
+                    onChange={(event) => setObjectiveDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") addObjective();
+                    }}
+                  />
+                  <button onClick={addObjective}>Add</button>
+                </div>
+              </div>
+
+              <div>
+                <h3>Mastery checks</h3>
+                <div className={styles.reviewList}>
+                  {masteryChecks.map((check) => (
+                    <button
+                      className={styles.masteryRow}
+                      key={check.id}
+                      onClick={() =>
+                        setMasteryChecks((current) =>
+                          current.map((item) =>
+                            item.id === check.id
+                              ? {
+                                  ...item,
+                                  evidence:
+                                    item.evidence === "reviewed" ? "draft" : "reviewed",
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                    >
+                      <span>{check.evidence === "reviewed" ? "✓" : "○"}</span>
+                      <strong>{check.prompt}<small>{check.evidence === "reviewed" ? "Evidence reviewed" : "Needs answer criteria"}</small></strong>
+                    </button>
+                  ))}
+                </div>
+                <div className={styles.compactComposer}>
+                  <input
+                    aria-label="New mastery check"
+                    placeholder="Ask the learner to…"
+                    value={checkDraft}
+                    onChange={(event) => setCheckDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") addMasteryCheck();
+                    }}
+                  />
+                  <button onClick={addMasteryCheck}>Add</button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article className={styles.retrievalPanel}>
+            <div className={styles.labHeading}>
+              <div><p className={styles.eyebrow}>Grounding check</p><h2>Retrieval preview</h2></div>
+              <span>Local lexical preview</span>
+            </div>
+            <p className={styles.sectionCopy}>Test whether lesson language can support a representative learner question before re-indexing.</p>
+            <label className={styles.queryField}>
+              <span>Representative learner question</span>
+              <textarea
+                value={retrievalQuery}
+                onChange={(event) => setRetrievalQuery(event.target.value)}
+              />
+            </label>
+            <div className={styles.chunkMeta}>
+              <span><strong>{previewChunkCount}</strong> preview chunk{previewChunkCount === 1 ? "" : "s"}</span>
+              <span><strong>{LEGACY_TARGET_WORDS}</strong> words / chunk</span>
+              <span><strong>{LEGACY_OVERLAP_WORDS}</strong> word overlap</span>
+            </div>
+            <div className={styles.chunkResults}>
+              {rankedPreviewChunks.slice(0, 2).map((result, rank) => (
+                <div key={`${result.index}:${result.chunk.slice(0, 20)}`}>
+                  <span>#{rank + 1} · lesson chunk {result.index + 1}</span>
+                  <p>{result.chunk}</p>
+                  <small>
+                    {result.matched.length > 0
+                      ? `Shared terms: ${result.matched.join(", ")}`
+                      : "No meaningful shared terms · revise the lesson or query"}
+                  </small>
+                </div>
+              ))}
+            </div>
+            <p className={styles.fixtureNote}>This quick check is deterministic and local. It does not claim semantic similarity, embedding quality or production retrieval readiness.</p>
+          </article>
         </section>
 
         <div className={styles.editorGrid}>
@@ -735,7 +1068,7 @@ export default function LearningWorkspace() {
                 <option value="markdown">Markdown</option>
               </select>
               <span />
-              <small>{content.trim().split(/\s+/u).filter(Boolean).length} words · {currentLesson?.blocks.length ?? 0} blocks</small>
+              <small>{words.length} words · {currentLesson?.blocks.length ?? 0} blocks · ⌘S save</small>
             </div>
             <textarea
               aria-label="Lesson content"
@@ -744,6 +1077,28 @@ export default function LearningWorkspace() {
                 setContent(event.target.value);
                 showNotice("Unsaved editor changes · live course remains unchanged");
               }}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "s") {
+                  event.preventDefault();
+                  void saveDraft()
+                    .then((snapshot) =>
+                      showNotice(
+                        `Lesson saved in private course draft v${snapshot.course.version}`,
+                        "success",
+                      ),
+                    )
+                    .catch((error: unknown) =>
+                      showNotice(
+                        error instanceof Error ? error.message : "Lesson could not save.",
+                        "error",
+                      ),
+                    );
+                }
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  void previewValidation();
+                }
+              }}
             />
             <div className={styles.suggestion}>
               <span>✦</span>
@@ -751,7 +1106,7 @@ export default function LearningWorkspace() {
               <button onClick={() => void cleanContent()}>Clean &amp; save</button>
             </div>
             <footer className={styles.editorFooter}>
-              <p>Authoring revisions and retrieval versions are separate and remain rollback-safe.</p>
+              <p>⌘S saves the lesson. ⌘↵ validates. Authoring and retrieval versions remain separate and rollback-safe.</p>
               <div>
                 <button className={styles.secondary} onClick={() => void previewValidation()}>Validate</button>
                 <button className={styles.reingest} onClick={() => void reingest()}>↻ Re-ingest lesson</button>

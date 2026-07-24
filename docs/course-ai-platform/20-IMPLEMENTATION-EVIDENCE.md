@@ -49,12 +49,13 @@ assistive-technology matrix, load test, restore, or legal policy.
 | MCP-08 | C / partial | Invocation without the exact capability, budget, and unexpired grant denies. Per-principal tool-discovery filtering still requires a connection-bound production principal/registry adapter. | MCP authorization tests; production adapter gap |
 | MCP-06, MCP-07 | B | Twenty-eight tools use shared console API boundaries, including intelligence review/feedback and separately permissioned privacy lifecycle operations. Smoke covers shared authoring/intelligence/privacy snapshots, authorized course, feedback and manifest operations, plus a denied write. Delete/retention still require one-use exact confirmation. Durable multi-replica grant/idempotency stores and production service-principal provenance remain pending. | `pnpm --filter @course-ai/mcp-server smoke` |
 | Build/runtime isolation | B / partial | Next.js development output is isolated in `.next-dev` while optimized production output remains in `.next`, preventing a parallel production build from replacing the running development server manifests. This is local integration evidence only; production deployment, CI/CD, migration gates, and live-host operational evidence remain pending. | `apps/console/next.config.ts`; local development and production build verification |
+| Production Auth/onboarding boundary | B / partial | The production `/auth/sign-in`, `/auth/callback`, `/app` and `/onboarding` routes use strict Supabase SSR clients and UID-bound database RPCs. Same-origin POST, verified non-anonymous users, durable tenant selection, exact membership checks and explicit failures replace any fixture fallback. Signed-in browser acceptance, production SMTP, invitation delivery, SSO/SCIM and deprovisioning remain pending. | `apps/console/AUTH.md`; `apps/console/src/lib/supabase`; `apps/console/src/app/onboarding`; console Auth/onboarding contract tests |
 | Durable execution | C / partial | Fingerprinted command receipts replay the same normalized JSON result or reject conflicting reuse; course revisions use a locked compare-and-swap head; telemetry uses tenant-scoped dedupe and bounded leases. The adapters require an injected transaction and have no process-memory fallback. They are not yet wired into every application service. | `pnpm --filter @course-ai/postgres-adapters test`; `packages/postgres-adapters` |
 | Durable identity | C / partial | Migration 0008 and injected Postgres repositories preserve opaque verified principal IDs without coercing them into the legacy UUID membership model. Exact membership bootstrap is server-only; every tenant operation retains its tenant predicate; `platform_admin` is not a tenant membership; service principals do not use human invitations; invitation and SCIM receipts are immutable and conflict-safe. Protocol-verified principal registration is an explicit prerequisite. The current service contract still needs an outer unit of work before multi-repository invitation/SCIM flows can claim workflow-level atomicity. | `pnpm --filter @course-ai/postgres-adapters test`; `packages/postgres-adapters/src/identity.ts`; `infra/supabase/migrations/0008_identity_and_provisioning.sql` |
-| Durable uploads | C / partial | Migration 0009 and `PostgresUploadIntentRepository` persist tenant/actor-bound upload intents and immutable callback receipts with exact row locks, atomic callback/state commits, optimistic versions and protected terminal facts. The focused adapter suite passes, but the SQL negative suite has not run against an approved live PostgreSQL environment and no production object store/scanner is claimed. | `pnpm --filter @course-ai/postgres-adapters test`; `packages/postgres-adapters/src/upload-intents.ts`; `infra/supabase/migrations/0009_durable_upload_intents.sql` |
+| Durable uploads | A/C / partial | Migration 0009 and `PostgresUploadIntentRepository` persist tenant/actor-bound upload intents and immutable callback receipts with exact row locks, atomic callback/state commits, optimistic versions and protected terminal facts. The focused adapter suite and hosted transactional upload SQL suite pass. No production object-store, signed-upload, malware-scanner or extraction-worker execution is claimed. | `pnpm --filter @course-ai/postgres-adapters test`; `packages/postgres-adapters/src/upload-intents.ts`; hosted `durable_upload_intents_verification.sql` |
 | OpenAI embeddings | C / partial | The server-side adapter uses request-scoped models, injected asynchronous credentials, HTTPS-only endpoints, absolute deadlines, bounded batches/bodies/dimensions, exact response model/index validation, finite vectors, usage and injected cost accounting. It fails closed without retrying or exposing provider bodies. No live credential/provider execution is claimed. | `pnpm --filter @course-ai/provider-router test`; `packages/provider-router/src/openai-embeddings.ts` |
 | Surface launchpad | B / non-production | The root launchpad links every visual preview route, distinguishes fixture status, reports its protected environment/build, repairs dead navigation, and provides a universal return control. Desktop and 390px browser checks found all ten visual routes reachable with no horizontal overflow after the Course Studio diagram fix. This is discoverability and responsive preview evidence only. | Browser route inventory and responsive geometry check; `apps/console/src/app/page.tsx`; `apps/console/src/app/preview-navigator.tsx` |
-| Durable schema | C / partial | Migrations 0007–0009 define durable execution, identity/provisioning and upload-intent tables with forced RLS, immutable facts, server-only bootstrap functions and explicit client denial. Structural verification covers 9 migrations and 38 tables. The SQL negative suites exist but have not run against PostgreSQL on this machine because Docker is unavailable. | `pnpm supabase:verify`; migrations 0007–0009; SQL verification suites |
+| Durable schema | A/C / partial | Sixteen ordered migrations define the 41-table durable execution, identity, upload, onboarding and Supabase Auth/RPC foundation. Structural verification passes, the hosted migration ledger includes 0001–0016, and all seven hosted transactional suites pass with rolled-back fixtures. Migrations 0013–0016 are forward-only name-resolution corrections exposed by the hosted tests. Backup/PITR restore, load, failover and broader object/provider operations remain pending. | `pnpm supabase:verify`; `infra/supabase/migrations/0001`–`0016`; hosted SQL acceptance transcript |
 | Private fixture preview | A / non-production | Production builds deny fixture APIs by default. The Vercel Preview deployment requires Vercel Authentication, uses two exact branch-scoped fixture values, and exposes dependency-free `/api/health`. Unauthenticated health access redirects to login; authenticated health, fixture health and Student chat checks pass. This is live-host evidence for the protected preview boundary only, not production identity/data/provider evidence. | Vercel deployment `dpl_FcTh71b8KCq4WrrvVhhHuaS5QUpb`; GitHub Preview deployment `5583998909`; `apps/console/test/deployment-mode.test.ts` |
 
 ## Whole-repository gate
@@ -78,6 +79,32 @@ intelligence and privacy entry points are respectively:
 The final integration handoff must record the actual outcome. A structural
 Supabase verifier is not equivalent to executing the PostgreSQL negative-policy
 suite.
+
+### 2026-07-24 current release checkpoint
+
+- The optimized local Next.js build generated **43 application routes**,
+  including the production Auth, authenticated application and durable
+  onboarding surfaces. This supersedes the smaller route counts in the dated
+  historical checkpoints below; it is build evidence, not proof that every
+  route has completed signed-in production-browser acceptance.
+- Development and production compiler outputs remain isolated in `.next-dev`
+  and `.next`. The development server therefore keeps its manifests while the
+  optimized build runs.
+- `verify:dev` continues to cover the development API, authoring, Creator
+  intelligence, privacy operations, Widget host and all **28 management MCP
+  tools**. Intelligence and privacy remain explicitly exercised by
+  `pnpm --filter @course-ai/console smoke:intelligence` and
+  `pnpm --filter @course-ai/console smoke:privacy`.
+- `pnpm supabase:verify` passes for **16 ordered migrations and 41 tables**.
+  The hosted migration ledger includes 0001–0016 and all **seven hosted
+  transactional SQL suites pass** against the dedicated LearningBot Supabase
+  project. The suites roll back their fixed fixtures. Forward-only migrations
+  0013–0016 preserve the approved contract while correcting PostgreSQL
+  parameter/column name resolution found during hosted acceptance.
+- The `/dev/**` learning, onboarding, intelligence, privacy and administration
+  surfaces remain labeled development fixtures. The production `/auth/**`,
+  `/app` and `/onboarding` surfaces fail closed on missing environment, session
+  or durable RPC state and never silently substitute those fixtures.
 
 ### 2026-07-23 integration outcome
 
@@ -161,9 +188,11 @@ suite.
 
 The repository does not yet claim grade-A evidence for:
 
-- production OIDC application wiring, SAML/service-principal verification or
-  durable authorization;
-- live PostgreSQL RLS/storage negative tests on an approved database;
+- signed-in production-browser Auth/onboarding acceptance, production SMTP,
+  invitation delivery, SAML/service-principal verification, SCIM or
+  deprovisioning;
+- comprehensive live RLS/storage negative coverage beyond the seven bounded
+  transactional database suites, including signed object operations;
 - live LLM, embedding, transcription, speech, realtime, storage, malware, or
   connector provider execution and credentials;
 - Circle/custom-code/CDN/CSP installation, browser matrix, screen-reader or

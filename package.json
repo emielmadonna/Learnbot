@@ -10,10 +10,12 @@
   "scripts": {
     "build": "pnpm -r --if-present build",
     "build:packages": "pnpm --filter './packages/**' -r --if-present build",
-    "check": "pnpm docs:check && pnpm build:packages && pnpm typecheck && pnpm test",
+    "check": "pnpm docs:check && pnpm supabase:verify && pnpm supabase:release:test && pnpm build:packages && pnpm typecheck && pnpm test",
     "docs:check": "node scripts/validate-docs.mjs",
     "smoke:dev": "node scripts/smoke-dev-api.mjs",
     "supabase:verify": "node infra/supabase/scripts/verify-structure.mjs",
+    "supabase:release": "node infra/supabase/scripts/hosted-release.mjs",
+    "supabase:release:test": "node --test infra/supabase/scripts/hosted-release.test.mjs",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
     "verify:dev": "pnpm smoke:dev && pnpm --filter @course-ai/console smoke:authoring && pnpm --filter @course-ai/console smoke:intelligence && pnpm --filter @course-ai/console smoke:privacy && pnpm --filter @course-ai/console smoke:widget && pnpm --filter @course-ai/mcp-server smoke && pnpm supabase:verify"

@@ -17,3 +17,10 @@ coverage/
 
 *.log
 .DS_Store
+
+# Hosted Supabase release inputs and generated evidence are operator-local.
+# The example approval is tracked; real approvals may contain internal metadata.
+infra/supabase/release/*.approval.json
+infra/supabase/.release-evidence/
+infra/supabase/.temp/
+.vercel
