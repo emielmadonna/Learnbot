@@ -54,6 +54,10 @@ test("client detail route is platform-gated and links tenant surfaces", () => {
   assert.equal(isTenantId("not-a-tenant"), false);
   assert.match(page, /platform_admin_is_authorized/);
   assert.match(rpc, /platform_admin_client_detail/);
+  assert.match(page, /getPlatformOverview/);
+  assert.match(page, /summaryFallback/);
+  assert.match(page, /scope=workspace/);
+  assert.match(page, /Client summary is online/);
   assert.match(page, /href="\/app\/platform"/);
   assert.doesNotMatch(page, /href="\/app\/admin\/clients"/);
   for (const path of ["\/app\/conversation", "\/app", "\/onboarding", "\/install\/circle"]) {

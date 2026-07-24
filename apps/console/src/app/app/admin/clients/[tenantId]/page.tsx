@@ -3,7 +3,10 @@ import { notFound, redirect } from "next/navigation";
 
 import { requireVerifiedUser } from "../../../../../lib/supabase/auth-boundary";
 import {
+  type PlatformClientDetail,
+  type PlatformClientSummary,
   getPlatformClientDetail,
+  getPlatformOverview,
   isTenantId,
 } from "../../../../../lib/supabase/platform-admin-rpc";
 import { createServerSupabaseClient } from "../../../../../lib/supabase/server";
@@ -27,6 +30,58 @@ function surfaceHref(path: string, tenantId: string) {
   return `${path}?tenantId=${encodeURIComponent(tenantId)}`;
 }
 
+function summaryFallback(summary: PlatformClientSummary): PlatformClientDetail {
+  return {
+    ok: true,
+    dataMode: "durable",
+    generatedAt: summary.updatedAt,
+    client: {
+      tenantId: summary.tenantId,
+      slug: summary.slug,
+      displayName: summary.displayName,
+      status: summary.status,
+      region: summary.region,
+      assistantName: summary.assistantName,
+      updatedAt: summary.updatedAt,
+    },
+    branding: {
+      assistantName: summary.assistantName,
+      primaryColor: "#315F50",
+      accentColor: "#D8A653",
+      surfaceColor: "#FFFDF8",
+      textColor: "#17211D",
+      iconKey: "spark",
+    },
+    providerVoice: {
+      provider: "development-local",
+      model: "workspace summary",
+      credentials: "server_side_only",
+      voiceEnabled: false,
+      voiceId: "harbor",
+    },
+    features: {
+      analytics: true,
+      voice: false,
+      uploads: true,
+      contextMapping: true,
+    },
+    counts: {
+      courses: summary.courses,
+      publishedCourses: summary.publishedCourses,
+      modules: 0,
+      lessons: 0,
+      sources: summary.sources,
+      documents: 0,
+      knowledgeChunks: summary.knowledgeChunks,
+      people: summary.members,
+      activePeople: summary.members,
+      questions: 0,
+    },
+    courses: [],
+    people: [],
+  };
+}
+
 export default async function PlatformClientDetailPage({
   params,
 }: {
@@ -46,7 +101,14 @@ export default async function PlatformClientDetailPage({
   const authorization = await supabase.rpc("platform_admin_is_authorized");
   if (authorization.error || authorization.data !== true) redirect("/app/admin");
 
-  const detail = await getPlatformClientDetail(supabase, tenantId);
+  const directDetail = await getPlatformClientDetail(supabase, tenantId);
+  const overviewFallback = directDetail
+    ? null
+    : await getPlatformOverview(supabase);
+  const summary = overviewFallback?.tenants.find(
+    (tenant) => tenant.tenantId === tenantId,
+  );
+  const detail = directDetail ?? (summary ? summaryFallback(summary) : null);
   if (!detail || detail.client.tenantId !== tenantId) notFound();
 
   const { client, counts } = detail;
@@ -81,7 +143,24 @@ export default async function PlatformClientDetailPage({
           <Link href={surfaceHref("/onboarding", tenantId)}><span>Configure</span><small>Review workspace setup</small><b aria-hidden="true">↗</b></Link>
           <Link href={surfaceHref("/install/circle", tenantId)}><span>Circle install</span><small>Open the client launcher setup</small><b aria-hidden="true">↗</b></Link>
         </section>
-        <p className={styles.actionNote}>These links preserve the client id in the URL and require the signed-in account to hold an active membership for that client surface.</p>
+        <p className={styles.actionNote}>Every action is labeled for {client.displayName} and carries this workspace id. The assistant only answers from this client&apos;s authorized learning context.</p>
+
+        <section className={styles.assistantPanel} aria-labelledby="workspace-assistant-heading">
+          <div>
+            <p className={styles.eyebrow}>Workspace assistant</p>
+            <h2 id="workspace-assistant-heading">Ask about {client.displayName}</h2>
+            <p>Open a fresh, workspace-labeled conversation to ask about learning, knowledge sources, and the student signals available to this client.</p>
+          </div>
+          <Link className={styles.assistantAction} href={`${surfaceHref("/app/conversation", tenantId)}&new=1&scope=workspace`}>
+            Open scoped assistant <span aria-hidden="true">↗</span>
+          </Link>
+        </section>
+
+        {!directDetail ? (
+          <p className={styles.summaryFallback} role="status">
+            Client summary is online. Detailed course and learner rows will appear when the platform detail control-plane function is deployed; this page remains available for workspace actions and assistant testing.
+          </p>
+        ) : null}
 
         <section className={styles.operationsGrid} aria-label="Client operating configuration">
           <article className={styles.configPanel} style={{ background: detail.branding.surfaceColor, color: detail.branding.textColor }}>
