@@ -1,80 +1,8 @@
 import Link from "next/link";
 
-import { fixturePreviewEnabled } from "../lib/deployment-mode";
-
-const developmentModules = [
-  {
-    name: "Conversation",
-    description: "Text, voice, sources and rich learning responses in one thread.",
-    status: "Fixture surface",
-    href: "/dev/chat",
-  },
-  {
-    name: "Courses & Learning",
-    description: "Create, organize, review, publish and roll back learning.",
-    status: "Fixture surface",
-    href: "/dev/learning",
-  },
-  {
-    name: "Creator Console",
-    description: "Questions, confusion, learners and review opportunities.",
-    status: "Fixture surface",
-    href: "/dev/creator",
-  },
-  {
-    name: "Creator Intelligence",
-    description: "Evidence, source health, unknown metrics and human review.",
-    status: "Fixture surface",
-    href: "/dev/intelligence",
-  },
-  {
-    name: "Teacher Console",
-    description: "Cohort pulse, learner questions, progress and follow-up.",
-    status: "Fixture surface",
-    href: "/dev/teacher",
-  },
-  {
-    name: "Onboarding",
-    description: "Organization setup, assistant identity and invitations.",
-    status: "Fixture surface",
-    href: "/dev/onboarding",
-  },
-  {
-    name: "Platform Admin",
-    description: "Tenants, providers, budgets, audit, policy and MCP controls.",
-    status: "Fixture surface",
-    href: "/dev/admin",
-  },
-  {
-    name: "Branding & Context",
-    description: "Tenant identity, colors, voice and learning context.",
-    status: "Fixture surface",
-    href: "/dev/branding",
-  },
-  {
-    name: "Privacy Operations",
-    description: "Access, export, deletion, retention, holds and audit.",
-    status: "Fixture surface",
-    href: "/dev/privacy",
-  },
-  {
-    name: "Embeddable Widget",
-    description: "Assistant runtime, resize, theme and host events.",
-    status: "Fixture surface",
-    href: "/dev/widget",
-  },
-  {
-    name: "Embedded Course",
-    description: "The learning companion inside a realistic host page.",
-    status: "Fixture surface",
-    href: "/dev/widget/host",
-  },
-];
-
 function LearningBotMark() {
   return (
     <span className="lbMark" aria-hidden="true">
-      <i />
       <i />
       <i />
     </span>
@@ -195,34 +123,34 @@ function PlatformLanding() {
 
       <section className="lbHero">
         <div className="lbHeroCopy">
-          <p className="lbEyebrow">Enterprise learning platform</p>
-          <h1>Turn company knowledge into learning people can use.</h1>
+          <p className="lbEyebrow">The learning layer for your business</p>
+          <h1>Make learning feel obvious.</h1>
           <p className="lbHeroLede">
-            LearningBot gives every organization a secure learning workspace
-            where people can ask questions, practice, and build understanding
-            through text or voice.
+            LearningBot turns your best knowledge into a living learning space—
+            clean enough to trust, simple enough to use, and smart enough to
+            show you what people need next.
           </p>
           <div className="lbHeroActions">
             <Link className="lbButton" href="/auth/sign-in">
-              Sign in <span aria-hidden="true">→</span>
+              Start building <span aria-hidden="true">↗</span>
             </Link>
             <a className="lbButton lbButtonSecondary" href="#product">
               Explore the product
             </a>
           </div>
           <p className="lbHeroNote">
-            Grounded in your published learning content. Isolated by organization.
+            Grounded in your knowledge. Private by default.
           </p>
         </div>
       </section>
 
       <section className="lbSurfaceSection" id="product">
         <div className="lbSectionIntro">
-          <p className="lbEyebrow">The learner workspace</p>
-          <h2>One place to learn, ask, and keep moving.</h2>
+          <p className="lbEyebrow">One connected system</p>
+          <h2>From source to signal, without the busywork.</h2>
           <p>
-            Courses, source-backed answers, progress, and voice stay together in
-            one continuous learning experience.
+            Give creators, teachers, and admins the same view of what is being
+            learned, what is unclear, and what to do next.
           </p>
         </div>
         <ProductSurface />
@@ -434,96 +362,6 @@ function PlatformLanding() {
   );
 }
 
-function DevelopmentDirectory({
-  protectedPreview,
-  buildIdentity,
-}: {
-  protectedPreview: boolean;
-  buildIdentity: string;
-}) {
-  return (
-    <main className="launchPage">
-      <header className="topbar">
-        <div className="brandMark">L</div>
-        <div>
-          <p className="eyebrow">LearningBot</p>
-          <h1>Development surface directory</h1>
-        </div>
-        <div className="environment">
-          <span aria-hidden="true" />
-          {protectedPreview ? "Protected fixture preview" : "Local development"}
-        </div>
-      </header>
-
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Release lab</p>
-          <h2>Every product surface, one place.</h2>
-          <p className="lede">
-            Fixture-backed developer surfaces are isolated from the production
-            product. Use them to inspect visual and interaction contracts.
-          </p>
-          <div className="homeActions">
-            <Link className="homePrimary" href="/app">Open durable workspace</Link>
-            <Link className="homeSecondary" href="/auth/sign-in">Sign in</Link>
-          </div>
-        </div>
-        <aside className="sprint">
-          <p className="eyebrow">Environment boundary</p>
-          <strong>{protectedPreview ? "Protected preview" : "Local only"}</strong>
-          <p>Every card below uses explicitly labeled fixture data.</p>
-        </aside>
-      </section>
-
-      <section aria-labelledby="modules-heading">
-        <div className="sectionHeading">
-          <div>
-            <p className="eyebrow">Fixture surfaces</p>
-            <h2 id="modules-heading">Open a workspace</h2>
-          </div>
-          <p>These routes are not linked from the production product.</p>
-        </div>
-        <div className="moduleGrid">
-          {developmentModules.map((module) => (
-            <Link className="moduleCard" href={module.href} key={module.name}>
-              <div>
-                <span className="status">{module.status}</span>
-                <h3>{module.name}</h3>
-                <p>{module.description}</p>
-              </div>
-              <span className="arrow" aria-hidden="true">↗</span>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <footer className="launchFooter">
-        <div>
-          <p className="eyebrow">Build</p>
-          <strong>{buildIdentity}</strong>
-        </div>
-        <div>
-          <Link href="/api/health">Public health</Link>
-          <Link href="/api/dev/health">Preview health</Link>
-        </div>
-      </footer>
-    </main>
-  );
-}
-
 export default function HomePage() {
-  const protectedPreview = fixturePreviewEnabled();
-  const showDevelopmentDirectory =
-    process.env.NODE_ENV !== "production" || protectedPreview;
-  const buildIdentity =
-    process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local";
-
-  return showDevelopmentDirectory ? (
-    <DevelopmentDirectory
-      protectedPreview={protectedPreview}
-      buildIdentity={buildIdentity}
-    />
-  ) : (
-    <PlatformLanding />
-  );
+  return <PlatformLanding />;
 }

@@ -32,5 +32,8 @@ export default async function AuthenticatedEntryPage() {
   ) {
     redirect("/app/admin");
   }
+  if (context.identityRole === "creator" || context.identityRole === "teacher") {
+    redirect("/app/teacher");
+  }
   redirect("/app");
 }

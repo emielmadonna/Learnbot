@@ -290,3 +290,22 @@
 @media (prefers-reduced-motion: reduce) {
   .pulse, .spinner { animation: none; }
 }
+
+.intakePanel { display: grid; grid-template-columns: minmax(220px, .8fr) minmax(280px, 1.2fr); gap: 18px 24px; align-items: start; margin-top: 14px; padding: 19px; border: 1px solid #cfe0b0; border-radius: 14px; background: #f5faea; }
+.intakePanel h2 { margin: 0; font-size: 20px; letter-spacing: -.04em; }
+.intakePanel p:last-child { max-width: 340px; margin: 8px 0 0; color: #72805a; font-size: 10px; line-height: 1.5; }
+.intakeModes { display: flex; gap: 5px; padding: 4px; border-radius: 9px; background: #e8f0d8; }
+.intakeModes button, .intakeModes a { flex: 1; padding: 9px 7px; border: 0; border-radius: 6px; background: transparent; color: #788460; font-size: 9px; font-weight: 720; text-align: center; text-decoration: none; cursor: pointer; }
+.intakeModes .intakeModeActive { background: #fff; color: #29351f; box-shadow: 0 1px 4px rgb(36 54 23 / 10%); }
+.intakeFields { grid-column: 1 / -1; display: grid; grid-template-columns: .7fr 1.3fr; gap: 10px; }
+.intakeFields label { display: grid; gap: 6px; color: #7d895f; font-size: 9px; font-weight: 700; }
+.intakeFields input, .intakeFields textarea { width: 100%; min-width: 0; padding: 10px; border: 1px solid #d5e2bd; border-radius: 8px; background: #fff; color: #2d3826; font-size: 11px; outline: 0; }
+.intakeFields textarea { min-height: 78px; resize: vertical; }
+.intakeFooter { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 15px; color: #87916e; font-size: 9px; }
+.intakeFooter > div { display: flex; gap: 7px; }
+@media (max-width: 760px) {
+  .intakePanel, .intakeFields { grid-template-columns: 1fr; }
+  .intakeFooter { align-items: flex-start; flex-direction: column; }
+  .intakeFooter > div { width: 100%; }
+  .intakeFooter button { flex: 1; }
+}

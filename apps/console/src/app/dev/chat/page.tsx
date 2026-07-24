@@ -706,6 +706,14 @@ export default function StudentChatPrototype() {
   );
   const [followUp, setFollowUp] = useState<string | null>(null);
   const [followUpAnswer, setFollowUpAnswer] = useState("");
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [followUpSource, setFollowUpSource] = useState(
+    sources[0] ?? {
+      number: 1,
+      title: "Published learning source",
+      detail: "Grounded course knowledge",
+    },
+  );
   const [replyStatus, setReplyStatus] = useState<
     "idle" | "streaming" | "complete" | "error"
   >("idle");
@@ -1156,10 +1164,46 @@ export default function StudentChatPrototype() {
           attachmentId,
           modality,
           pageUrl: mockPageContext.url,
+          ...(conversationId ? { conversationId } : {}),
+          ...(() => {
+            try {
+              const stored = window.localStorage.getItem(
+                "learningbot.dev.activeKnowledge",
+              );
+              if (!stored) return {};
+              const knowledge = JSON.parse(stored) as {
+                title?: unknown;
+                text?: unknown;
+              };
+              return typeof knowledge.title === "string" &&
+                typeof knowledge.text === "string"
+                ? {
+                    knowledge: {
+                      title: knowledge.title,
+                      text: knowledge.text,
+                    },
+                  }
+                : {};
+            } catch {
+              return {};
+            }
+          })(),
           idempotencyKey: `message-${Date.now()}`,
         }),
       });
-      if (!response.ok || !response.body) throw new Error("Chat request failed.");
+      if (!response.ok) {
+        let message = "Chat request failed.";
+        try {
+          const payload = (await response.json()) as { message?: unknown };
+          if (typeof payload.message === "string" && payload.message.trim()) {
+            message = payload.message;
+          }
+        } catch {
+          // Keep the bounded fallback message.
+        }
+        throw new Error(message);
+      }
+      if (!response.body) throw new Error("Chat request failed.");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -1175,13 +1219,26 @@ export default function StudentChatPrototype() {
           const streamEvent = JSON.parse(line) as {
             type: string;
             text?: string;
+            sources?: Array<{ title?: string; detail?: string }>;
+            conversationId?: string;
           };
+          if (streamEvent.type === "context" && streamEvent.conversationId) {
+            setConversationId(streamEvent.conversationId);
+          }
           if (streamEvent.type === "delta" && streamEvent.text) {
             completedAnswer += streamEvent.text;
             setFollowUpAnswer((current) => current + streamEvent.text);
           }
           if (streamEvent.type === "completed") {
             setReplyStatus("complete");
+            const source = streamEvent.sources?.[0];
+            if (source?.title) {
+              setFollowUpSource({
+                number: 1,
+                title: source.title,
+                detail: source.detail ?? "Published learning source",
+              });
+            }
             if (
               modality === "voice" &&
               voiceGeneration === voiceGenerationRef.current &&
@@ -1201,10 +1258,12 @@ export default function StudentChatPrototype() {
       if (modality === "text") {
         setAnnouncement("Nova finished the grounded answer.");
       }
-    } catch {
+    } catch (error) {
       setReplyStatus("error");
       setFollowUpAnswer(
-        "I could not finish that response. Your message and attachment remain in this conversation, so you can retry safely.",
+        error instanceof Error && error.message !== "Chat request failed."
+          ? error.message
+          : "I could not finish that response. Your message and attachment remain in this conversation, so you can retry safely.",
       );
       if (
         modality === "voice" &&
@@ -2085,8 +2144,8 @@ export default function StudentChatPrototype() {
                           <button type="button">
                             <span>1</span>
                             <span>
-                              <strong>Designing Your Minimum Day</strong>
-                              <small>Momentum Method · Lesson 2.3</small>
+                              <strong>{followUpSource.title}</strong>
+                              <small>{followUpSource.detail}</small>
                             </span>
                           </button>
                         </div>
@@ -2258,7 +2317,9 @@ export default function StudentChatPrototype() {
             <div className={styles.composerFooter}>
               <span>
                 <Icon name="headphones" size={14} />
-                Voice, text, and files stay in one conversation
+                {conversationId
+                  ? "Thread active · voice, text, and files stay together"
+                  : "A thread will stay open across your messages"}
               </span>
               <span>
                 {assistantName} can make mistakes. Check important details.

@@ -51,6 +51,19 @@ export default function AdminConsole() {
   const [notice, setNotice] = useState("Loading the shared platform snapshot…");
   const [platform, setPlatform] = useState<PlatformSnapshot | null>(null);
   const [platformLoading, setPlatformLoading] = useState(true);
+  const [providerKey, setProviderKey] = useState("");
+  const [providerScope, setProviderScope] = useState("teacher_emiel_demo");
+  const [providerKind, setProviderKind] = useState<"development-local" | "openai">("development-local");
+  const [providerModel, setProviderModel] = useState("gpt-4o-mini");
+  const [providerRoutes, setProviderRoutes] = useState<Array<{
+    scopeId: string;
+    configured: boolean;
+    provider: "development-local" | "openai";
+    model: string;
+    keyLast4?: string;
+    updatedAt: string | null;
+  }>>([]);
+  const [providerBusy, setProviderBusy] = useState(false);
   const seededTenant = tenants.find((item) => item.id === selectedTenant) ?? tenants[0]!;
   const tenant = {
     ...seededTenant,
@@ -89,6 +102,71 @@ export default function AdminConsole() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    void fetch("/api/dev/provider", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Provider configuration unavailable.");
+        return (await response.json()) as { routes?: typeof providerRoutes };
+      })
+      .then((payload) => {
+        const routes = payload.routes ?? [];
+        setProviderRoutes(routes);
+        const selected = routes.find((route) => route.scopeId === providerScope);
+        if (selected) {
+          setProviderKind(selected.provider);
+          setProviderModel(selected.model);
+        }
+      })
+      .catch(() => setProviderRoutes([]));
+  }, []);
+
+  const selectedProviderRoute = providerRoutes.find((route) => route.scopeId === providerScope);
+
+  async function saveProviderKey() {
+    if (providerKind === "openai" && !providerKey.trim() && !selectedProviderRoute?.configured) {
+      setNotice("Paste a provider API key before saving.");
+      return;
+    }
+    setProviderBusy(true);
+    setNotice("Saving this teacher's provider route in server memory…");
+    try {
+      const response = await fetch("/api/dev/provider", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          apiKey: providerKey,
+          scopeId: providerScope,
+          provider: providerKind,
+          model: providerModel,
+        }),
+      });
+      const payload = (await response.json()) as (typeof selectedProviderRoute) & { message?: string };
+      if (!response.ok) throw new Error(payload.message ?? "Provider key was not saved.");
+      const route = payload as NonNullable<typeof selectedProviderRoute>;
+      setProviderRoutes((current) => [...current.filter((item) => item.scopeId !== providerScope), route]);
+      setProviderKey("");
+      setNotice(`${providerScope} now routes grounded chat to ${providerKind} · ${providerModel}`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Provider key was not saved.");
+    } finally {
+      setProviderBusy(false);
+    }
+  }
+
+  async function clearProviderKey() {
+    setProviderBusy(true);
+    setNotice("Removing the configured provider key…");
+    try {
+      const response = await fetch(`/api/dev/provider?scopeId=${encodeURIComponent(providerScope)}`, { method: "DELETE" });
+      const payload = (await response.json()) as NonNullable<typeof selectedProviderRoute>;
+      setProviderRoutes((current) => [...current.filter((item) => item.scopeId !== providerScope), payload]);
+      setProviderKind("development-local");
+      setNotice(`${providerScope} now uses the grounded local fallback`);
+    } finally {
+      setProviderBusy(false);
+    }
+  }
 
   async function saveBudget() {
     setNotice("Saving the tenant budget policy…");
@@ -183,6 +261,28 @@ export default function AdminConsole() {
             {providers.map((provider) => (
               <div className={styles.providerRow} key={provider.capability}><b>{provider.capability}</b><span>{provider.primary}</span><span>{provider.fallback}</span><span className={styles.good}>{provider.health}</span></div>
             ))}
+          </div>
+          <div className={styles.providerCredential}>
+            <div>
+              <p className={styles.eyebrow}>Bring your own provider</p>
+              <h3>{selectedProviderRoute?.configured ? `${selectedProviderRoute.provider} active · ${selectedProviderRoute.model}` : "Configure a teacher route"}</h3>
+              <small>Choose who owns the route, select the provider and model, then save. Keys are sent to the local server once, held in process memory, never rendered back, and used for that teacher's next grounded chat request.</small>
+            </div>
+            <div className={styles.providerCredentialActions}>
+              <label><span>Route owner</span><select aria-label="Provider route owner" value={providerScope} onChange={(event) => { setProviderScope(event.target.value); const route = providerRoutes.find((item) => item.scopeId === event.target.value); setProviderKind(route?.provider ?? "development-local"); setProviderModel(route?.model ?? "gpt-4o-mini"); }}><option value="workspace">Workspace default</option><option value="teacher_emiel_demo">Emiel · Teacher</option></select></label>
+              <label><span>Provider</span><select aria-label="Provider" value={providerKind} onChange={(event) => setProviderKind(event.target.value as "development-local" | "openai")}><option value="development-local">LearningBot local fallback</option><option value="openai">OpenAI</option></select></label>
+              <label><span>Model</span><input aria-label="Provider model" value={providerModel} onChange={(event) => setProviderModel(event.target.value)} placeholder="gpt-4o-mini" /></label>
+              <input
+                aria-label="OpenAI API key"
+                type="password"
+                value={providerKey}
+                placeholder={providerKind === "openai" ? "sk-…" : "Not needed for local"}
+                onChange={(event) => setProviderKey(event.target.value)}
+                autoComplete="off"
+              />
+              <button className={styles.primary} disabled={providerBusy} onClick={saveProviderKey}>{providerBusy ? "Saving…" : "Save route"}</button>
+              {selectedProviderRoute?.configured ? <button className={styles.secondary} disabled={providerBusy} onClick={clearProviderKey}>Remove route</button> : null}
+            </div>
           </div>
         </section>
 

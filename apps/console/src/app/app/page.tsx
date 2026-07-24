@@ -18,6 +18,7 @@ import styles from "./workspace.module.css";
 import UploadLearning from "./upload-learning";
 import { UsageSignal } from "./usage-signal";
 import { ConfigurationSection } from "./configure/configuration-client";
+import { LearningIntakeSection } from "./learning/learning-intake-section";
 
 const statusMessages: Record<string, string> = {
   course_created: "Draft created. Review it below, then publish when ready.",
@@ -141,10 +142,11 @@ export default async function AuthenticatedAppPage({
           <a href="#courses">
             Learning
           </a>
+          {workspace.identity.canAuthor ? <a href="#learning-intake">Add learning</a> : null}
           {canManageConfiguration ? <a href="#configuration">Configure</a> : null}
           {workspace.identity.canAuthor ? (
             <a href="#create-course">
-              Create
+              Build
             </a>
           ) : null}
           {["tenant_owner", "tenant_admin"].includes(
@@ -152,7 +154,7 @@ export default async function AuthenticatedAppPage({
           ) ? (
             <>
               <Link href="/app/admin">Admin</Link>
-              <Link href="/app/admin/users">People</Link>
+              <Link href="/app/admin#people-signals">People &amp; signals</Link>
             </>
           ) : null}
           {canManagePlatform ? (
@@ -454,7 +456,7 @@ export default async function AuthenticatedAppPage({
                   <button type="submit">Create draft</button>
                 </footer>
               </form>
-              <div className={styles.uploadSection}>
+              <div className={styles.uploadSection} id="add-learning">
                 <div>
                   <p className={styles.eyebrow}>Secure import</p>
                   <h3>Upload an existing source</h3>
@@ -474,6 +476,7 @@ export default async function AuthenticatedAppPage({
             </section>
           ) : null}
           {canManageConfiguration ? <ConfigurationSection initial={configuration} /> : null}
+          {workspace.identity.canAuthor ? <LearningIntakeSection tenantName={workspace.tenant.displayName} /> : null}
         </div>
       </section>
 

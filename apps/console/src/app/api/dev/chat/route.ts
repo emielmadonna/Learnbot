@@ -18,6 +18,12 @@ type ChatRequest = {
   modality?: "text" | "voice";
   pageUrl?: string;
   idempotencyKey?: string;
+  conversationId?: string;
+  knowledge?: {
+    title?: string;
+    detail?: string;
+    text?: string;
+  };
 };
 
 export async function POST(request: Request) {
@@ -39,26 +45,25 @@ export async function POST(request: Request) {
     const runtime = getDevelopmentRuntime();
     const studentContext = session.context;
     const key = input.idempotencyKey ?? crypto.randomUUID();
-    const conversation = await runtime.services.createConversation(
-      studentContext,
-      {
-        idempotencyKey: "student-demo-conversation",
-        studentId,
-        identityTier: "verified",
-        activeModality: "text",
-        pageContext: {
-          url:
-            input.pageUrl ??
-            "/courses/momentum-method/modules/build-your-rhythm/lessons/minimum-day",
-          courseId: "course_momentum",
-          course: "Momentum Method",
-          moduleId: "module_rhythm",
-          module: "Build Your Rhythm",
-          lessonId: "lesson_minimum_day",
-          lesson: "Minimum Day",
-        },
-      },
-    );
+    const conversation = input.conversationId
+      ? await runtime.services.getConversation(studentContext, input.conversationId)
+      : await runtime.services.createConversation(studentContext, {
+          idempotencyKey: "student-demo-conversation",
+          studentId,
+          identityTier: "verified",
+          activeModality: "text",
+          pageContext: {
+            url:
+              input.pageUrl ??
+              "/courses/momentum-method/modules/build-your-rhythm/lessons/minimum-day",
+            courseId: "course_momentum",
+            course: "Momentum Method",
+            moduleId: "module_rhythm",
+            module: "Build Your Rhythm",
+            lessonId: "lesson_minimum_day",
+            lesson: "Minimum Day",
+          },
+        });
     if (input.modality === "voice") {
       await runtime.services.setConversationModality(
         studentContext,
@@ -93,6 +98,34 @@ export async function POST(request: Request) {
         studentId,
       },
     );
+    const activeKnowledge = runtime.pipeline.getActiveVersion({
+      tenantId: studentContext.tenantId,
+    });
+    const activeSourceJob = activeKnowledge
+      ? runtime.pipeline.getJob(
+          { tenantId: studentContext.tenantId },
+          activeKnowledge.sourceJobId,
+        )
+      : undefined;
+    const activeKnowledgeText = activeKnowledge?.chunks
+      .map((chunk) => chunk.text)
+      .join("\n")
+      .trim();
+    const requestedKnowledge = input.knowledge;
+    const clientKnowledge =
+      typeof requestedKnowledge?.title === "string" &&
+      typeof requestedKnowledge?.text === "string" &&
+      requestedKnowledge.title.trim() &&
+      requestedKnowledge.text.trim()
+        ? {
+            title: requestedKnowledge.title.trim().slice(0, 160),
+            detail:
+              typeof requestedKnowledge.detail === "string"
+                ? requestedKnowledge.detail.trim().slice(0, 160)
+                : `${context.course} · Published knowledge`,
+            text: requestedKnowledge.text.trim().slice(0, 32_000),
+          }
+        : undefined;
     const providerContext = {
       requestId: studentContext.requestId,
       traceId: studentContext.traceId,
@@ -110,8 +143,20 @@ export async function POST(request: Request) {
         message,
         contextSource: context.source,
         contextConfidence: context.confidence,
+        ...(clientKnowledge
+          ? { knowledge: clientKnowledge }
+          : activeKnowledgeText && activeSourceJob?.artifacts.document?.title
+          ? {
+              knowledge: {
+                title: activeSourceJob.artifacts.document.title,
+                detail: `${context.course} · Published knowledge`,
+                text: activeKnowledgeText,
+              },
+            }
+          : {}),
       },
       key,
+      "teacher_emiel_demo",
     );
     const providerOutcome = providerExecution.outcome;
     if (!providerOutcome.ok) {

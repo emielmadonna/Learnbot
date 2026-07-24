@@ -112,6 +112,10 @@ export default function LearningWorkspace() {
   const [diagramCount, setDiagramCount] = useState(1);
   const [showNewCourse, setShowNewCourse] = useState(false);
   const [newCourseTitle, setNewCourseTitle] = useState("");
+  const [showIntake, setShowIntake] = useState(false);
+  const [intakeKind, setIntakeKind] = useState<"notes" | "link">("notes");
+  const [intakeTitle, setIntakeTitle] = useState("");
+  const [intakeBody, setIntakeBody] = useState("");
   const [showNewLesson, setShowNewLesson] = useState(false);
   const [newLessonTitle, setNewLessonTitle] = useState("");
   const [importFormat, setImportFormat] = useState<"plain_text" | "markdown">(
@@ -578,16 +582,47 @@ export default function LearningWorkspace() {
   }
 
   async function addLearning() {
+    const title = intakeTitle.trim();
+    const body = intakeBody.trim();
+    if (!title || !body) {
+      showNotice("Name the source and add its notes or link before continuing.", "error");
+      return;
+    }
+    if (intakeKind === "link" && !/^https:\/\//iu.test(body)) {
+      showNotice("Links must use HTTPS so the source can be reviewed safely.", "error");
+      return;
+    }
     setJob("running");
-    showNotice("New source added · validating, scanning and extracting");
+    showNotice(
+      intakeKind === "link"
+        ? "Saving the reviewed link in the lesson…"
+        : "New source added · validating, scanning and extracting",
+    );
     try {
+      if (intakeKind === "link") {
+        const saved = await saveDraft();
+        const snapshot = await postAuthoring({
+          action: "add_embed",
+          lessonId: selected,
+          expectedVersion: saved.course.version,
+          url: body,
+          idempotencyKey: `source-link-${crypto.randomUUID()}`,
+        });
+        applySnapshot(snapshot);
+        setShowIntake(false);
+        setIntakeTitle("");
+        setIntakeBody("");
+        setJob("ready");
+        showNotice(`${title} linked in the lesson draft · review before publishing`, "success");
+        return;
+      }
       const response = await fetch("/api/dev/ingestion", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: "start",
-          title: `Creator upload ${sourceCount + 1}`,
-          body: content,
+          title,
+          body,
           idempotencyKey: `source-${crypto.randomUUID()}`,
         }),
       });
@@ -600,6 +635,13 @@ export default function LearningWorkspace() {
       };
       setSourceCount((count) => count + 1);
       setDraftVersionId(result.job.draftVersionId);
+      window.localStorage.setItem(
+        "learningbot.dev.pendingKnowledge",
+        JSON.stringify({ title, text: body }),
+      );
+      setShowIntake(false);
+      setIntakeTitle("");
+      setIntakeBody("");
       setJob("ready");
       showNotice(
         `Source ready · ${result.job.artifacts.chunks.length} chunks in a reviewable draft`,
@@ -677,6 +719,18 @@ export default function LearningWorkspace() {
         );
         return;
       }
+      if (
+        draftVersionId &&
+        (!pipelineQuality ||
+          pipelineQuality.chunkQuality.state !== "known" ||
+          pipelineQuality.retrievalReadiness.state !== "known")
+      ) {
+        showNotice(
+          "Publish blocked: the knowledge draft is not retrieval-ready. Review or reprocess the source first.",
+          "error",
+        );
+        return;
+      }
       const published = await postAuthoring({
         action: "publish",
         expectedVersion: saved.course.version,
@@ -710,6 +764,16 @@ export default function LearningWorkspace() {
         setActiveVersionId(result.published.versionId);
         setDraftVersionId(undefined);
         setPipelineQuality(result.quality);
+        const pendingKnowledge = window.localStorage.getItem(
+          "learningbot.dev.pendingKnowledge",
+        );
+        if (pendingKnowledge) {
+          window.localStorage.setItem(
+            "learningbot.dev.activeKnowledge",
+            pendingKnowledge,
+          );
+          window.localStorage.removeItem("learningbot.dev.pendingKnowledge");
+        }
         showNotice(
           `Course v${published.course.version} and knowledge v${result.published.sequence} published`,
           "success",
@@ -887,7 +951,7 @@ export default function LearningWorkspace() {
             </div>
             <div className={styles.headerActions}>
               <button className={styles.secondary} onClick={() => setShowNewCourse(true)}>＋ New course</button>
-              <button className={styles.add} onClick={() => void addLearning()}>＋ Add learning</button>
+              <button className={styles.add} onClick={() => setShowIntake((current) => !current)}>＋ Add learning</button>
             </div>
           </div>
           <div className={styles.stages}>
@@ -902,6 +966,26 @@ export default function LearningWorkspace() {
             ))}
           </div>
         </section>
+
+        {showIntake ? (
+          <section className={styles.intakePanel} aria-label="Add learning source">
+            <div>
+              <p className={styles.eyebrow}>Simple source intake</p>
+              <h2>Bring in something useful.</h2>
+              <p>LearningBot will keep the source attached, clean it into reviewable knowledge, and leave publishing in your hands.</p>
+            </div>
+            <div className={styles.intakeModes} role="tablist" aria-label="Source type">
+              <button className={intakeKind === "notes" ? styles.intakeModeActive : ""} onClick={() => setIntakeKind("notes")} role="tab" aria-selected={intakeKind === "notes"}>Paste or write</button>
+              <button className={intakeKind === "link" ? styles.intakeModeActive : ""} onClick={() => setIntakeKind("link")} role="tab" aria-selected={intakeKind === "link"}>Add a link</button>
+              <a href="/dev/admin#mcp">Connect MCP <span aria-hidden="true">↗</span></a>
+            </div>
+            <div className={styles.intakeFields}>
+              <label>Source name<input value={intakeTitle} onChange={(event) => setIntakeTitle(event.target.value)} placeholder="e.g. Customer onboarding notes" /></label>
+              <label>{intakeKind === "link" ? "HTTPS link" : "Source material"}<textarea value={intakeBody} onChange={(event) => setIntakeBody(event.target.value)} placeholder={intakeKind === "link" ? "https://…" : "Paste notes, a transcript, or a clean draft…"} /></label>
+            </div>
+            <div className={styles.intakeFooter}><span>Private draft · human review before publish</span><div><button className={styles.secondary} onClick={() => setShowIntake(false)}>Cancel</button><button className={styles.publish} onClick={() => void addLearning()}>Clean &amp; add</button></div></div>
+          </section>
+        ) : null}
 
         <section className={styles.knowledgeLab} aria-label="Knowledge and training review">
           <article className={styles.objectivesPanel}>

@@ -136,6 +136,7 @@ export default async function PlatformAdminPage() {
               Tenant content remains isolated; this overview exposes readiness
               counts, not learner conversations or source contents.
             </p>
+            <Link className={styles.introAction} href="/onboarding#client-access">Add client</Link>
           </div>
           <div className={styles.liveState} data-ready={Boolean(overview)}>
             <span aria-hidden="true" />

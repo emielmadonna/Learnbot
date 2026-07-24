@@ -122,7 +122,7 @@ export function DurableWorkspace({
         ) : null}
       </section>
 
-      <section className={styles.section}>
+      <section className={styles.section} id="brand">
         <div className={styles.sectionHeading}>
           <div>
             <p className={styles.eyebrow}>Company and brand</p>

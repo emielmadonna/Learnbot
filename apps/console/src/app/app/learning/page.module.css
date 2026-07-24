@@ -20,11 +20,11 @@
 .cardHeader { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 22px; }
 .cardHeader > span { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 10px; background: #dce9dc; color: #315f50; font-size: 11px; font-weight: 800; }
 .cardHeader h2 { font-size: 27px; }
-label { display: grid; gap: 7px; margin-top: 16px; color: #33483e; font-size: 12px; font-weight: 750; }
-label span { color: #5d7166; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
-input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid #d8d9d0; border-radius: 11px; background: #fff; color: #17231f; font: inherit; }
-input, select { min-height: 42px; padding: 0 12px; }
-textarea { min-height: 250px; padding: 14px; resize: vertical; line-height: 1.55; }
+.card label, .prepareCard label { display: grid; gap: 7px; margin-top: 16px; color: #33483e; font-size: 12px; font-weight: 750; }
+.card label span, .prepareCard label span { color: #5d7166; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.card input, .card select, .card textarea, .prepareCard input, .prepareCard select, .prepareCard textarea { width: 100%; box-sizing: border-box; border: 1px solid #d8d9d0; border-radius: 11px; background: #fff; color: #17231f; font: inherit; }
+.card input, .card select, .prepareCard input, .prepareCard select { min-height: 42px; padding: 0 12px; }
+.card textarea, .prepareCard textarea { min-height: 250px; padding: 14px; resize: vertical; line-height: 1.55; }
 .controls, .formGrid, .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .fileDrop { display: grid; min-height: 75px; place-items: center; align-content: center; border: 1px dashed #9ab3a1; border-radius: 16px; background: #f2f8f0; color: #315f50; text-align: center; cursor: pointer; }
 .fileDrop small { margin-top: 5px; color: #708379; font-size: 10px; font-weight: 500; }
