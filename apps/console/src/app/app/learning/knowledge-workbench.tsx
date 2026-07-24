@@ -40,6 +40,8 @@ export default function KnowledgeWorkbench({
   const [description, setDescription] = useState("");
   const [moduleTitle, setModuleTitle] = useState("Imported material");
   const [lessonTitle, setLessonTitle] = useState("Cleaned course knowledge");
+  const [diagramTitle, setDiagramTitle] = useState("");
+  const [diagramSteps, setDiagramSteps] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [preparedCourseId, setPreparedCourseId] = useState<string | null>(null);
@@ -105,7 +107,12 @@ export default function KnowledgeWorkbench({
           description: reviewedDraft.description,
           moduleTitle,
           lessonTitle,
-          lessonContent: reviewedDraft.normalizedText,
+          lessonContent: [
+            reviewedDraft.normalizedText,
+            diagramTitle.trim() && diagramSteps.trim()
+              ? `\n\n\`\`\`diagram\n${diagramTitle.trim()}\n${diagramSteps.trim()}\n\`\`\``
+              : "",
+          ].filter(Boolean).join(""),
           sourceName: reviewedDraft.sourceName,
           sourceFormat: reviewedDraft.format,
           diagramReview: reviewedDraft.diagramFlags,
@@ -194,7 +201,13 @@ export default function KnowledgeWorkbench({
         <article className={styles.card}>
           <div className={styles.cardHeader}><span>04</span><div><p className={styles.eyebrow}>Diagram review</p><h2>Decide what deserves a visual</h2></div></div>
           {reviewedDraft.diagramFlags.length ? <div className={styles.diagramList}>{reviewedDraft.diagramFlags.map((flag) => <div className={styles.diagramFlag} key={flag.flagId}><div><strong>{flag.title}</strong><small>{flag.evidence}</small></div><div className={styles.flagActions}><button type="button" data-active={flag.state === "accepted"} onClick={() => review(flag.flagId, "accepted")}>Keep</button><button type="button" data-active={flag.state === "dismissed"} onClick={() => review(flag.flagId, "dismissed")}>Dismiss</button></div></div>)}</div> : <p className={styles.empty}>No diagram-worthy structures were detected. That is okay for a text-first lesson.</p>}
-          <p className={styles.muted}>Review is a content decision only. This lane does not generate or publish diagram assets.</p>
+          <p className={styles.muted}>Keep detected diagram-worthy ideas, or add a simple teaching diagram manually below. It stays in the private draft until you publish.</p>
+          <div className={styles.diagramEditor}>
+            <strong>Add a diagram manually</strong>
+            <small>Use arrows between steps, for example: Notice → Try → Reflect → Repeat.</small>
+            <input value={diagramTitle} onChange={(event) => setDiagramTitle(event.target.value)} placeholder="Diagram title" />
+            <textarea value={diagramSteps} onChange={(event) => setDiagramSteps(event.target.value)} placeholder="Notice → Try → Reflect → Repeat" rows={3} />
+          </div>
         </article>
       </section>
 

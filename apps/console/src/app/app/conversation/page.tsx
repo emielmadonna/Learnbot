@@ -55,6 +55,10 @@ export default async function ConversationPage({
     typeof parameters.courseId === "string" ? parameters.courseId : null;
   const requestedLessonId =
     typeof parameters.lessonId === "string" ? parameters.lessonId : null;
+  const requestedConversationId =
+    typeof parameters.conversationId === "string"
+      ? parameters.conversationId
+      : null;
   const brand = workspace.branding;
   const theme = {
     "--brand-primary": brand?.primaryColor ?? "#234f40",
@@ -77,6 +81,7 @@ export default async function ConversationPage({
         initialMode={requestedMode === "voice" ? "voice" : "text"}
         initialCourseId={requestedCourseId}
         initialLessonId={requestedLessonId}
+        initialConversationId={requestedConversationId}
         courses={workspace.courses.map((course) => ({
           courseId: course.courseId,
           title: course.title,

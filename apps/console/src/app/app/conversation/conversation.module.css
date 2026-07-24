@@ -278,6 +278,28 @@
   font-weight: 800;
 }
 
+.newConversation {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-primary) 8%, #fff);
+  color: var(--brand-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 760;
+}
+
+.newConversation:hover {
+  background: color-mix(in srgb, var(--brand-primary) 14%, #fff);
+}
+
+.newConversation:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .conversation {
   position: relative;
   min-width: 0;
@@ -992,6 +1014,56 @@
     inset -24px -22px 45px rgb(15 47 38 / 20%),
     0 32px 90px color-mix(in srgb, var(--brand-primary) 21%, transparent),
     0 0 115px color-mix(in srgb, var(--brand-accent) 20%, transparent);
+}
+
+/* The voice control is intentionally geometric and stable: the old stacked
+   liquid shapes looked different at each size and clipped on small screens. */
+.voiceOrb,
+.voiceContinuous .voiceOrb {
+  width: clamp(148px, 21vw, 218px);
+  height: clamp(148px, 21vw, 218px);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, rgb(255 255 255 / 94%), transparent 17%),
+    radial-gradient(circle at 68% 72%, color-mix(in srgb, var(--brand-accent) 80%, white), transparent 28%),
+    linear-gradient(145deg, color-mix(in srgb, var(--brand-primary) 84%, white), var(--brand-primary));
+  box-shadow:
+    inset 12px 12px 24px rgb(255 255 255 / 24%),
+    inset -16px -18px 28px rgb(9 42 32 / 22%),
+    0 22px 55px color-mix(in srgb, var(--brand-primary) 20%, transparent);
+  scale: calc(1 + (var(--voice-energy) * 0.08));
+  transform: none;
+  animation: voicePulse 2.8s ease-in-out infinite;
+}
+
+.voiceOrb::before {
+  inset: 16%;
+  width: auto;
+  height: auto;
+  border: 1px solid rgb(255 255 255 / 34%);
+  background: transparent;
+  box-shadow: none;
+}
+
+.voiceOrb::after {
+  inset: 29%;
+  width: auto;
+  height: auto;
+  border: 1px solid rgb(255 255 255 / 25%);
+  background: transparent;
+  box-shadow: none;
+}
+
+.voiceOrb em {
+  inset: -14%;
+  background: color-mix(in srgb, var(--brand-primary) 14%, transparent);
+  filter: blur(26px);
+}
+
+@keyframes voicePulse {
+  0%,
+  100% { transform: scale(0.98); }
+  50% { transform: scale(1.02); }
 }
 
 .voiceStatus {

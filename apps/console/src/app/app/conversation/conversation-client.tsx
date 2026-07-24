@@ -174,6 +174,22 @@ function isRichLine(line: string) {
   );
 }
 
+function renderInlineMarkdown(value: string, keyPrefix: string): ReactNode {
+  const tokens = value.split(/(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)/gu);
+  return tokens.map((token, index) => {
+    if (token.startsWith("**") && token.endsWith("**")) {
+      return <strong key={`${keyPrefix}-strong-${index}`}>{token.slice(2, -2)}</strong>;
+    }
+    if (token.startsWith("`") && token.endsWith("`")) {
+      return <code key={`${keyPrefix}-code-${index}`}>{token.slice(1, -1)}</code>;
+    }
+    if (token.startsWith("*") && token.endsWith("*")) {
+      return <em key={`${keyPrefix}-em-${index}`}>{token.slice(1, -1)}</em>;
+    }
+    return token ? <span key={`${keyPrefix}-text-${index}`}>{token}</span> : null;
+  });
+}
+
 function RichMessageBody({ content }: { content: string }) {
   const lines = content.replace(/\r\n?/gu, "\n").split("\n");
   const blocks: ReactNode[] = [];
@@ -194,6 +210,27 @@ function RichMessageBody({ content }: { content: string }) {
         index += 1;
       }
       if (index < lines.length) index += 1;
+      if (language.toLowerCase() === "diagram") {
+        const title = code.shift()?.trim() || "Learning map";
+        const steps = code
+          .join(" ")
+          .split(/\s*(?:->|→|➜)\s*/u)
+          .map((step) => step.trim())
+          .filter(Boolean);
+        blocks.push(
+          <figure className={styles.diagramPart} key={`diagram-${index}`}>
+            <div>
+              <span aria-hidden="true">◇</span>
+              <b>{title}</b>
+            </div>
+            <figcaption>
+              {steps.length > 1 ? steps.join("  →  ") : code.join(" ")}
+              <small>Learning diagram</small>
+            </figcaption>
+          </figure>,
+        );
+        continue;
+      }
       blocks.push(
         <pre key={`code-${index}`} data-language={language || undefined}>
           <code>{code.join("\n")}</code>
@@ -203,7 +240,11 @@ function RichMessageBody({ content }: { content: string }) {
     }
     const heading = line.match(/^(#{1,3})\s+(.+)$/u);
     if (heading) {
-      blocks.push(<h3 key={`heading-${index}`}>{heading[2]}</h3>);
+      blocks.push(
+        <h3 key={`heading-${index}`}>
+          {renderInlineMarkdown(heading[2] ?? "", `heading-${index}`)}
+        </h3>,
+      );
       index += 1;
       continue;
     }
@@ -219,7 +260,9 @@ function RichMessageBody({ content }: { content: string }) {
       blocks.push(
         <ul key={`list-${index}`}>
           {items.map((item, itemIndex) => (
-            <li key={`${itemIndex}-${item}`}>{item}</li>
+            <li key={`${itemIndex}-${item}`}>
+              {renderInlineMarkdown(item, `list-${index}-${itemIndex}`)}
+            </li>
           ))}
         </ul>,
       );
@@ -237,7 +280,9 @@ function RichMessageBody({ content }: { content: string }) {
       blocks.push(
         <ol key={`ordered-${index}`}>
           {items.map((item, itemIndex) => (
-            <li key={`${itemIndex}-${item}`}>{item}</li>
+            <li key={`${itemIndex}-${item}`}>
+              {renderInlineMarkdown(item, `ordered-${index}-${itemIndex}`)}
+            </li>
           ))}
         </ol>,
       );
@@ -250,7 +295,9 @@ function RichMessageBody({ content }: { content: string }) {
         index += 1;
       }
       blocks.push(
-        <blockquote key={`quote-${index}`}>{quote.join(" ")}</blockquote>,
+        <blockquote key={`quote-${index}`}>
+          {renderInlineMarkdown(quote.join(" "), `quote-${index}`)}
+        </blockquote>,
       );
       continue;
     }
@@ -264,7 +311,11 @@ function RichMessageBody({ content }: { content: string }) {
       paragraph.push(lines[index] ?? "");
       index += 1;
     }
-    blocks.push(<p key={`paragraph-${index}`}>{paragraph.join(" ")}</p>);
+    blocks.push(
+      <p key={`paragraph-${index}`}>
+        {renderInlineMarkdown(paragraph.join(" "), `paragraph-${index}`)}
+      </p>,
+    );
   }
 
   return <div className={styles.messageContent}>{blocks}</div>;
@@ -442,6 +493,7 @@ export default function ConversationClient({
   initialMode,
   initialCourseId,
   initialLessonId,
+  initialConversationId,
   courses,
 }: {
   assistantName: string;
@@ -451,6 +503,7 @@ export default function ConversationClient({
   initialMode: "text" | "voice";
   initialCourseId: string | null;
   initialLessonId: string | null;
+  initialConversationId: string | null;
   courses: CourseOption[];
 }) {
   const [mode, setMode] = useState<"text" | "voice">(initialMode);
@@ -464,7 +517,9 @@ export default function ConversationClient({
   const [selectedLessonId, setSelectedLessonId] = useState(
     initialLessonId ?? "",
   );
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(
+    initialConversationId,
+  );
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -498,6 +553,7 @@ export default function ConversationClient({
   const conversationStartKeyRef = useRef(
     `conversation:${crypto.randomUUID()}`,
   );
+  const loadExplicitConversationRef = useRef(Boolean(initialConversationId));
   const retryTurnRef = useRef<{ content: string; key: string } | null>(null);
   const realtimePeerRef = useRef<RTCPeerConnection | null>(null);
   const realtimeChannelRef = useRef<RTCDataChannel | null>(null);
@@ -534,8 +590,18 @@ export default function ConversationClient({
 
   useEffect(() => {
     let active = true;
+    if (!loadExplicitConversationRef.current) {
+      setConversationId(null);
+      setMessages([]);
+      setLoadingHistory(false);
+      return () => {
+        active = false;
+      };
+    }
+    const conversationForLoad = initialConversationId ?? "";
     async function loadConversation() {
       const parameters = new URLSearchParams();
+      parameters.set("conversationId", conversationForLoad);
       if (selectedCourseId) parameters.set("courseId", selectedCourseId);
       if (selectedLessonId) parameters.set("lessonId", selectedLessonId);
       const suffix = parameters.size ? `?${parameters.toString()}` : "";
@@ -581,7 +647,7 @@ export default function ConversationClient({
     return () => {
       active = false;
     };
-  }, [selectedCourseId, selectedLessonId]);
+  }, [initialConversationId, selectedCourseId, selectedLessonId]);
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -1466,8 +1532,9 @@ export default function ConversationClient({
     setVoiceTranscript("");
     setVoiceAnswer("");
     setConversationId(null);
+    loadExplicitConversationRef.current = false;
     setMessages([]);
-    setLoadingHistory(true);
+    setLoadingHistory(false);
     setError(null);
     retryTurnRef.current = null;
     conversationStartKeyRef.current = `conversation:${crypto.randomUUID()}`;
@@ -1667,6 +1734,14 @@ export default function ConversationClient({
         </div>
 
         <div className={styles.navActions}>
+          <button
+            className={styles.newConversation}
+            type="button"
+            onClick={resetConversationContext}
+            disabled={sending || loadingHistory}
+          >
+            New
+          </button>
           <div className={styles.modeSwitch} aria-label="Conversation mode">
             <button
               className={mode === "text" ? styles.modeActive : ""}
