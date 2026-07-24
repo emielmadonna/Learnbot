@@ -52,18 +52,23 @@ The repository now includes:
 - policy-driven, resumable privacy access/export/delete/retention workflows
   with exact grants, legal holds, deletion tombstones, manifest integrity and
   explicit partial/blocked states;
-- a 20-tool management MCP whose mutations deny by default and require exact
+- a 28-tool management MCP whose mutations deny by default and require exact
   tenant/actor/grant/idempotency context plus expiry, budget and rate controls;
-- six Supabase migrations with 25 tenant-scoped tables, forced RLS, private
-  storage policies and executable SQL negative tests.
+- seven Supabase migrations with 29 tenant-scoped tables, forced RLS, private
+  storage policies and executable SQL negative tests;
+- injected PostgreSQL primitives for transactional command replay, immutable
+  course revisions and a leased telemetry outbox, with no memory fallback;
+- an explicit two-value private-fixture-preview gate, a minimal `/api/health`
+  endpoint and a frozen-install CI validation workflow.
 
 ## Honest delivery boundary
 
 The current build is an evidence-backed development slice, not a production
 certification. PostgreSQL security tests require Docker or an approved Supabase
-development project. Production realtime transport/IdP adapters, durable
-identity and replay repositories, durable queues and
-outboxes, object storage, secret management, billing reconciliation,
+development project. The durable primitives are not yet wired into every
+application service. Production realtime transport/IdP adapters, durable
+identity repositories, worker execution, object storage, secret management,
+billing reconciliation,
 approved privacy policies and production retention/export/delete adapters,
 load/recovery evidence and deployment
 remediation remain explicit production milestones.

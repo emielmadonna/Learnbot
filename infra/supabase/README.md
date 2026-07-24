@@ -14,6 +14,7 @@ Apply the numbered files exactly once, in lexical order:
 4. `0004_branding_progress_and_conversations.sql`
 5. `0005_audit_cost_and_mcp.sql`
 6. `0006_rls_policies_and_storage.sql`
+7. `0007_durable_execution_primitives.sql`
 
 With a disposable local Supabase instance:
 
@@ -23,6 +24,9 @@ supabase db reset --workdir infra
 psql "$LOCAL_DATABASE_URL" \
   --set ON_ERROR_STOP=1 \
   --file infra/supabase/tests/security_verification.sql
+psql "$LOCAL_DATABASE_URL" \
+  --set ON_ERROR_STOP=1 \
+  --file infra/supabase/tests/durable_execution_primitives_verification.sql
 node infra/supabase/scripts/verify-structure.mjs
 ```
 
@@ -30,7 +34,10 @@ node infra/supabase/scripts/verify-structure.mjs
 parts of SEC-01, SEC-02, SEC-03, SEC-07, ATT-02 and MCP-08. The Node verifier
 requires no database and checks table manifests, tenant/concurrency/retention
 columns, RLS controls, immutable ledgers, storage policies and forbidden raw
-credential columns.
+credential columns. `durable_execution_primitives_verification.sql` also rolls
+back its fixtures and covers cross-tenant revision denial, immutable revision
+facts and protected command/outbox identity. Structural verification does not
+substitute for executing either SQL suite against PostgreSQL.
 
 ## Tenant and role trust boundary
 
@@ -50,6 +57,13 @@ repositories. Never expose them to browser, Widget, MCP client or agent code.
 Optimistic concurrency uses `record_version`. Mutations must include
 `where record_version = :expected_version`; the trigger increments the token.
 Every mutation path supplies a stable, tenant-scoped `idempotency_key`.
+
+The durable execution migration adds append-only course revisions, a
+compare-and-swap revision head, fingerprinted command receipts and a leased
+telemetry outbox. Their TypeScript adapters live in
+`packages/postgres-adapters` and require an injected transactional PostgreSQL
+executor; they never fall back to process memory. The adapter's tenant and
+course identifiers must resolve to the UUIDs used by this schema.
 
 ## Storage paths
 

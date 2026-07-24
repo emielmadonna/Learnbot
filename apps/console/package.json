@@ -9,7 +9,7 @@
     "smoke:intelligence": "node src/app/api/dev/intelligence/smoke.mjs",
     "smoke:privacy": "node src/app/api/dev/privacy/smoke.mjs",
     "smoke:widget": "node src/app/dev/widget/smoke.mjs",
-    "start": "next start --hostname 127.0.0.1",
+    "start": "next start --hostname 0.0.0.0",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

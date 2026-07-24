@@ -3,6 +3,7 @@ import {
   developmentApiErrorStatus,
   requireDevSession,
 } from "../../../../lib/dev-session-guard";
+import { fixturePreviewEnabled } from "../../../../lib/deployment-mode";
 
 export async function GET(request: Request) {
   try {
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
     return Response.json({
       service: "course-ai-console",
       status: "healthy",
-      mode: "development",
+      mode: fixturePreviewEnabled() ? "fixture-preview" : "development",
     });
   } catch (error) {
     return Response.json(serializeDevelopmentError(error), {

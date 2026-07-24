@@ -17,8 +17,16 @@ const tests = await readFile(
   resolve(root, "tests", "security_verification.sql"),
   "utf8",
 );
+const durableExecutionTests = await readFile(
+  resolve(
+    root,
+    "tests",
+    "durable_execution_primitives_verification.sql",
+  ),
+  "utf8",
+);
 
-const expectedTables = [
+const manifestTables = [
   "tenants",
   "roles",
   "profiles",
@@ -45,6 +53,13 @@ const expectedTables = [
   "mcp_grants",
   "mcp_invocations",
 ];
+const durableExecutionTables = [
+  "course_revisions",
+  "course_revision_heads",
+  "command_receipts",
+  "telemetry_outbox",
+];
+const expectedTables = [...manifestTables, ...durableExecutionTables];
 
 function fail(message) {
   throw new Error(`Supabase structure verification failed: ${message}`);
@@ -87,8 +102,19 @@ for (const table of expectedTables) {
       fail(`${table} is missing ${column}`);
     }
   }
-  if (!sql.includes(`'${table}'`)) {
+  if (manifestTables.includes(table) && !sql.includes(`'${table}'`)) {
     fail(`${table} is missing from the RLS/trigger table manifests`);
+  }
+}
+
+for (const table of durableExecutionTables) {
+  for (const control of [
+    `alter table public.${table} enable row level security`,
+    `alter table public.${table} force row level security`,
+  ]) {
+    if (!sql.includes(control)) {
+      fail(`${table} is missing required control: ${control}`);
+    }
   }
 }
 
@@ -119,6 +145,12 @@ for (const acceptanceId of [
   }
 }
 
+for (const acceptanceId of ["DUR-01", "DUR-02", "DUR-03"]) {
+  if (!durableExecutionTests.includes(acceptanceId)) {
+    fail(`missing durable verification coverage marker ${acceptanceId}`);
+  }
+}
+
 for (const ledger of ["audit_ledger", "cost_ledger"]) {
   if (!sql.includes(`${ledger}_reject_update`)) {
     fail(`${ledger} lacks immutable update protection`);
@@ -126,6 +158,21 @@ for (const ledger of ["audit_ledger", "cost_ledger"]) {
   if (!sql.includes(`${ledger}_reject_delete`)) {
     fail(`${ledger} lacks immutable delete protection`);
   }
+}
+
+for (const immutableTable of ["course_revisions", "command_receipts"]) {
+  if (!sql.includes(`${immutableTable}_reject_delete`)) {
+    fail(`${immutableTable} lacks immutable delete protection`);
+  }
+}
+if (!sql.includes("course_revisions_reject_update")) {
+  fail("course_revisions lacks immutable update protection");
+}
+if (!sql.includes("protect_command_receipt_identity")) {
+  fail("command_receipts lacks immutable identity protection");
+}
+if (!sql.includes("protect_telemetry_outbox_payload")) {
+  fail("telemetry_outbox lacks immutable payload protection");
 }
 
 const forbiddenCredentialAssignments = [
@@ -140,5 +187,5 @@ for (const pattern of forbiddenCredentialAssignments) {
 }
 
 console.log(
-  `Verified ${migrationNames.length} ordered migrations, ${expectedTables.length} tenant tables and 6 acceptance controls.`,
+  `Verified ${migrationNames.length} ordered migrations, ${expectedTables.length} tenant tables, 6 security controls and 3 durable execution controls.`,
 );

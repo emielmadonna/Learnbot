@@ -15,6 +15,7 @@ import {
 } from "@course-ai/identity-access";
 
 import { DEVELOPMENT_TENANT_ID } from "./dev-runtime";
+import { developmentFixturesAllowed } from "./deployment-mode";
 
 export type DevelopmentPrincipalProfile =
   | "owner"
@@ -74,7 +75,7 @@ const PROFILE_ASSERTIONS: Readonly<
  */
 export class DemoVerifiedAssertionAdapter {
   verify(profile: DevelopmentPrincipalProfile): VerifiedAuthenticationAssertion {
-    if (process.env.NODE_ENV === "production") {
+    if (!developmentFixturesAllowed()) {
       throw new IdentityAccessError("ACCESS_DENIED", {
         reason: "development_identity_disabled",
       });

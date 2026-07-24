@@ -43,6 +43,8 @@ packages/
                  event quality, metrics and human-reviewed opportunities
   privacy-lifecycle/
                  access, export, deletion and policy-driven retention jobs
+  postgres-adapters/
+                 transactional receipts, revisions and telemetry outbox
   mcp-server/    deny-by-default management MCP over shared APIs
 infra/
   supabase/      ordered schema, forced RLS, storage and security tests
@@ -85,19 +87,23 @@ The active development-server and parallel ownership rules are in
 ## Current delivery boundary
 
 The local vertical slice is integrated and testable. The management MCP exposes
-20 shared-service tools, including course creation, authoring, validation,
-diagram approval, reprocessing, publishing and rollback guarded by exact
-tenant/actor grants, expiry, budget, rate and idempotency controls. The
+28 shared-service tools, including course creation, authoring, validation,
+diagram approval, reprocessing, publishing, intelligence review, privacy
+operations and rollback guarded by exact tenant/actor grants, expiry, budget,
+rate and idempotency controls. The
 framework-free Widget is isolated in Shadow DOM and ships below 12KB gzipped;
 the intelligence core validates versioned events and produces evidence-backed,
 explicitly known/partial/unknown advisory metrics. The privacy lifecycle adds
 tenant-safe, resumable access/export/delete/retention contracts with live
 legal-hold suppression, deletion tombstones and export integrity without
-inventing unresolved retention periods. Supabase has six ordered
-migrations, 25 tenant-scoped tables, forced RLS/storage policies and SQL
-security acceptance tests. This machine does not have a running Docker daemon,
-so the structural verifier passes but the PostgreSQL policy tests have not yet
-executed locally. The identity package provides the application boundary, but
+inventing unresolved retention periods. Supabase has seven ordered migrations,
+29 tenant-scoped tables, forced RLS/storage policies and SQL security acceptance
+tests. The PostgreSQL adapter package now provides transactional fingerprinted
+command receipts, immutable course revisions with compare-and-swap heads, and a
+leased telemetry outbox without a memory fallback. This machine does not have a
+running Docker daemon, so the structural verifier and deterministic adapter
+tests pass but the PostgreSQL policy tests have not yet executed locally. The
+identity package provides the application boundary, but
 real OIDC/SAML/client-credential verification, KMS-backed signing, durable
 identity/replay repositories and transactional SCIM still require production
 adapters. Named production provider credentials, durable multi-replica
@@ -105,6 +111,17 @@ outboxes/idempotency stores, production object storage, deployment secrets and
 live Widget/Circle installation evidence, approved retention/region policies,
 privacy lifecycle production adapters and UI, and load/recovery evidence remain
 environment work—not claims made by the development UI.
+
+## Private fixture preview
+
+The optimized console can be hosted as an explicitly non-production, privately
+access-controlled preview. Production mode denies all fixture APIs by default.
+Enabling the preview requires both exact variables documented in
+`.env.example`, and the hosting project must protect the whole deployment with
+platform-level access control. `/api/health` is the unauthenticated liveness
+endpoint; it exposes no tenant or dependency details. This preview is not a
+substitute for production identity, durable application wiring or executed RLS
+evidence.
 
 ## Legacy input
 
