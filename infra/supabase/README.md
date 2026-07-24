@@ -15,6 +15,7 @@ Apply the numbered files exactly once, in lexical order:
 5. `0005_audit_cost_and_mcp.sql`
 6. `0006_rls_policies_and_storage.sql`
 7. `0007_durable_execution_primitives.sql`
+8. `0008_identity_and_provisioning.sql`
 
 With a disposable local Supabase instance:
 
@@ -27,6 +28,9 @@ psql "$LOCAL_DATABASE_URL" \
 psql "$LOCAL_DATABASE_URL" \
   --set ON_ERROR_STOP=1 \
   --file infra/supabase/tests/durable_execution_primitives_verification.sql
+psql "$LOCAL_DATABASE_URL" \
+  --set ON_ERROR_STOP=1 \
+  --file infra/supabase/tests/identity_provisioning_verification.sql
 node infra/supabase/scripts/verify-structure.mjs
 ```
 
@@ -37,7 +41,9 @@ columns, RLS controls, immutable ledgers, storage policies and forbidden raw
 credential columns. `durable_execution_primitives_verification.sql` also rolls
 back its fixtures and covers cross-tenant revision denial, immutable revision
 facts and protected command/outbox identity. Structural verification does not
-substitute for executing either SQL suite against PostgreSQL.
+substitute for executing the SQL suites against PostgreSQL. The identity suite
+covers direct-client denial, exact server-only membership bootstrap, the
+tenant-role boundary and immutable invitation/SCIM provisioning facts.
 
 ## Tenant and role trust boundary
 
@@ -64,6 +70,14 @@ telemetry outbox. Their TypeScript adapters live in
 `packages/postgres-adapters` and require an injected transactional PostgreSQL
 executor; they never fall back to process memory. The adapter's tenant and
 course identifiers must resolve to the UUIDs used by this schema.
+
+Migration 0008 adds the separate opaque-principal identity boundary used by the
+application role vocabulary. It intentionally does not coerce those identifiers
+into the legacy UUID membership table. Browser roles receive no table or
+bootstrap-function access; only the trusted server connection can register a
+verified principal and perform explicitly tenant-predicated repository work.
+`platform_admin` remains outside tenant memberships, and service identities are
+registered through the service-principal path rather than human invitations.
 
 ## Storage paths
 

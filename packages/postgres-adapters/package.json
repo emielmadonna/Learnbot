@@ -19,5 +19,10 @@
     "build": "tsc -p tsconfig.json",
     "test": "pnpm build && node --test dist/tests/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@course-ai/application-services": "workspace:*",
+    "@course-ai/contracts": "workspace:*",
+    "@course-ai/identity-access": "workspace:*"
   }
 }

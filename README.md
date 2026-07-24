@@ -96,8 +96,8 @@ the intelligence core validates versioned events and produces evidence-backed,
 explicitly known/partial/unknown advisory metrics. The privacy lifecycle adds
 tenant-safe, resumable access/export/delete/retention contracts with live
 legal-hold suppression, deletion tombstones and export integrity without
-inventing unresolved retention periods. Supabase has seven ordered migrations,
-29 tenant-scoped tables, forced RLS/storage policies and SQL security acceptance
+inventing unresolved retention periods. Supabase has eight ordered migrations,
+36 schema tables, forced RLS/storage policies and SQL security acceptance
 tests. The PostgreSQL adapter package now provides transactional fingerprinted
 command receipts, immutable course revisions with compare-and-swap heads, and a
 leased telemetry outbox without a memory fallback. This machine does not have a
@@ -107,8 +107,12 @@ identity package provides the application boundary and a production-oriented
 OIDC/JWKS verifier with exact issuer, audience, algorithm, lifetime and key
 rotation controls. It deliberately ignores authorization claims from tokens.
 Console session wiring, an approved IdP registration, SAML/client-credential
-verification, KMS-backed signing, durable identity/replay repositories and
-transactional SCIM still require production integration. The learning pipeline
+verification and KMS-backed signing still require production integration.
+Postgres repositories now cover exact verified-principal registration,
+membership resolution, tenant context, service principals, invitations and
+SCIM replay without a memory fallback. Application wiring and an outer
+unit-of-work for workflow-level invitation/SCIM atomicity remain explicit
+follow-up work. The learning pipeline
 also exposes an injected durable-repository boundary for short-lived signed
 quarantine uploads, atomic scan callback receipts, magic-byte and malware
 results, and clean-only idempotent promotion; no production storage or scanner

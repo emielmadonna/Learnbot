@@ -25,6 +25,10 @@ const durableExecutionTests = await readFile(
   ),
   "utf8",
 );
+const identityProvisioningTests = await readFile(
+  resolve(root, "tests", "identity_provisioning_verification.sql"),
+  "utf8",
+);
 
 const manifestTables = [
   "tenants",
@@ -59,7 +63,21 @@ const durableExecutionTables = [
   "command_receipts",
   "telemetry_outbox",
 ];
-const expectedTables = [...manifestTables, ...durableExecutionTables];
+const identityTenantTables = [
+  "identity_memberships",
+  "identity_service_principals",
+  "identity_invitations",
+  "identity_invitation_acceptances",
+  "identity_scim_bindings",
+  "identity_scim_receipts",
+];
+const globalIdentityTables = ["identity_principals"];
+const expectedTables = [
+  ...manifestTables,
+  ...durableExecutionTables,
+  ...identityTenantTables,
+  ...globalIdentityTables,
+];
 
 function fail(message) {
   throw new Error(`Supabase structure verification failed: ${message}`);
@@ -89,15 +107,18 @@ function tableBody(name) {
 
 for (const table of expectedTables) {
   const body = tableBody(table);
-  for (const column of [
-    "tenant_id",
+  const requiredColumns = [
     "record_version",
     "idempotency_key",
     "created_at",
     "updated_at",
     "deleted_at",
     "retain_until",
-  ]) {
+  ];
+  if (!globalIdentityTables.includes(table)) {
+    requiredColumns.unshift("tenant_id");
+  }
+  for (const column of requiredColumns) {
     if (!new RegExp(`\\b${column}\\b`).test(body)) {
       fail(`${table} is missing ${column}`);
     }
@@ -114,6 +135,17 @@ for (const table of durableExecutionTables) {
   ]) {
     if (!sql.includes(control)) {
       fail(`${table} is missing required control: ${control}`);
+    }
+  }
+}
+
+for (const table of [...identityTenantTables, ...globalIdentityTables]) {
+  for (const control of [
+    `alter table public.${table} enable row level security`,
+    `alter table public.${table} force row level security`,
+  ]) {
+    if (!sql.includes(control)) {
+      fail(`${table} is missing required identity control: ${control}`);
     }
   }
 }
@@ -148,6 +180,25 @@ for (const acceptanceId of [
 for (const acceptanceId of ["DUR-01", "DUR-02", "DUR-03"]) {
   if (!durableExecutionTests.includes(acceptanceId)) {
     fail(`missing durable verification coverage marker ${acceptanceId}`);
+  }
+}
+
+for (const acceptanceId of ["IAM-01", "IAM-02", "IAM-03"]) {
+  if (!identityProvisioningTests.includes(acceptanceId)) {
+    fail(`missing identity verification coverage marker ${acceptanceId}`);
+  }
+}
+
+for (const required of [
+  "list_active_identity_memberships",
+  "resolve_identity_invitation_tenant",
+  "resolve_identity_service_principal_tenant",
+  "identity_memberships_deny_authenticated",
+  "identity_invitation_acceptances_reject_update",
+  "identity_scim_receipts_reject_update",
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing required identity control: ${required}`);
   }
 }
 
@@ -187,5 +238,5 @@ for (const pattern of forbiddenCredentialAssignments) {
 }
 
 console.log(
-  `Verified ${migrationNames.length} ordered migrations, ${expectedTables.length} tenant tables, 6 security controls and 3 durable execution controls.`,
+  `Verified ${migrationNames.length} ordered migrations, ${expectedTables.length} tables, 6 security controls, 3 durable execution controls and 3 identity controls.`,
 );

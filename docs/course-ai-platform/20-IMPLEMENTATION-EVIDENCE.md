@@ -50,7 +50,8 @@ assistive-technology matrix, load test, restore, or legal policy.
 | MCP-06, MCP-07 | B | Twenty-eight tools use shared console API boundaries, including intelligence review/feedback and separately permissioned privacy lifecycle operations. Smoke covers shared authoring/intelligence/privacy snapshots, authorized course, feedback and manifest operations, plus a denied write. Delete/retention still require one-use exact confirmation. Durable multi-replica grant/idempotency stores and production service-principal provenance remain pending. | `pnpm --filter @course-ai/mcp-server smoke` |
 | Build/runtime isolation | B / partial | Next.js development output is isolated in `.next-dev` while optimized production output remains in `.next`, preventing a parallel production build from replacing the running development server manifests. This is local integration evidence only; production deployment, CI/CD, migration gates, and live-host operational evidence remain pending. | `apps/console/next.config.ts`; local development and production build verification |
 | Durable execution | C / partial | Fingerprinted command receipts replay the same normalized JSON result or reject conflicting reuse; course revisions use a locked compare-and-swap head; telemetry uses tenant-scoped dedupe and bounded leases. The adapters require an injected transaction and have no process-memory fallback. They are not yet wired into every application service. | `pnpm --filter @course-ai/postgres-adapters test`; `packages/postgres-adapters` |
-| Durable schema | C / partial | Migration 0007 defines four tenant-scoped durable-execution tables with forced RLS, immutable facts and a course/revision-number/ID head constraint. Structural verification covers 7 migrations and 29 tables. The SQL negative test exists but has not run against PostgreSQL on this machine because Docker is unavailable. | `pnpm supabase:verify`; `infra/supabase/migrations/0007_durable_execution_primitives.sql`; `infra/supabase/tests/durable_execution_primitives_verification.sql` |
+| Durable identity | C / partial | Migration 0008 and injected Postgres repositories preserve opaque verified principal IDs without coercing them into the legacy UUID membership model. Exact membership bootstrap is server-only; every tenant operation retains its tenant predicate; `platform_admin` is not a tenant membership; service principals do not use human invitations; invitation and SCIM receipts are immutable and conflict-safe. Protocol-verified principal registration is an explicit prerequisite. The current service contract still needs an outer unit of work before multi-repository invitation/SCIM flows can claim workflow-level atomicity. | `pnpm --filter @course-ai/postgres-adapters test`; `packages/postgres-adapters/src/identity.ts`; `infra/supabase/migrations/0008_identity_and_provisioning.sql` |
+| Durable schema | C / partial | Migrations 0007–0008 define durable execution and identity/provisioning tables with forced RLS, immutable facts, server-only bootstrap functions and explicit client denial. Structural verification covers 8 migrations and 36 tables. The SQL negative suites exist but have not run against PostgreSQL on this machine because Docker is unavailable. | `pnpm supabase:verify`; `infra/supabase/migrations/0007_durable_execution_primitives.sql`; `infra/supabase/migrations/0008_identity_and_provisioning.sql`; SQL verification suites |
 | Private fixture preview | A / non-production | Production builds deny fixture APIs by default. The Vercel Preview deployment requires Vercel Authentication, uses two exact branch-scoped fixture values, and exposes dependency-free `/api/health`. Unauthenticated health access redirects to login; authenticated health, fixture health and Student chat checks pass. This is live-host evidence for the protected preview boundary only, not production identity/data/provider evidence. | Vercel deployment `dpl_FcTh71b8KCq4WrrvVhhHuaS5QUpb`; GitHub Preview deployment `5583998909`; `apps/console/test/deployment-mode.test.ts` |
 
 ## Whole-repository gate
@@ -129,6 +130,19 @@ suite.
   `5583998909` records the Preview environment as successful. The earlier
   app-only host build failed before becoming usable and produced no positive
   evidence.
+- Production-boundary checkpoint `f897564` **passed** clean GitHub CI run
+  `30069599914` and protected Vercel Preview deployment
+  `dpl_1hJjbpYRn6kpaHtRkqQkm3JEx6XB` reached Ready. This is live-host evidence
+  for build/deployment and the access-controlled fixture boundary only; the
+  OIDC, upload and LLM adapter tests remain no-network grade-C evidence.
+- The identity persistence increment passed the final local repository gate:
+  `pnpm check`; `pnpm build`;
+  `COURSE_AI_CONSOLE_URL=http://127.0.0.1:3100 pnpm verify:dev`; and
+  `git diff --check`. Postgres adapter tests passed 12/12 and structural
+  verification covered 8 migrations, 36 tables, 6 existing security controls,
+  3 durable-execution controls and 3 identity controls. The executable identity
+  SQL suite was added but remains unexecuted because no approved PostgreSQL
+  environment is available.
 
 ## Explicitly unproven
 
