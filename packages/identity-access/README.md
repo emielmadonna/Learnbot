@@ -1,9 +1,10 @@
 # Identity access boundary
 
 Provider-neutral identity and tenant authorization for LearningBot. This package
-accepts only already-verified OIDC/SAML assertions, verified signed host
-contexts, or registered service principals. It never accepts a raw IdP token
-and never treats a request-body tenant ID as authorization.
+accepts verified OIDC/SAML assertions, verified signed host contexts, or
+registered service principals. Its OIDC boundary verifies raw compact JWTs
+before producing an assertion, and it never treats a request-body tenant ID as
+authorization.
 
 ## Boundary guarantees
 
@@ -13,6 +14,12 @@ and never treats a request-body tenant ID as authorization.
 - Verifies compact signed host contexts through pluggable key and signature
   abstractions, including `kid` rotation, issuer, audience, algorithm, nonce,
   issued-at, maximum lifetime, expiry, and single-use replay checks.
+- Verifies OIDC JWTs with `jose`, an explicit issuer/audience/algorithm policy,
+  bounded clock skew and token age, and local or HTTPS remote JWKS resolution.
+  Remote resolution supports an injected fetch implementation and `kid`
+  refresh for key rotation.
+- Maps only subject and optional email/name/session claims from OIDC. Tenant,
+  role, permission, and scope claims are never promoted to authorization.
 - Maps active memberships to the exact `PlatformRole` and
   `PlatformPermission` contracts in `@course-ai/application-services`.
 - Intersects service-role permissions with registered API/MCP scopes.
@@ -25,9 +32,12 @@ and never treats a request-body tenant ID as authorization.
 
 At an HTTP, realtime, or MCP boundary:
 
-1. A protocol adapter verifies the IdP assertion. OIDC discovery/JWK validation,
-   SAML XML signature validation, certificate policy, and credential exchange
-   remain outside this package.
+1. For a compact OIDC JWT, configure `OidcAssertionVerifier` with the exact
+   issuer, audience, algorithm allowlist, token-age policy, and pinned or remote
+   JWKS source, then call `verify`. OIDC discovery and credential exchange
+   remain outside this package. A SAML adapter must still verify its assertion
+   and certificate policy before constructing a
+   `VerifiedAuthenticationAssertion`.
 2. For host embeds, call `HostContextVerifier.verify`.
 3. Pass the resulting `VerifiedAuthenticationAssertion` to
    `IdentityAccessService.resolveSession`.

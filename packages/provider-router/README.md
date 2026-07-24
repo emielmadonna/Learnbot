@@ -65,6 +65,30 @@ pricing estimates. Request-level result idempotency remains the responsibility
 of the application boundary or provider adapter; telemetry dedupe does not make
 a repeated provider call free.
 
+## OpenAI Responses text adapter
+
+`OpenAIResponsesAdapter` implements the provider-neutral `LLMProvider` contract
+for typed Responses API text streaming. Model selection is request-scoped; the
+adapter does not define a global model. Construct it with an asynchronous
+credential resolver and, where needed, an injected `fetch`:
+
+```ts
+const adapter = new OpenAIResponsesAdapter({
+  id: "openai-responses",
+  credentialResolver: async (context) =>
+    vault.resolveOpenAIAccessToken(context.tenantId),
+});
+```
+
+The credential exists only at the server-side adapter boundary. It is excluded
+from errors and provider metadata. The resolver receives the same abort signal
+as the network request. The adapter enforces HTTPS, `store: false`,
+the shared absolute deadline, bounded request/response/event sizes, complete SSE
+termination, and safe request-id correlation. It never retries; retry, fallback,
+routing, and model policy remain router responsibilities. The current adapter
+intentionally supports text messages only and rejects tools, structured output,
+and other unsupported features instead of silently changing their semantics.
+
 ## Scoped validation
 
 ```sh

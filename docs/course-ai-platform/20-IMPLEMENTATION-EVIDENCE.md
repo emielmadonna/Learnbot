@@ -1,6 +1,6 @@
 # Implementation Evidence
 
-**Recorded:** 2026-07-23
+**Recorded:** 2026-07-24
 **Scope:** local development repository represented by the commit containing
 this file
 **Environment:** Node 22, pnpm workspace, macOS local console on
@@ -32,6 +32,9 @@ assistive-technology matrix, load test, restore, or legal policy.
 | WID-05 | B / partial | Browser QA retains typed text/voice/evidence events and the conversation identifier across desktop/mobile/expanded changes; deterministic fixtures cover attachment/source/diagram/reconnect ordering. Live realtime media and signed uploads remain pending. | Widget Lab browser QA; widget tests 6–9 |
 | VOI-01, VOI-02 | B / partial | The unified Student conversation binds voice lifecycle to the authenticated tenant and actor, preserves the mounted text composer during voice presentation, restores draft/scroll/focus on exit, acknowledges interruption, and supports safe cancellation and text fallback. The integrated presentation expands from the real microphone origin; stale animation frames are cancelled during rapid reversals and reduced-motion mode has no artificial delay. Live low-latency speech/realtime providers, measured latency budgets, actual audio-energy animation, reconnect/resume, and production browser evidence remain pending. | `pnpm --filter @course-ai/console test`; `apps/console/test/voice-transition-contract.test.ts`; `/dev/chat` browser QA |
 | VOI-03–VOI-05 | Blocked / partial | Local controls do not retain raw audio by default and do not enable voice cloning. Approved O-07 recording policy, scope-specific cloning consent, live provider usage/cost telemetry, and production latency evidence remain unresolved; local fixtures are not evidence for these requirements. | Open decisions in `19-RISKS-AND-DECISIONS.md`; production adapter gap |
+| Identity verification | C / partial | The OIDC verifier enforces exact issuer, audience and algorithm policy; HTTPS local/remote JWKS selection and rotation; `exp`/`nbf`/`iat`/maximum-age/skew; bounded mapped identity claims; and stable non-leaking failures. Hostile tests prove that token tenant, role and scope claims never become authorization facts. Approved IdP registration, console wiring, SAML/client credentials and live login evidence remain pending. | `pnpm --filter @course-ai/identity-access test`; `packages/identity-access/src/oidc.ts` |
+| Secure upload intake | C / partial | The provider-neutral boundary requires an injected durable repository, atomically binds callback replay to an exact tenant/actor intent, issues only short-lived HTTPS grants bound to type/size, records magic-byte and malware results, and promotes only clean objects through an idempotent storage port. The memory repository is explicit test/local infrastructure. A PostgreSQL repository, signed-storage/scanner adapter, extraction worker and live upload evidence remain pending. | `pnpm --filter @course-ai/learning-pipeline test`; `packages/learning-pipeline/src/upload-boundary.ts` |
+| LLM provider adapter | C / partial | The OpenAI Responses adapter implements the neutral `LLMProvider`, resolves credentials through an injected server capability, requires HTTPS and a request-scoped model, sets `store: false`, propagates abort/deadline, parses bounded typed SSE, reports token usage and safe request correlation, and fails closed on provider failure, refusal, malformed or truncated output. No live credential, provider latency/cost or output-quality evidence is claimed. | `pnpm --filter @course-ai/provider-router test`; `packages/provider-router/src/openai-responses.ts`; official Responses API schema/stream contract reviewed 2026-07-24 |
 | INT-01 | C | Unknown/malformed event versions quarantine; event and delivery keys deduplicate; conflicting reuse quarantines without stopping the batch. | `pnpm --filter @course-ai/intelligence-core test`, cases 1–3 |
 | INT-02 | C | Confusion, trailing-30-day content gap, stall, and same-tenant velocity fixtures match the documented formulas. | Intelligence core test, cases 5–9 |
 | INT-03 | C | Missing, degraded, or incomplete sources produce partial/unknown rather than a false known zero. | Intelligence core test, case 10 |
@@ -131,13 +134,14 @@ suite.
 
 The repository does not yet claim grade-A evidence for:
 
-- production OIDC/SAML/service-principal verification or durable authorization;
+- production OIDC application wiring, SAML/service-principal verification or
+  durable authorization;
 - live PostgreSQL RLS/storage negative tests on an approved database;
 - live LLM, embedding, transcription, speech, realtime, storage, malware, or
-  connector providers and their credentials;
+  connector provider execution and credentials;
 - Circle/custom-code/CDN/CSP installation, browser matrix, screen-reader or
   usability acceptance;
-- signed upload, malware quarantine, extraction, and retention execution;
+- live signed storage, malware scanning, extraction, and retention execution;
 - approved privacy retention periods, legal-hold policy, production
   export/delete/de-identification, voice recording, or voice cloning;
 - O-09 opportunity scoring/calibration, billing reconciliation, load, restore,

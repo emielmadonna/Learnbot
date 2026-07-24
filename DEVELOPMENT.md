@@ -38,11 +38,19 @@ The repository now includes:
   immutable revisions, publishing and rollback;
 - membership-derived development sessions, tenant-match guards and
   actor-bound Student/voice ownership;
+- an OIDC/JWKS verifier with pinned issuer/audience/algorithm policy, remote-key
+  rotation, bounded claims and no trust in token role or tenant claims;
 - tenant-safe in-memory application services used by UI, APIs and MCP;
 - deterministic staged ingestion, selective reprocessing, atomic publish and
   rollback;
+- an injected durable upload-intent boundary for tenant/actor-bound signed
+  quarantine transport, atomic scan callback replay, magic-byte/malware gates
+  and clean-only idempotent promotion;
 - provider-neutral routing with tenant policy, deadlines, compatible fallback,
   circuit state and attempt/cost telemetry;
+- a server-side OpenAI Responses text adapter with injected credentials,
+  `store: false`, typed bounded SSE, deadline propagation and safe failures,
+  selected only through the provider-neutral route policy;
 - a framework-free Shadow-DOM Widget runtime with dynamic branding, honest
   identity/context states, one multimodal thread, resumable layout and bounded
   browser-safe distribution;
@@ -66,8 +74,9 @@ The repository now includes:
 The current build is an evidence-backed development slice, not a production
 certification. PostgreSQL security tests require Docker or an approved Supabase
 development project. The durable primitives are not yet wired into every
-application service. Production realtime transport/IdP adapters, durable
-identity repositories, worker execution, object storage, secret management,
+application service. Production realtime transport, IdP application wiring,
+SAML/service authentication, durable identity repositories, worker execution,
+object storage, secret management,
 billing reconciliation,
 approved privacy policies and production retention/export/delete adapters,
 load/recovery evidence and deployment

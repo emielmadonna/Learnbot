@@ -103,14 +103,27 @@ command receipts, immutable course revisions with compare-and-swap heads, and a
 leased telemetry outbox without a memory fallback. This machine does not have a
 running Docker daemon, so the structural verifier and deterministic adapter
 tests pass but the PostgreSQL policy tests have not yet executed locally. The
-identity package provides the application boundary, but
-real OIDC/SAML/client-credential verification, KMS-backed signing, durable
-identity/replay repositories and transactional SCIM still require production
-adapters. Named production provider credentials, durable multi-replica
+identity package provides the application boundary and a production-oriented
+OIDC/JWKS verifier with exact issuer, audience, algorithm, lifetime and key
+rotation controls. It deliberately ignores authorization claims from tokens.
+Console session wiring, an approved IdP registration, SAML/client-credential
+verification, KMS-backed signing, durable identity/replay repositories and
+transactional SCIM still require production integration. The learning pipeline
+also exposes an injected durable-repository boundary for short-lived signed
+quarantine uploads, atomic scan callback receipts, magic-byte and malware
+results, and clean-only idempotent promotion; no production storage or scanner
+is claimed. Named production provider credentials, durable multi-replica
 outboxes/idempotency stores, production object storage, deployment secrets and
 live Widget/Circle installation evidence, approved retention/region policies,
 privacy lifecycle production adapters and UI, and load/recovery evidence remain
 environment work—not claims made by the development UI.
+
+The provider router now includes a server-side OpenAI Responses text adapter
+behind the shared `LLMProvider` contract. It resolves credentials through an
+injected secret capability, forces `store: false`, streams typed SSE events,
+propagates the shared deadline, bounds provider data and fails closed on
+malformed, refused or truncated output. It is contract-tested without a live
+credential; tenant route policy still selects the model and adapter.
 
 ## Private fixture preview
 
@@ -124,7 +137,7 @@ substitute for production identity, durable application wiring or executed RLS
 evidence.
 
 The current protected preview is:
-[learningbot-estie-preview](https://learningbot-estie-preview-lnp7tiixp-emiel-madonnas-projects.vercel.app).
+[learningbot-estie-preview](https://learningbot-estie-preview-git-co-984d79-emiel-madonnas-projects.vercel.app).
 Vercel Authentication is required; access is limited to authorized Vercel
 project users. The branch-scoped fixture variables apply only to
 `codex/platform-foundations` preview deployments.
