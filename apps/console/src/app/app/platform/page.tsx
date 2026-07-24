@@ -119,7 +119,7 @@ export default async function PlatformAdminPage() {
           <Link className={styles.active} href="/app/platform">
             Overview
           </Link>
-          <Link href="/app/admin">Client workspace</Link>
+          <Link href="/app/admin/clients">Clients</Link>
           <Link href="/app">Learning</Link>
         </nav>
         <form action="/auth/sign-out" method="post">
@@ -214,8 +214,8 @@ export default async function PlatformAdminPage() {
                       </div>
                     </dl>
                     <div className={styles.cardActions}>
-                      <Link href="/app/admin">Open client administration</Link>
-                      <Link href="/app/conversation">Test learning</Link>
+                      <Link href={`/app/admin/clients/${tenant.tenantId}`}>Open client detail</Link>
+                      <Link href={`/app/conversation?tenantId=${encodeURIComponent(tenant.tenantId)}`}>Test learning</Link>
                     </div>
                   </article>
                 ))}
