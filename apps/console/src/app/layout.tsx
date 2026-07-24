@@ -4,8 +4,12 @@ import "./globals.css";
 import { PreviewNavigator } from "./preview-navigator";
 
 export const metadata: Metadata = {
-  title: "Course AI Platform",
-  description: "Unified learning, assistant and tenant operations."
+  title: {
+    default: "LearningBot",
+    template: "%s · LearningBot",
+  },
+  description:
+    "Private, grounded learning conversations, courses, voice, progress, and administration for modern teams.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

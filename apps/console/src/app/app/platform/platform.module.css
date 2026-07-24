@@ -1,0 +1,481 @@
+.shell {
+  min-height: 100vh;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background:
+    radial-gradient(circle at 88% 0%, rgb(178 226 211 / 34%), transparent 31rem),
+    radial-gradient(circle at 8% 62%, rgb(223 212 250 / 28%), transparent 34rem),
+    #f6f8f6;
+  color: #14241d;
+  font-family:
+    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  min-height: 72px;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 10px clamp(18px, 4vw, 56px);
+  border-bottom: 1px solid rgb(20 50 37 / 8%);
+  background: rgb(248 251 249 / 76%);
+  backdrop-filter: blur(24px);
+}
+
+.brand {
+  display: inline-flex;
+  width: fit-content;
+  gap: 10px;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brandMark {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #183f31, #2f7357);
+  box-shadow: 0 10px 25px rgb(27 80 58 / 18%);
+  color: white;
+  font-weight: 820;
+}
+
+.brand > span:last-child {
+  display: grid;
+}
+
+.brand b {
+  font-size: 13px;
+}
+
+.brand small {
+  margin-top: 2px;
+  color: #718078;
+  font-size: 9px;
+}
+
+.topbar nav {
+  display: flex;
+  gap: 5px;
+  padding: 4px;
+  border: 1px solid rgb(28 60 46 / 8%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 70%);
+}
+
+.topbar nav a {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #66756d;
+  font-size: 10px;
+  font-weight: 720;
+  text-decoration: none;
+}
+
+.topbar nav .active {
+  background: #e5f0ea;
+  color: #245a44;
+}
+
+.topbar form {
+  justify-self: end;
+}
+
+.topbar button {
+  border: 0;
+  background: transparent;
+  color: #68766e;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.canvas {
+  width: min(1280px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: clamp(44px, 7vw, 90px) 0 100px;
+}
+
+.intro {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 40px;
+}
+
+.intro > div:first-child {
+  max-width: 760px;
+}
+
+.eyebrow {
+  margin: 0 0 11px;
+  color: #347259;
+  font-size: 9px;
+  font-weight: 830;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.intro h1 {
+  margin: 0;
+  font-size: clamp(48px, 7vw, 86px);
+  font-weight: 640;
+  letter-spacing: -0.07em;
+  line-height: 0.96;
+}
+
+.intro > div:first-child > p:last-child {
+  max-width: 700px;
+  margin: 24px 0 0;
+  color: #617169;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.liveState {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 9px;
+  align-items: center;
+  padding: 10px 13px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 68%);
+  box-shadow: inset 0 0 0 1px rgb(28 60 46 / 8%);
+  color: #6c776f;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.liveState span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b36b55;
+  box-shadow: 0 0 0 4px rgb(179 107 85 / 10%);
+}
+
+.liveState[data-ready="true"] span {
+  background: #27805a;
+  box-shadow: 0 0 0 4px rgb(39 128 90 / 11%);
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 56px;
+  overflow: hidden;
+  border: 1px solid rgb(28 60 46 / 9%);
+  border-radius: 24px;
+  background: rgb(255 255 255 / 68%);
+  box-shadow: 0 24px 70px rgb(28 54 42 / 6%);
+}
+
+.metrics article {
+  display: grid;
+  min-height: 144px;
+  align-content: center;
+  padding: 24px;
+  border-right: 1px solid rgb(28 60 46 / 8%);
+}
+
+.metrics article:last-child {
+  border-right: 0;
+}
+
+.metrics span {
+  color: #64736b;
+  font-size: 10px;
+  font-weight: 690;
+}
+
+.metrics strong {
+  margin-top: 9px;
+  font-size: 36px;
+  font-weight: 640;
+  letter-spacing: -0.05em;
+}
+
+.metrics small {
+  margin-top: 7px;
+  color: #89958e;
+  font-size: 9px;
+}
+
+.workspaceSection {
+  margin-top: 72px;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.sectionHeading h2,
+.boundary h2,
+.error h2 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.045em;
+}
+
+.sectionHeading > span {
+  color: #7b8881;
+  font-size: 9px;
+}
+
+.workspaceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.workspaceCard {
+  padding: 26px;
+  border: 1px solid rgb(28 60 46 / 9%);
+  border-radius: 24px;
+  background: rgb(255 255 255 / 76%);
+  box-shadow: 0 18px 50px rgb(27 54 42 / 5%);
+}
+
+.workspaceCard header {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.tenantMark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 15px;
+  background: #204f3c;
+  color: white;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.status {
+  display: inline-flex;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #e5f2eb;
+  color: #2a674c;
+  font-size: 8px;
+  font-weight: 790;
+  text-transform: uppercase;
+}
+
+.workspaceCard h3 {
+  margin: 8px 0 4px;
+  font-size: 21px;
+  letter-spacing: -0.035em;
+}
+
+.workspaceCard header p {
+  margin: 0;
+  color: #7a8880;
+  font-size: 10px;
+}
+
+.workspaceCard dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 25px 0;
+}
+
+.workspaceCard dl div {
+  padding: 13px;
+  border-radius: 14px;
+  background: #f3f7f4;
+}
+
+.workspaceCard dt {
+  color: #78867e;
+  font-size: 8px;
+  font-weight: 720;
+  text-transform: uppercase;
+}
+
+.workspaceCard dd {
+  margin: 6px 0 0;
+  color: #20362c;
+  font-size: 11px;
+  font-weight: 730;
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cardActions a,
+.boundary a {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 11px;
+  background: #e7f0eb;
+  color: #285942;
+  font-size: 9px;
+  font-weight: 740;
+  text-decoration: none;
+}
+
+.cardActions a:first-child {
+  background: #214f3c;
+  color: white;
+}
+
+.error {
+  display: flex;
+  gap: 16px;
+  margin-top: 56px;
+  padding: 28px;
+  border: 1px solid #eccfc7;
+  border-radius: 24px;
+  background: #fff6f3;
+}
+
+.error > span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #b75f49;
+  color: white;
+  font-weight: 800;
+}
+
+.error p {
+  margin: 8px 0 0;
+  color: #7b5a50;
+  line-height: 1.6;
+}
+
+.boundary {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(320px, 1.2fr) auto;
+  gap: 36px;
+  align-items: center;
+  margin-top: 72px;
+  padding: 30px;
+  border-radius: 24px;
+  background: #182d24;
+  color: white;
+}
+
+.boundary .eyebrow {
+  color: #91c3aa;
+}
+
+.boundary > p {
+  margin: 0;
+  color: #b8c8c0;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.boundary > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.boundary a {
+  justify-content: center;
+  background: rgb(255 255 255 / 9%);
+  color: white;
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .topbar nav {
+    display: none;
+  }
+
+  .intro {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .metrics article:nth-child(2) {
+    border-right: 0;
+  }
+
+  .metrics article:nth-child(-n + 2) {
+    border-bottom: 1px solid rgb(28 60 46 / 8%);
+  }
+
+  .workspaceGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .boundary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    padding-inline: 14px;
+  }
+
+  .canvas {
+    width: min(100% - 24px, 1280px);
+    padding-top: 42px;
+  }
+
+  .intro h1 {
+    font-size: 52px;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics article {
+    min-height: 118px;
+    border-right: 0;
+    border-bottom: 1px solid rgb(28 60 46 / 8%);
+  }
+
+  .metrics article:last-child {
+    border-bottom: 0;
+  }
+
+  .workspaceCard {
+    padding: 20px;
+  }
+
+  .sectionHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

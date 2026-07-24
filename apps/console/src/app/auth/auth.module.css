@@ -1,37 +1,35 @@
 .shell {
-  min-height: 100vh;
-  overflow: hidden;
-  padding: 26px clamp(16px, 4vw, 52px) 70px;
+  width: auto;
+  min-height: 100svh;
+  margin-inline: calc(50% - 50vw);
+  overflow-x: hidden;
   background:
-    radial-gradient(circle at 83% 3%, rgb(184 238 216 / 48%), transparent 30rem),
-    radial-gradient(circle at 7% 58%, rgb(225 205 255 / 40%), transparent 32rem),
-    radial-gradient(circle at 58% 96%, rgb(249 220 192 / 32%), transparent 28rem),
-    linear-gradient(145deg, #f8faf8, #f2f7f4 52%, #fbf8fc);
-  color: #13241d;
+    radial-gradient(circle at 88% 10%, rgb(198 240 224 / 30%), transparent 31rem),
+    #f8faf9;
+  color: #12221b;
   font-family:
     Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
 }
 
 .frame {
-  width: min(1180px, 100%);
-  margin: 0 auto;
+  display: grid;
+  width: 100%;
+  min-height: 100svh;
+  grid-template-rows: 76px minmax(0, 1fr);
 }
 
 .floatingNav {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   display: flex;
-  min-height: 62px;
-  padding: 9px 12px;
+  min-height: 76px;
+  padding: 0 clamp(22px, 4vw, 64px);
   align-items: center;
   justify-content: space-between;
-  border-radius: 21px;
-  background: rgb(255 255 255 / 64%);
-  box-shadow:
-    0 18px 64px rgb(28 62 49 / 6%),
-    inset 0 1px rgb(255 255 255 / 90%);
-  backdrop-filter: blur(22px);
+  border-bottom: 1px solid rgb(31 62 49 / 9%);
+  background: rgb(255 255 255 / 88%);
+  backdrop-filter: blur(24px);
 }
 
 .brand {
@@ -43,15 +41,20 @@
 }
 
 .brandMark {
+  position: relative;
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   place-items: center;
-  border-radius: 14px;
-  background: linear-gradient(145deg, #1b5e45, #337c60);
-  box-shadow: 0 10px 24px rgb(26 91 67 / 22%);
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 75%);
+  border-radius: 46% 54% 48% 52% / 52% 44% 56% 48%;
+  background:
+    radial-gradient(circle at 34% 23%, rgb(255 255 255 / 88%) 0 7%, transparent 24%),
+    conic-gradient(from 205deg, #103f32, #61c7a6, #b8a8ed, #103f32);
+  box-shadow: 0 11px 28px rgb(25 84 63 / 20%);
   color: white;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 820;
 }
 
@@ -61,70 +64,130 @@
 }
 
 .brand b {
-  font-size: 13px;
+  color: #173229;
+  font-size: 14px;
+  letter-spacing: -0.015em;
 }
 
 .brand small {
-  margin-top: 2px;
+  margin-top: 1px;
   color: #7a8981;
-  font-size: 9px;
+  font-size: 8px;
+  font-weight: 680;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
 .secureLabel {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
   padding: 9px 13px;
-  border-radius: 12px;
-  background: rgb(235 245 239 / 82%);
-  color: #38624f;
-  font-size: 10px;
+  border: 1px solid rgb(41 100 74 / 9%);
+  border-radius: 999px;
+  background: #f0f7f3;
+  color: #35614e;
+  font-size: 9px;
   font-weight: 740;
+}
+
+.secureLabel::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34805f;
+  box-shadow: 0 0 0 4px rgb(52 128 95 / 10%);
+  content: "";
 }
 
 .authLayout {
   display: grid;
-  min-height: calc(100vh - 158px);
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
-  gap: clamp(40px, 8vw, 120px);
-  align-items: center;
-  padding: clamp(52px, 8vw, 100px) clamp(8px, 3vw, 38px);
+  min-height: calc(100svh - 76px);
+  grid-template-columns: minmax(0, 1.08fr) minmax(430px, 0.92fr);
+  gap: 0;
+  align-items: stretch;
 }
 
 .authIntro {
-  max-width: 640px;
+  position: relative;
+  display: flex;
+  max-width: none;
+  min-height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  padding: clamp(64px, 9vw, 132px) clamp(38px, 8vw, 118px);
+  background:
+    radial-gradient(circle at 18% 20%, rgb(112 214 176 / 20%), transparent 26rem),
+    radial-gradient(circle at 84% 84%, rgb(190 168 237 / 16%), transparent 30rem),
+    linear-gradient(145deg, #0d2c23, #143d31 58%, #18382f);
+  color: white;
+}
+
+.authIntro::after {
+  position: absolute;
+  right: -15%;
+  bottom: -30%;
+  width: min(42vw, 600px);
+  aspect-ratio: 1;
+  border: 1px solid rgb(184 231 212 / 10%);
+  border-radius: 46% 54% 42% 58% / 51% 41% 59% 49%;
+  background:
+    radial-gradient(circle at 34% 24%, rgb(255 255 255 / 14%) 0 4%, transparent 19%),
+    conic-gradient(from 190deg, rgb(58 143 108 / 16%), rgb(172 150 224 / 12%), transparent 65%);
+  filter: blur(1px);
+  content: "";
+  transform: rotate(-12deg);
+}
+
+.authIntro > * {
+  position: relative;
+  z-index: 1;
 }
 
 .displayTitle {
+  max-width: 790px;
   margin: 0;
-  font-size: clamp(52px, 7.5vw, 92px);
-  font-weight: 650;
-  letter-spacing: -0.075em;
-  line-height: 0.94;
+  color: #f9fffc;
+  font-size: clamp(48px, 6vw, 86px);
+  font-weight: 590;
+  letter-spacing: -0.072em;
+  line-height: 0.96;
 }
 
 .authIntro > p:not(.eyebrow) {
-  max-width: 550px;
-  margin: 25px 0 0;
-  color: #607168;
-  font-size: clamp(15px, 1.7vw, 18px);
+  max-width: 600px;
+  margin: 27px 0 0;
+  color: rgb(223 241 233 / 72%);
+  font-size: clamp(15px, 1.5vw, 18px);
   line-height: 1.7;
 }
 
 .trustLine {
   display: inline-flex;
+  width: fit-content;
   gap: 10px;
   align-items: center;
-  margin-top: 34px;
-  padding: 11px 15px;
-  border-radius: 14px;
-  background: rgb(255 255 255 / 52%);
-  color: #52675d;
-  font-size: 10px;
+  margin-top: 36px;
+  padding: 12px 15px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 7%);
+  color: rgb(234 248 241 / 78%);
+  font-size: 9px;
   font-weight: 690;
-  box-shadow: inset 0 1px rgb(255 255 255 / 80%);
+  backdrop-filter: blur(12px);
 }
 
 .trustLine span {
-  color: #3d8b67;
-  font-size: 15px;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(135 218 184 / 14%);
+  color: #96d9bd;
+  font-size: 11px;
 }
 
 .card,
@@ -138,9 +201,13 @@
 }
 
 .card {
-  width: 100%;
-  padding: clamp(28px, 4vw, 48px);
-  border-radius: 30px;
+  width: min(520px, calc(100% - 64px));
+  margin: auto;
+  padding: clamp(38px, 5vw, 68px) 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .wideCard {
@@ -152,31 +219,35 @@
 
 .eyebrow {
   margin: 0 0 12px;
-  color: #34765b;
+  color: #317458;
   font-size: 9px;
   font-weight: 830;
   letter-spacing: 0.17em;
   text-transform: uppercase;
 }
 
+.authIntro .eyebrow {
+  color: #8fd1b5;
+}
+
 .title {
   margin: 0;
   color: #14271f;
-  font-size: clamp(34px, 5vw, 54px);
-  font-weight: 650;
-  letter-spacing: -0.055em;
+  font-size: clamp(38px, 4.5vw, 58px);
+  font-weight: 620;
+  letter-spacing: -0.06em;
   line-height: 1;
 }
 
 .card .title {
-  font-size: clamp(32px, 4vw, 46px);
+  font-size: clamp(38px, 4vw, 52px);
 }
 
 .lede {
-  margin: 17px 0 27px;
+  margin: 18px 0 28px;
   color: #65746c;
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 .progress {
@@ -184,7 +255,7 @@
   grid-template-columns: auto 1fr auto 1fr auto;
   gap: 8px;
   align-items: center;
-  margin: 0 0 36px;
+  margin: 0 0 42px;
 }
 
 .progress span {
@@ -215,7 +286,7 @@
 }
 
 .progress span[data-active="true"] b {
-  background: #225e46;
+  background: #1d5b43;
   box-shadow: 0 7px 18px rgb(34 94 70 / 22%);
   color: white;
 }
@@ -236,26 +307,26 @@
 
 .form {
   display: grid;
-  gap: 17px;
+  gap: 18px;
 }
 
 .field {
   display: grid;
   gap: 8px;
-  color: #3b5046;
+  color: #334b40;
   font-size: 10px;
   font-weight: 760;
 }
 
 .input {
   width: 100%;
-  min-height: 49px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 14px;
+  min-height: 52px;
+  padding: 0 15px;
+  border: 1px solid #dfe7e2;
+  border-radius: 13px;
   outline: none;
-  background: #eff4f1;
-  box-shadow: inset 0 1px 2px rgb(30 61 48 / 5%);
+  background: #fff;
+  box-shadow: 0 4px 14px rgb(30 61 48 / 3%);
   color: #16231d;
   font: inherit;
   font-size: 12px;
@@ -263,7 +334,7 @@
 
 .input:focus {
   box-shadow:
-    inset 0 0 0 1px #62a286,
+    inset 0 0 0 1px #4d9676,
     0 0 0 4px rgb(66 145 109 / 10%);
 }
 
@@ -280,20 +351,20 @@ input[type="color"].input {
 .button,
 .secondaryButton {
   display: inline-flex;
-  min-height: 48px;
+  min-height: 52px;
   align-items: center;
   justify-content: center;
   padding: 0 18px;
   border: 0;
-  border-radius: 14px;
+  border-radius: 13px;
   cursor: pointer;
   font-weight: 770;
   text-decoration: none;
 }
 
 .button {
-  background: linear-gradient(135deg, #1d5a43, #337a5d);
-  box-shadow: 0 14px 32px rgb(29 90 67 / 17%);
+  background: linear-gradient(135deg, #164d39, #2f7659);
+  box-shadow: 0 15px 32px rgb(29 90 67 / 18%);
   color: white;
 }
 
@@ -342,10 +413,31 @@ input[type="color"].input {
 }
 
 .finePrint {
-  margin: 18px 0 0;
+  margin: 20px 0 0;
   color: #849087;
   font-size: 10px;
   line-height: 1.6;
+}
+
+.securityNote {
+  display: grid;
+  gap: 4px;
+  margin: -8px 0 24px;
+  padding: 13px 15px;
+  border: 1px solid #dfe9e3;
+  border-radius: 13px;
+  background: #f1f7f4;
+}
+
+.securityNote strong {
+  color: #2c5d48;
+  font-size: 9px;
+}
+
+.securityNote span {
+  color: #687a71;
+  font-size: 10px;
+  line-height: 1.55;
 }
 
 .membershipList {
@@ -702,18 +794,34 @@ input[type="color"].input {
 }
 
 @media (max-width: 820px) {
+  .frame {
+    grid-template-rows: 68px minmax(0, 1fr);
+  }
+
+  .floatingNav {
+    min-height: 68px;
+    padding: 0 22px;
+  }
+
   .authLayout {
-    min-height: auto;
+    min-height: calc(100svh - 68px);
     grid-template-columns: 1fr;
-    gap: 38px;
+    gap: 0;
   }
 
   .authIntro {
-    padding-top: 24px;
+    min-height: 390px;
+    padding: 64px clamp(26px, 8vw, 64px);
   }
 
   .displayTitle {
     max-width: 680px;
+    font-size: clamp(48px, 10vw, 72px);
+  }
+
+  .card {
+    width: min(560px, calc(100% - 48px));
+    padding: 56px 0 72px;
   }
 
   .inviteForm {
@@ -723,7 +831,7 @@ input[type="color"].input {
 
 @media (max-width: 640px) {
   .shell {
-    padding: 14px 12px 48px;
+    padding: 0;
   }
 
   .secureLabel {
@@ -731,17 +839,38 @@ input[type="color"].input {
   }
 
   .authLayout {
-    padding: 44px 2px;
+    padding: 0;
+  }
+
+  .authIntro {
+    min-height: 350px;
+    padding: 52px 24px;
+  }
+
+  .displayTitle {
+    font-size: clamp(43px, 13vw, 60px);
+  }
+
+  .authIntro > p:not(.eyebrow) {
+    margin-top: 20px;
   }
 
   .authIntro > p:not(.eyebrow),
   .trustLine {
-    font-size: 12px;
+    font-size: 11px;
   }
 
-  .card,
+  .trustLine {
+    margin-top: 26px;
+  }
+
   .wideCard {
     border-radius: 24px;
+  }
+
+  .card {
+    width: calc(100% - 40px);
+    padding: 44px 0 58px;
   }
 
   .wideCard {

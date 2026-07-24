@@ -21,6 +21,7 @@ export default async function SignInPage({
   const parameters = await searchParams;
   const nextPath = safeRelativePath(
     typeof parameters.next === "string" ? parameters.next : null,
+    "/app/entry",
   );
   const status =
     typeof parameters.status === "string" ? parameters.status : "";
@@ -47,27 +48,27 @@ export default async function SignInPage({
       <div className={styles.frame}>
         <nav className={styles.floatingNav} aria-label="Secure access">
           <Link className={styles.brand} href="/">
-            <span className={styles.brandMark}>E</span>
+            <span className={styles.brandMark}>L</span>
             <span>
-              <b>Estie</b>
-              <small>Native learning</small>
+              <b>LearningBot</b>
+              <small>Enterprise learning</small>
             </span>
           </Link>
-          <span className={styles.secureLabel}>Private workspace access</span>
+          <span className={styles.secureLabel}>Administrator-managed access</span>
         </nav>
         <div className={styles.authLayout}>
           <section className={styles.authIntro}>
-            <p className={styles.eyebrow}>Your learning canvas</p>
+            <p className={styles.eyebrow}>One place to learn</p>
             <h1 className={styles.displayTitle}>
-              Learn in the flow of your work.
+              Knowledge that moves with your work.
             </h1>
             <p>
-              One private place for guided learning, grounded answers, practice,
-              and progress—shaped around your company’s own knowledge.
+              Ask, listen, practice, and keep making progress in one private
+              learning workspace grounded in your organization’s knowledge.
             </p>
             <div className={styles.trustLine}>
-              <span aria-hidden="true">✦</span>
-              Your administrator controls access and learning sources.
+              <span aria-hidden="true">✓</span>
+              Your workspace and learning sources appear after secure sign-in.
             </div>
           </section>
           <section className={styles.card}>
@@ -87,8 +88,8 @@ export default async function SignInPage({
             <p className={styles.eyebrow}>Secure access</p>
             <h2 className={styles.title}>Welcome back.</h2>
             <p className={styles.lede}>
-              Use the work email and password supplied by your administrator.
-              There is no public sign-up.
+              Sign in with the work email and password provided by your
+              administrator. LearningBot does not offer public account creation.
             </p>
             {!configured ? (
               <p className={styles.error} role="alert">
@@ -109,8 +110,8 @@ export default async function SignInPage({
             ) : null}
             <SignInForm configured={configured} nextPath={nextPath} />
             <p className={styles.finePrint}>
-              Need access or a fresh temporary password? Contact your workspace
-              administrator.
+              Need access, forgot your password, or received an expired temporary
+              password? Your organization’s LearningBot administrator can help.
             </p>
           </section>
         </div>

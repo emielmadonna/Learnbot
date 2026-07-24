@@ -4,6 +4,7 @@ import {
   getCurrentTenantContext,
   requireVerifiedUser,
 } from "../../../../lib/supabase/auth-boundary";
+import { getLearningWorkspace } from "../../../../lib/supabase/learning-rpc";
 import { createServerSupabaseClient } from "../../../../lib/supabase/server";
 import { UserAccessManager } from "./user-access-manager";
 import styles from "./users.module.css";
@@ -20,23 +21,27 @@ export default async function UserAccessPage() {
   if (!["tenant_owner", "tenant_admin"].includes(context.identityRole ?? "")) {
     redirect("/app?error=access_denied");
   }
+  const workspace = await getLearningWorkspace(supabase);
+  const assistantName = workspace.branding?.assistantName ?? "LearningBot";
 
   return (
     <main className={styles.shell}>
       <nav className={styles.floatingNav} aria-label="Administration">
         <Link className={styles.brand} href="/app">
-          <span className={styles.brandMark}>E</span>
+          <span className={styles.brandMark}>
+            {assistantName.slice(0, 1).toUpperCase()}
+          </span>
           <span>
-            <b>Estie</b>
-            <small>Learning workspace</small>
+            <b>{assistantName}</b>
+            <small>{workspace.tenant.displayName}</small>
           </span>
         </Link>
         <div className={styles.navContext}>
           <span className={styles.liveDot} aria-hidden="true" />
           Secure administration
         </div>
-        <Link className={styles.backLink} href="/app">
-          Learning home
+        <Link className={styles.backLink} href="/app/admin">
+          Admin overview
         </Link>
       </nav>
       <header className={styles.header}>

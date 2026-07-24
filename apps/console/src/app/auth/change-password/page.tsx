@@ -14,9 +14,9 @@ export default async function ChangePasswordPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const parameters = await searchParams;
-  const nextPath = safeRelativePath(
+  const requestedNextPath = safeRelativePath(
     typeof parameters.next === "string" ? parameters.next : null,
-    "/app",
+    "/app/entry",
   );
   let supabase;
   try {
@@ -28,6 +28,19 @@ export default async function ChangePasswordPage({
     );
   }
   const state = await getManagedAccessState(supabase);
+  const platformAuthorization = await supabase.rpc(
+    "platform_admin_is_authorized",
+  );
+  const canManagePlatform =
+    !platformAuthorization.error && platformAuthorization.data === true;
+  const nextPath =
+    requestedNextPath === "/onboarding" &&
+    (state.identityRole === "tenant_owner" ||
+      state.identityRole === "tenant_admin")
+      ? canManagePlatform
+        ? "/app/platform"
+        : "/app/admin"
+      : requestedNextPath;
   if (!state.mustChangePassword) redirect(nextPath);
 
   return (
@@ -35,25 +48,25 @@ export default async function ChangePasswordPage({
       <div className={styles.frame}>
         <nav className={styles.floatingNav} aria-label="Secure access">
           <span className={styles.brand}>
-            <span className={styles.brandMark}>E</span>
+            <span className={styles.brandMark}>L</span>
             <span>
-              <b>Estie</b>
-              <small>Native learning</small>
+              <b>LearningBot</b>
+              <small>Enterprise learning</small>
             </span>
           </span>
           <span className={styles.secureLabel}>Protected first sign-in</span>
         </nav>
         <div className={styles.authLayout}>
           <section className={styles.authIntro}>
-            <p className={styles.eyebrow}>Make it yours</p>
-            <h1 className={styles.displayTitle}>A secure start, in one step.</h1>
+            <p className={styles.eyebrow}>First sign-in protection</p>
+            <h1 className={styles.displayTitle}>Protect your LearningBot account.</h1>
             <p>
-              Your temporary password did its job. Replace it now so only you
-              can return to this learning workspace.
+              Your administrator created your account with a temporary password.
+              Replace it now before entering any organization workspace.
             </p>
             <div className={styles.trustLine}>
               <span aria-hidden="true">✓</span>
-              Your temporary password cannot unlock the workspace again.
+              After this update, the temporary password can no longer be used.
             </div>
           </section>
           <section className={styles.card}>
@@ -73,9 +86,16 @@ export default async function ChangePasswordPage({
             <p className={styles.eyebrow}>Protect your account</p>
             <h2 className={styles.title}>Choose your password.</h2>
             <p className={styles.lede}>
-              Use at least 12 characters with uppercase, lowercase, a number,
-              and a symbol.
+              This required one-time step verifies that only you control the
+              credentials for this administrator-created account.
             </p>
+            <div className={styles.securityNote}>
+              <strong>Password requirements</strong>
+              <span>
+                At least 12 characters, including uppercase, lowercase, a number,
+                and a symbol.
+              </span>
+            </div>
             <ChangePasswordForm nextPath={nextPath} />
             <form action="/auth/sign-out" method="post">
               <button className={styles.textButton} type="submit">

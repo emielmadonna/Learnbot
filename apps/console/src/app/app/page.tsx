@@ -78,6 +78,11 @@ export default async function AuthenticatedAppPage({
   } catch {
     redirect("/onboarding?error=selection_failed");
   }
+  const platformAuthorization = await supabase.rpc(
+    "platform_admin_is_authorized",
+  );
+  const canManagePlatform =
+    !platformAuthorization.error && platformAuthorization.data === true;
 
   const parameters = await searchParams;
   const status =
@@ -128,9 +133,13 @@ export default async function AuthenticatedAppPage({
           {["tenant_owner", "tenant_admin"].includes(
             workspace.identity.role,
           ) ? (
-            <Link href="/app/admin/users">
-              People
-            </Link>
+            <>
+              <Link href="/app/admin">Admin</Link>
+              <Link href="/app/admin/users">People</Link>
+            </>
+          ) : null}
+          {canManagePlatform ? (
+            <Link href="/app/platform">Platform</Link>
           ) : null}
           <Link href="/onboarding">
             Settings
@@ -183,7 +192,7 @@ export default async function AuthenticatedAppPage({
               </h1>
               <p>
                 {firstCourse?.description ??
-                  `${assistantName} is ready for real course material. Add the first lesson or import Estie’s existing library.`}
+                  `${assistantName} is ready for real course material. Add the first lesson or import ${workspace.tenant.displayName}’s existing library.`}
               </p>
               <div className={styles.heroActions}>
                 {firstLesson ? (
