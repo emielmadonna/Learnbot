@@ -597,6 +597,9 @@ for (const required of [
     fail(`missing managed access or usage control: ${required}`);
   }
 }
+if (!sql.includes("caller_membership_id")) {
+  fail("usage events do not resolve the verified active membership");
+}
 
 const forbiddenCredentialAssignments = [
   /\bapi_key\s+text\b/i,
