@@ -95,12 +95,14 @@ test("surface has the requested sections and no browser credential persistence",
   }
   assert.doesNotMatch(clientSource, /localStorage|sessionStorage/iu);
   assert.match(clientSource, /credentials\.configured/iu);
-  assert.match(clientSource, /tenant-scoped secret storage is not available/iu);
+  assert.match(clientSource, /server-side Vault boundary/iu);
+  assert.match(clientSource, /type="password"/iu);
 });
 
 test("server boundary refuses raw credentials without echoing them", () => {
   assert.match(routeSource, /secret_write_not_supported/);
   assert.match(routeSource, /authenticatedLearningClient/);
+  assert.match(routeSource, /updateTenantConfiguration/);
   assert.doesNotMatch(routeSource, /localStorage|sessionStorage/iu);
   assert.match(routeSource, /Cache-Control.*no-store/isu);
 });

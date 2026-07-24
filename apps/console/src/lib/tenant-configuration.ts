@@ -38,9 +38,9 @@ export type TenantConfiguration = {
   credentials: {
     provider: "openai";
     configured: boolean;
-    scope: "deployment" | "none";
+    scope: "deployment" | "tenant" | "none";
     vaultReferencePresent: boolean;
-    durableTenantStorage: false;
+    durableTenantStorage: boolean;
     rawValueReturned: false;
   };
   voiceGuide: {
@@ -69,7 +69,7 @@ export type TenantConfiguration = {
   };
   persistence: {
     configuration: "durable";
-    secrets: "not_available";
+    secrets: "durable" | "not_available";
   };
 };
 
@@ -79,6 +79,8 @@ export type TenantConfigurationPatch = {
   voiceGuide: TenantConfiguration["voiceGuide"];
   assistant: TenantConfiguration["assistant"];
   featureGates: TenantConfiguration["featureGates"];
+  apiKey?: string;
+  clearApiKey?: boolean;
   expectedTenantRevision: number;
   expectedBrandingRevision: number;
 };
@@ -148,10 +150,10 @@ function credentialStatus(
 ): TenantConfiguration["credentials"] {
   return {
     provider: "openai",
-    configured: false,
-    scope: "none",
+    configured: vaultReferencePresent,
+    scope: vaultReferencePresent ? "tenant" : "deployment",
     vaultReferencePresent,
-    durableTenantStorage: false,
+    durableTenantStorage: vaultReferencePresent,
     rawValueReturned: false,
   };
 }
@@ -180,6 +182,11 @@ export function parseTenantConfiguration(input: {
     : {};
 
   const provider = providerValue(durableProvider);
+  const vaultReferencePresent =
+    typeof storedConfiguration.credential_vault_ref === "string" &&
+    /^vault:\/\/[a-z0-9/_:.~-]{3,240}$/iu.test(
+      storedConfiguration.credential_vault_ref,
+    );
   return {
     version: CONFIGURATION_VERSION,
     tenant: {
@@ -194,10 +201,7 @@ export function parseTenantConfiguration(input: {
       provider,
       model: safeModel(durableModel),
     },
-    credentials: credentialStatus(
-      typeof storedConfiguration.credential_vault_ref === "string" &&
-        /^vault:\/\/[a-z0-9/_:.~-]{3,240}$/iu.test(storedConfiguration.credential_vault_ref),
-    ),
+    credentials: credentialStatus(vaultReferencePresent),
     voiceGuide: {
       enabled: booleanValue(voiceConfiguration.enabled, true),
       voice: voiceValue(voiceConfiguration.voiceId),
@@ -224,7 +228,7 @@ export function parseTenantConfiguration(input: {
     },
     persistence: {
       configuration: "durable",
-      secrets: "not_available",
+      secrets: vaultReferencePresent ? "durable" : "not_available",
     },
   };
 }
@@ -234,7 +238,6 @@ export function validateTenantConfigurationPatch(
 ): TenantConfigurationPatch {
   if (!isRecord(value)) throw new TenantConfigurationError("invalid_request");
   if (
-    "apiKey" in value ||
     "api_key" in value ||
     "secret" in value ||
     "credential" in value ||
@@ -250,6 +253,19 @@ export function validateTenantConfigurationPatch(
   const voiceGuide = isRecord(value.voiceGuide) ? value.voiceGuide : {};
   const assistant = isRecord(value.assistant) ? value.assistant : {};
   const featureGates = isRecord(value.featureGates) ? value.featureGates : {};
+  const apiKey = "apiKey" in value
+    ? typeof value.apiKey === "string" && /^[\x20-\x7e]{20,500}$/u.test(value.apiKey.trim())
+      ? value.apiKey.trim()
+      : null
+    : undefined;
+  if ("apiKey" in value && apiKey === null) {
+    throw new TenantConfigurationError("invalid_credential");
+  }
+  const clearApiKey = "clearApiKey" in value ? value.clearApiKey : false;
+  if (typeof clearApiKey !== "boolean" || (clearApiKey && Boolean(apiKey))) {
+    throw new TenantConfigurationError("invalid_credential");
+  }
+  const normalizedApiKey = apiKey === null ? undefined : apiKey;
   const expectedTenantRevision = Number(value.expectedTenantRevision);
   const expectedBrandingRevision = Number(value.expectedBrandingRevision);
   if (!Number.isInteger(expectedTenantRevision) || expectedTenantRevision < 1) {
@@ -282,6 +298,8 @@ export function validateTenantConfigurationPatch(
       uploads: booleanValue(featureGates.uploads, true),
       contextMapping: booleanValue(featureGates.contextMapping, true),
     },
+    ...(normalizedApiKey !== undefined ? { apiKey: normalizedApiKey } : {}),
+    ...(clearApiKey ? { clearApiKey: true } : {}),
     expectedTenantRevision,
     expectedBrandingRevision,
   };
@@ -343,6 +361,7 @@ export async function updateTenantConfiguration(
   supabase: SupabaseClient,
   context: TenantContext,
   patch: TenantConfigurationPatch,
+  options: { authorization?: string | undefined } = {},
 ) {
   if (context.identityRole !== "tenant_owner" && context.identityRole !== "tenant_admin") {
     throw new TenantConfigurationError("access_denied");
@@ -355,14 +374,48 @@ export async function updateTenantConfiguration(
   const existingConfiguration = isRecord(settings.configuration)
     ? settings.configuration
     : {};
+  let credentialReference: string | null | undefined;
+  if (patch.apiKey !== undefined || patch.clearApiKey === true) {
+    const credentialResponse = await supabase.functions.invoke(
+      "learning-provider-credentials",
+      {
+        body: {
+          tenantId: context.tenantId,
+          provider: patch.provider,
+          apiKey: patch.apiKey ?? "",
+          clearApiKey: patch.clearApiKey === true,
+          requestId: `tenant-credential:${crypto.randomUUID()}`,
+        },
+        ...(options.authorization
+          ? { headers: { Authorization: options.authorization } }
+          : {}),
+      },
+    );
+    const result = credentialResponse.data as Record<string, unknown> | null;
+    if (
+      credentialResponse.error ||
+      !result ||
+      result.ok !== true ||
+      (result.vaultReference !== null &&
+        typeof result.vaultReference !== "string")
+    ) {
+      throw new TenantConfigurationError("credential_boundary_unavailable");
+    }
+    credentialReference = result.vaultReference as string | null;
+  }
+  const nextConfiguration = {
+    ...existingConfiguration,
+    provider: patch.provider,
+    model: patch.model,
+    featureGates: patch.featureGates,
+  } as Record<string, unknown>;
+  if (credentialReference !== undefined) {
+    if (credentialReference) nextConfiguration.credential_vault_ref = credentialReference;
+    else delete nextConfiguration.credential_vault_ref;
+  }
   const nextSettings = {
     ...settings,
-    configuration: {
-      ...existingConfiguration,
-      provider: patch.provider,
-      model: patch.model,
-      featureGates: patch.featureGates,
-    },
+    configuration: nextConfiguration,
     learningBot: {
       ...existingLearningBot,
       provider: patch.provider,

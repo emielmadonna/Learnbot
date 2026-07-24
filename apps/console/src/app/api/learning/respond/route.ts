@@ -17,6 +17,7 @@ import {
 } from "../../../../lib/supabase/learning-route";
 import { LearningRpcError } from "../../../../lib/supabase/learning-rpc";
 import { searchPublishedLearning } from "../../../../lib/semantic-learning-search";
+import { getTenantConfiguration } from "../../../../lib/tenant-configuration";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -265,6 +266,8 @@ export async function POST(request: Request) {
       }),
       executeLearningRpc(supabase, "learning_get_workspace"),
     ]);
+    const configuration = await getTenantConfiguration(supabase, tenantContext);
+    const session = await supabase.auth.getSession();
     const retrievedSources = normalizeSources(searchResult);
     const sources = lessonId
       ? retrievedSources.filter((source) => source.lessonId === lessonId)
@@ -296,6 +299,15 @@ export async function POST(request: Request) {
       scopeLabel: selectedLessonLabel(workspace, lessonId),
       history,
       sources,
+      provider: configuration.provider.provider,
+      model: configuration.provider.model,
+      supabase,
+      ...(request.headers.get("authorization") || session.data.session?.access_token
+        ? {
+            authorization: request.headers.get("authorization") ??
+              `Bearer ${session.data.session!.access_token}`,
+          }
+        : {}),
     });
     const evidence = publicSources(sources);
     const recorded = await executeLearningRpc(

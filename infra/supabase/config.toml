@@ -77,6 +77,12 @@ verify_jwt = true
 [functions.learning-admin-users]
 verify_jwt = true
 
+[functions.learning-provider-credentials]
+verify_jwt = true
+
+[functions.learning-provider-complete]
+verify_jwt = true
+
 # This is intentionally not JWT-gated because it is authenticated by the
 # tenant-bound, expiring, one-use owner claim. Once claimed, it fails closed.
 [functions.learning-bootstrap-owner]
