@@ -7,8 +7,20 @@
     currentScript.dataset.appUrl || "https://clone.stack-labs.ai/app/conversation",
   );
   applicationUrl.searchParams.set("source", "circle");
+  const tenantId = currentScript.dataset.tenantId || "";
+  const tenantSlug = currentScript.dataset.tenantSlug || "";
+  const assistantName = currentScript.dataset.assistantName || "";
+  const assistantAccent = currentScript.dataset.assistantAccent || "";
+  const assistantWelcome = currentScript.dataset.assistantWelcome || "";
+  const communityUrl = currentScript.dataset.communityUrl || "";
+  if (tenantId) applicationUrl.searchParams.set("tenantId", tenantId);
+  if (tenantSlug) applicationUrl.searchParams.set("tenantSlug", tenantSlug);
+  if (assistantName) applicationUrl.searchParams.set("assistant", assistantName);
+  if (assistantAccent) applicationUrl.searchParams.set("assistantAccent", assistantAccent);
+  if (assistantWelcome) applicationUrl.searchParams.set("welcome", assistantWelcome);
+  if (communityUrl) applicationUrl.searchParams.set("circleCommunityUrl", communityUrl);
   const label = currentScript.dataset.label || "Ask Estie";
-  const primary = currentScript.dataset.primary || "#205b46";
+  const primary = currentScript.dataset.assistantPrimary || currentScript.dataset.primary || "#205b46";
 
   const launcher = document.createElement("a");
   launcher.dataset.learningbotCircleLauncher = "true";

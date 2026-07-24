@@ -1,30 +1,59 @@
 import Link from "next/link";
+import {
+  getCurrentTenantContext,
+  requireVerifiedUser,
+} from "../../../lib/supabase/auth-boundary";
+import { getOnboardingSnapshot } from "../../../lib/supabase/onboarding-rpc";
+import { createServerSupabaseClient } from "../../../lib/supabase/server";
+import { CircleInstallationPanel } from "../../onboarding/circle-installation";
+import {
+  buildCircleSnippet,
+  publicCircleAppUrl,
+} from "../../../lib/circle-installation";
 import styles from "./circle.module.css";
 
-const snippet = `(() => {
-  const script = document.createElement("script");
-  script.src = "https://clone.stack-labs.ai/integrations/circle-learningbot.js";
-  script.dataset.appUrl = "https://clone.stack-labs.ai/app/conversation";
-  script.dataset.label = "Ask Estie";
-  script.dataset.primary = "#205B46";
-  script.defer = true;
-  document.head.append(script);
-})();`;
-
-export default function CircleInstallPage() {
+export default async function CircleInstallPage() {
+  let installation = null;
+  try {
+    const supabase = await createServerSupabaseClient();
+    await requireVerifiedUser(supabase);
+    const context = await getCurrentTenantContext(supabase);
+    if (context.selected && context.tenantId) {
+      const snapshot = await getOnboardingSnapshot(supabase);
+      installation = {
+        tenantId: snapshot.tenant.tenantId,
+        tenantSlug: snapshot.tenant.slug,
+        assistantName: snapshot.branding.assistantName,
+        primaryColor: snapshot.branding.primaryColor,
+        accentColor: snapshot.branding.accentColor,
+        welcomeMessage: snapshot.branding.welcomeMessage,
+      };
+    }
+  } catch {
+    installation = null;
+  }
+  const assistantName = installation?.assistantName ?? "your assistant";
+  const genericSnippet = buildCircleSnippet({
+    tenantId: "your-tenant-id",
+    tenantSlug: "your-workspace",
+    assistantName: "your assistant",
+    primaryColor: "#205B46",
+    accentColor: "#D8A653",
+    welcomeMessage: "Ask about the published learning.",
+  });
   return (
     <main className={styles.shell}>
       <section className={styles.hero}>
         <span className={styles.mark}>E</span>
         <p>Circle installation</p>
-        <h1>Put Estie inside your community.</h1>
+        <h1>Put {assistantName} inside your community.</h1>
         <span>
           Members get one calm launcher that opens the secure LearningBot
           conversation. Circle never receives a LearningBot password or
           impersonates a learner.
         </span>
         <div className={styles.actions}>
-          <Link href="/auth/sign-in?next=/app">Open LearningBot</Link>
+          <Link href="/auth/sign-in?next=/install/circle">Open LearningBot</Link>
           <a href="#install">View installation</a>
         </div>
       </section>
@@ -40,8 +69,16 @@ export default function CircleInstallPage() {
             </p>
           </div>
         </article>
+        {installation ? (
+          <article>
+            <span>2</span>
+            <div>
+              <CircleInstallationPanel config={installation} />
+            </div>
+          </article>
+        ) : null}
         <article>
-          <span>2</span>
+          <span>{installation ? 3 : 2}</span>
           <div>
             <h2>Add the launcher to Circle</h2>
             <p>
@@ -49,13 +86,17 @@ export default function CircleInstallPage() {
               raw JavaScript. Do not add another script tag; Circle wraps the
               JavaScript field for you.
             </p>
-            <pre>
-              <code>{snippet}</code>
-            </pre>
+            {installation ? (
+              <p>Use the client-specific snippet above after signing in to the selected workspace.</p>
+            ) : (
+              <pre>
+                <code>{genericSnippet}</code>
+              </pre>
+            )}
           </div>
         </article>
         <article>
-          <span>3</span>
+          <span>{installation ? 4 : 3}</span>
           <div>
             <h2>Create member accounts</h2>
             <p>
@@ -72,7 +113,7 @@ export default function CircleInstallPage() {
         <p>
           Circle’s native mobile apps do not run every custom website snippet.
           Add a normal Circle navigation link to
-          https://clone.stack-labs.ai/app as the mobile fallback.
+          {publicCircleAppUrl().replace(/\/conversation$/u, "")} as the mobile fallback.
         </p>
       </aside>
     </main>

@@ -2,6 +2,7 @@ import type {
   OnboardingSnapshot,
   OnboardingStep,
 } from "../../lib/supabase/onboarding-rpc";
+import { CircleInstallationPanel } from "./circle-installation";
 import styles from "../auth/auth.module.css";
 
 const stepLabels: Record<string, string> = {
@@ -237,6 +238,17 @@ export function DurableWorkspace({
           </div>
         )}
       </section>
+
+      <CircleInstallationPanel
+        config={{
+          tenantId: snapshot.tenant.tenantId,
+          tenantSlug: snapshot.tenant.slug,
+          assistantName: snapshot.branding.assistantName,
+          primaryColor: snapshot.branding.primaryColor,
+          accentColor: snapshot.branding.accentColor,
+          welcomeMessage: snapshot.branding.welcomeMessage,
+        }}
+      />
 
       <section className={styles.section}>
         <div className={styles.sectionHeading}>
