@@ -56,7 +56,11 @@ test("semantic retrieval is authenticated and has an honest lexical fallback", (
   assert.match(searchSource, /retrievalMode: "lexical_degraded"/);
   assert.match(edgeSource, /client\.auth\.getUser\(token\)/);
   assert.match(edgeSource, /text-embedding-3-small/);
-  assert.match(edgeSource, /dimensions: 384/);
+  assert.match(edgeSource, /embeddingDimensions = 384/);
+  assert.match(edgeSource, /client\.rpc\("learning_search_chunks"/);
+  assert.match(edgeSource, /retrievalMode: "lexical_degraded"/);
+  assert.match(edgeSource, /embeddingProvider: null/);
+  assert.match(edgeSource, /embeddingModel: null/);
   assert.doesNotMatch(edgeSource, /service_role/i);
 });
 

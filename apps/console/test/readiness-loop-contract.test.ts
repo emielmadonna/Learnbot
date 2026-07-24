@@ -121,10 +121,11 @@ test("provider and embedding failures degrade safely without credential disclosu
   assert.match(semanticSearch, /retrievalMode: "lexical_degraded"/);
   assert.match(embeddingsFunction, /provider_not_configured/);
   assert.match(embeddingsFunction, /embedding_provider_failed/);
-  assert.match(
-    embeddingsFunction,
-    /return json\(\{ ok: false, code: "embedding_provider_failed" \}, 503\)/,
-  );
+  assert.match(embeddingsFunction, /provider_authentication_failed/);
+  assert.match(embeddingsFunction, /provider_rate_limited/);
+  assert.match(embeddingsFunction, /provider_timeout/);
+  assert.match(embeddingsFunction, /lexicalFallback/);
+  assert.match(embeddingsFunction, /learning_search_chunks/);
   assert.doesNotMatch(
     `${providerRuntime}\n${embeddingsFunction}`,
     /console\.(log|error).*apiKey|return.*apiKey/i,
