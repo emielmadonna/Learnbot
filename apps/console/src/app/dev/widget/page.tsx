@@ -7,6 +7,7 @@ import type {
   HostEvent,
   SimulatorConfiguration,
 } from "./protocol";
+import WorkspaceShell from "../../../components/workspace-shell";
 import styles from "./page.module.css";
 import viewportStyles from "./viewport.module.css";
 
@@ -159,6 +160,7 @@ export default function WidgetLabPage() {
   }, [snapshot]);
 
   return (
+    <WorkspaceShell active="admin">
     <main className={styles.lab}>
       <header className={styles.topbar}>
         <a href="/" className={styles.brand}>
@@ -172,11 +174,7 @@ export default function WidgetLabPage() {
           <span data-ready={hostReady} />
           {hostReady ? "Runtime connected" : "Connecting runtime"}
         </div>
-        <nav aria-label="Development modules">
-          <a href="/dev/chat">Chat</a>
-          <a href="/dev/learning">Learning</a>
-          <a href="/dev/branding">Branding</a>
-        </nav>
+        <span className={styles.runtimeLabel}>Advanced test tool</span>
       </header>
 
       <section className={styles.intro}>
@@ -436,5 +434,6 @@ export default function WidgetLabPage() {
         </aside>
       </section>
     </main>
+    </WorkspaceShell>
   );
 }

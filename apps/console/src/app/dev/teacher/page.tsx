@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import WorkspaceShell from "../../../components/workspace-shell";
 import styles from "../creator/page.module.css";
 
 const cohort = [
@@ -16,21 +17,8 @@ export default function TeacherConsole() {
   const learner = cohort.find((item) => item.name === selectedLearner) ?? cohort[0]!;
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <a className={styles.brand} href="/"><span>L</span><b>Learning OS</b></a>
-        <p className={styles.workspaceLabel}>Teacher workspace</p>
-        <strong>Momentum Method · Cohort 7</strong>
-        <nav aria-label="Teacher navigation">
-          <a className={styles.active} href="/dev/teacher">Cohort pulse</a>
-          <a href="#questions">Questions</a>
-          <a href="#learners">Learners</a>
-          <a href="/dev/learning">Course</a>
-          <a href="/dev/chat">Student preview</a>
-        </nav>
-        <div className={styles.profile}><span>EM</span><div><b>Emiel</b><small>Teacher</small></div></div>
-      </aside>
-
+    <WorkspaceShell active="people">
+      <main className={`${styles.shell} unified-page`}>
       <section className={styles.workspace}>
         <header className={styles.header}>
           <div>
@@ -126,6 +114,7 @@ export default function TeacherConsole() {
           </div>
         </section>
       </section>
-    </main>
+      </main>
+    </WorkspaceShell>
   );
 }

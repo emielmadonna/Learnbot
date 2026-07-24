@@ -7,6 +7,7 @@ import type {
   PrivacyDemoSnapshot,
   PrivacyPreview,
 } from "../../../lib/privacy-demo/types";
+import WorkspaceShell from "../../../components/workspace-shell";
 import styles from "./page.module.css";
 
 type Job = PrivacyDemoSnapshot["jobs"][number];
@@ -199,28 +200,8 @@ export default function PrivacyOperationsPage() {
   }
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <a href="/" className={styles.brand}>
-          <span>P</span>
-          <div><b>Platform Ops</b><small>Privacy lifecycle</small></div>
-        </a>
-        <p>CONTROL PLANE</p>
-        <nav>
-          <a href="/dev/admin">Tenant overview</a>
-          <a href="/dev/privacy" className={styles.active}>Privacy operations</a>
-          <a href="/dev/branding">Branding</a>
-          <a href="/dev/widget">Widget Lab</a>
-        </nav>
-        <div className={styles.tenantIdentity}>
-          <span>N</span>
-          <div>
-            <b>{snapshot.tenant.tenantSlug}</b>
-            <small>{snapshot.tenant.membershipRole} · verified fixture</small>
-          </div>
-        </div>
-      </aside>
-
+    <WorkspaceShell active="admin">
+    <main className={`${styles.shell} unified-page`}>
       <section className={styles.content}>
         <header className={styles.header}>
           <div>
@@ -502,5 +483,6 @@ export default function PrivacyOperationsPage() {
         </div>
       </section>
     </main>
+    </WorkspaceShell>
   );
 }

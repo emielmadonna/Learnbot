@@ -8,6 +8,7 @@ import type {
   IntelligenceMutation,
 } from "../../../lib/intelligence-demo/types";
 
+import WorkspaceShell from "../../../components/workspace-shell";
 import styles from "./page.module.css";
 
 type MetricKey = keyof IntelligenceDemoSnapshot["metrics"];
@@ -239,28 +240,8 @@ export default function IntelligencePage() {
   const identityCoverage = snapshot.health.identityCoverage.ratio;
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <a className={styles.logo} href="/">
-          <span>L</span>
-          <strong>Learning OS</strong>
-        </a>
-        <nav aria-label="Creator intelligence navigation">
-          <a href="/dev/creator">Overview</a>
-          <a className={styles.active} href="/dev/intelligence">Intelligence</a>
-          <a href="/dev/learning">Course</a>
-          <a href="/dev/chat">Student preview</a>
-          <a href="/dev/admin">Operations</a>
-        </nav>
-        <div className={styles.sidebarFoot}>
-          <span>MC</span>
-          <div>
-            <strong>Northstar Creator</strong>
-            <small>Verified membership</small>
-          </div>
-        </div>
-      </aside>
-
+    <WorkspaceShell active="people">
+      <main className={`${styles.shell} unified-page`}>
       <section className={styles.workspace}>
         <header className={styles.header}>
           <div>
@@ -582,6 +563,7 @@ export default function IntelligencePage() {
           <a href="/dev/learning">Review Minimum Day lesson →</a>
         </footer>
       </section>
-    </main>
+      </main>
+    </WorkspaceShell>
   );
 }

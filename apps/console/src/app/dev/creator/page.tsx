@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import WorkspaceShell from "../../../components/workspace-shell";
 import styles from "./page.module.css";
 
 type Signal = {
@@ -52,22 +53,8 @@ export default function CreatorConsole() {
   }
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <a className={styles.brand} href="/"><span>L</span><b>Learning OS</b></a>
-        <p className={styles.workspaceLabel}>Creator workspace</p>
-        <strong>Northstar Academy</strong>
-        <nav aria-label="Creator navigation">
-          <a className={styles.active} href="/dev/creator">This week</a>
-          <a href="/dev/learning">Courses</a>
-          <a href="#questions">Questions</a>
-          <a href="#learners">Learners</a>
-          <a href="/dev/intelligence">Intelligence</a>
-          <a href="/dev/branding">Assistant</a>
-        </nav>
-        <div className={styles.profile}><span>EM</span><div><b>Emiel</b><small>Owner</small></div></div>
-      </aside>
-
+    <WorkspaceShell active="people">
+      <main className={`${styles.shell} unified-page`}>
       <section className={styles.workspace}>
         <header className={styles.header}>
           <div>
@@ -160,6 +147,7 @@ export default function CreatorConsole() {
           </div>
         </section>
       </section>
-    </main>
+      </main>
+    </WorkspaceShell>
   );
 }

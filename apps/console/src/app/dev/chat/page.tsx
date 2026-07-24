@@ -19,6 +19,7 @@ import {
   loadRuntimeBranding,
   type RuntimeBranding,
 } from "../../../lib/branding-runtime";
+import WorkspaceShell from "../../../components/workspace-shell";
 import styles from "./page.module.css";
 
 type IconName =
@@ -1755,6 +1756,7 @@ export default function StudentChatPrototype() {
   }
 
   return (
+    <WorkspaceShell active="preview">
     <main className={pageClasses}>
       <div ref={companionRef} className={companionClasses} style={companionStyle}>
         <div className={styles.sheetGrabber} aria-hidden="true" />
@@ -2326,5 +2328,6 @@ export default function StudentChatPrototype() {
         </button>
       </div>
     </main>
+    </WorkspaceShell>
   );
 }

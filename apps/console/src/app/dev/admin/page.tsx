@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import WorkspaceShell from "../../../components/workspace-shell";
 import styles from "./page.module.css";
 
 const tenants = [
@@ -117,25 +118,8 @@ export default function AdminConsole() {
   }
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <a className={styles.brand} href="/"><span>L</span><b>Learning OS</b></a>
-        <p>Platform administration</p>
-        <nav aria-label="Admin navigation">
-          <a className={styles.active} href="/dev/admin">Overview</a>
-          <a href="#tenants">Tenants</a>
-          <a href="#providers">Providers</a>
-          <a href="#cost">Usage & cost</a>
-          <a href="#mcp">MCP registry</a>
-          <a href="#audit">Audit</a>
-          <a href="/dev/onboarding">Onboarding</a>
-          <a href="/dev/privacy">Privacy</a>
-          <a href="/dev/branding">Branding</a>
-          <a href="/dev/widget">Widget Lab</a>
-        </nav>
-        <div className={styles.system}><span /><div><b>Development</b><small>Local contracts active</small></div></div>
-      </aside>
-
+    <WorkspaceShell active="admin">
+      <main className={`${styles.shell} unified-page`}>
       <section className={styles.workspace}>
         <header className={styles.header}>
           <div><p className={styles.eyebrow}>Control plane</p><h1>Platform administration</h1><p>Tenant isolation, provider health, budgets, policy and agent access in one place.</p></div>
@@ -221,6 +205,7 @@ export default function AdminConsole() {
           </section>
         </div>
       </section>
-    </main>
+      </main>
+    </WorkspaceShell>
   );
 }

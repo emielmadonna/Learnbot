@@ -6,6 +6,7 @@ import {
   LEGACY_TARGET_WORDS,
 } from "@course-ai/learning-pipeline";
 
+import WorkspaceShell from "../../../components/workspace-shell";
 import styles from "./page.module.css";
 
 type ValidationIssue = {
@@ -800,25 +801,8 @@ export default function LearningWorkspace() {
   ];
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <div className={styles.brand}>
-          <span className={styles.logo}>L</span>
-          <span>Learning OS</span>
-        </div>
-        <nav aria-label="Workspace">
-          <a href="/">Overview</a>
-          <a className={styles.active} href="/dev/learning">Courses</a>
-          <a href="#sources">Sources</a>
-          <a href="/dev/chat">Assistant</a>
-          <a href="/dev/teacher">Students</a>
-        </nav>
-        <div className={styles.tenant}>
-          <span>NA</span>
-          <div><strong>{tenantName}</strong><small>Creator workspace</small></div>
-        </div>
-      </aside>
-
+    <WorkspaceShell active="learning">
+      <main className={`${styles.shell} unified-page`}>
       <section className={styles.workspace}>
         <header className={styles.topbar}>
           <div>
@@ -1158,6 +1142,7 @@ export default function LearningWorkspace() {
           </aside>
         </div>
       </section>
-    </main>
+      </main>
+    </WorkspaceShell>
   );
 }

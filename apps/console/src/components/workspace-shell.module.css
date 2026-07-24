@@ -1,0 +1,166 @@
+.shell {
+  --shell-ink: #18251f;
+  --shell-muted: #707b75;
+  --shell-line: #e3e7e4;
+  --shell-canvas: #f7f8f6;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 82% -10%, #edf3ee 0, transparent 31rem),
+    var(--shell-canvas);
+  color: var(--shell-ink);
+}
+
+.header {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 220px;
+  align-items: center;
+  min-height: 72px;
+  padding: 0 28px;
+  border-bottom: 1px solid rgb(220 226 222 / 82%);
+  background: rgb(247 248 246 / 90%);
+  backdrop-filter: blur(16px);
+}
+
+.identity,
+.accountArea,
+.primaryNav {
+  display: flex;
+  align-items: center;
+}
+
+.identity {
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.mark,
+.accountAvatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  font-weight: 800;
+}
+
+.mark {
+  width: 34px;
+  height: 34px;
+  background: #235a47;
+  color: #fff;
+  font-size: 13px;
+}
+
+.identityText {
+  display: grid;
+  gap: 1px;
+}
+
+.identityText strong {
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+.identityText small {
+  color: #89928d;
+  font-size: 10px;
+}
+
+.primaryNav {
+  justify-content: center;
+  gap: 3px;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 4px;
+  border: 1px solid #e0e5e1;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 86%);
+  box-shadow: 0 8px 24px rgb(34 54 44 / 5%);
+}
+
+.primaryNav a,
+.settings,
+.settingsActive {
+  color: #69746e;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.primaryNav a {
+  padding: 9px 13px;
+  border-radius: 999px;
+}
+
+.primaryNav a:hover {
+  color: #235a47;
+  background: #f1f5f2;
+}
+
+.primaryNav .active {
+  background: #e6ece8;
+  color: #235a47;
+}
+
+.accountArea {
+  justify-content: flex-end;
+  gap: 13px;
+}
+
+.settings:hover,
+.settingsActive {
+  color: #235a47;
+}
+
+.accountAvatar {
+  width: 31px;
+  height: 31px;
+  border: 1px solid #d7e2db;
+  background: #e9f0eb;
+  color: #235a47;
+  font-size: 9px;
+}
+
+.content {
+  min-width: 0;
+}
+
+@media (max-width: 920px) {
+  .header {
+    grid-template-columns: 1fr auto;
+    gap: 14px;
+    padding: 12px 18px;
+  }
+
+  .primaryNav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
+    width: 100%;
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+
+  .primaryNav a {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .header {
+    min-height: 64px;
+  }
+
+  .settings {
+    display: none;
+  }
+
+  .primaryNav a {
+    padding-inline: 10px;
+    font-size: 10px;
+  }
+}

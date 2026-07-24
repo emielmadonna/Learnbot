@@ -7,6 +7,7 @@ import {
   loadRuntimeBranding,
   publishRuntimeBranding,
 } from "../../../lib/branding-runtime";
+import WorkspaceShell from "../../../components/workspace-shell";
 import styles from "./page.module.css";
 
 type Branding = {
@@ -204,21 +205,8 @@ export default function BrandingStudio() {
   }
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.nav}>
-        <a className={styles.brand} href="/"><span>L</span>Learning OS</a>
-        <p>Tenant workspace</p>
-        <strong>Northstar Academy</strong>
-        <nav aria-label="Settings">
-          <a href="/dev/learning">Courses</a>
-          <a href="/dev/chat">Assistant</a>
-          <a className={styles.active} href="/dev/branding">Branding</a>
-          <a href="/dev/widget">Install</a>
-          <a href="/dev/admin">Settings</a>
-        </nav>
-        <div className={styles.tenant}><span>NA</span><div><b>Northstar Academy</b><small>Creator admin</small></div></div>
-      </aside>
-
+    <WorkspaceShell active="settings">
+      <main className={`${styles.shell} unified-page`}>
       <section className={styles.workspace}>
         <header className={styles.header}>
           <div>
@@ -329,6 +317,7 @@ export default function BrandingStudio() {
           </aside>
         </div>
       </section>
-    </main>
+      </main>
+    </WorkspaceShell>
   );
 }
