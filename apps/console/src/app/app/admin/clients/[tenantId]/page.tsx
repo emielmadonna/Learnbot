@@ -54,21 +54,20 @@ export default async function PlatformClientDetailPage({
   return (
     <main className={styles.shell}>
       <header className={styles.topbar}>
-        <Link className={styles.brand} href="/app/admin/clients">
+        <Link className={styles.brand} href="/app/platform">
           <span className={styles.brandMark}>L</span>
           <span><b>LearningBot</b><small>Platform control</small></span>
         </Link>
         <nav aria-label="Platform administration">
-          <Link href="/app/platform">Overview</Link>
-          <Link className={styles.active} href="/app/admin/clients" aria-current="page">Clients</Link>
+          <Link className={styles.active} href="/app/platform" aria-current="page">Clients</Link>
         </nav>
-        <Link className={styles.backLink} href="/app/admin/clients">All clients</Link>
+        <Link className={styles.backLink} href="/app/platform">All clients</Link>
       </header>
 
       <section className={styles.canvas}>
         <div className={styles.detailIntro}>
           <div>
-            <Link className={styles.backAction} href="/app/admin/clients">← All clients</Link>
+            <Link className={styles.backAction} href="/app/platform">← All clients</Link>
             <p className={styles.eyebrow}>Client workspace</p>
             <h1>{client.displayName}</h1>
             <p>{client.assistantName} · {client.slug}{client.region ? ` · ${client.region}` : ""}</p>

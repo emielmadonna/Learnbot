@@ -119,7 +119,6 @@ export default async function PlatformAdminPage() {
           <Link className={styles.active} href="/app/platform">
             Overview
           </Link>
-          <Link href="/app/admin/clients">Clients</Link>
           <Link href="/app">Learning</Link>
         </nav>
         <form action="/auth/sign-out" method="post">
