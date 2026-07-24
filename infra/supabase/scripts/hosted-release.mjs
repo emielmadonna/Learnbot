@@ -25,6 +25,10 @@ export const hostedVerificationSuites = Object.freeze([
   "onboarding_verification.sql",
   "auth_tenant_bridge_verification.sql",
   "authenticated_onboarding_rpcs_verification.sql",
+  "durable_learning_workspace_verification.sql",
+  "preprovisioned_tenant_claim_verification.sql",
+  "grounded_lexical_retrieval_verification.sql",
+  "durable_learning_conversations_verification.sql",
 ]);
 
 export function validateApproval(approval, fingerprint, action, now = new Date()) {

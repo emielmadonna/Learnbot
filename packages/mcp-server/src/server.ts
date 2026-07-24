@@ -9,11 +9,13 @@ import {
   DEVELOPMENT_TENANT_ID
 } from "./demo-data.js";
 import {
+  authenticatedConsoleHeaders,
   ConsoleApiClient,
   GrantAuthorizer,
   IdempotencyStore,
   mutationHeaders,
   parseGrantConfiguration,
+  ProcessBearerCredential,
   safeError,
   WRITE_PERMISSIONS,
   type MutationContext,
@@ -29,10 +31,17 @@ const server = new McpServer({
 const consoleBaseUrl =
   process.env.COURSE_AI_CONSOLE_URL ?? "http://127.0.0.1:3100";
 const consoleClient = new ConsoleApiClient(consoleBaseUrl);
+const fixtureModeEnabled =
+  process.env.COURSE_AI_MCP_FIXTURE_MODE === "enabled";
+const durableLearningCredential = new ProcessBearerCredential(
+  process.env.COURSE_AI_MCP_CONSOLE_BEARER_TOKEN
+);
 const authorizer = new GrantAuthorizer(
   parseGrantConfiguration(process.env.COURSE_AI_MCP_GRANTS)
 );
 const idempotencyStore = new IdempotencyStore();
+const durableLearningToolCount = 5;
+const fixtureToolCount = 27;
 
 async function consoleRequest<T>(
   path: string,
@@ -44,6 +53,27 @@ async function consoleRequest<T>(
     ...(init?.headers
       ? { headers: Object.fromEntries(new Headers(init.headers).entries()) }
       : {})
+  });
+}
+
+async function durableLearningRequest<T>(
+  path: string,
+  init: RequestInit = {}
+): Promise<T> {
+  const method = init.method?.toUpperCase() ?? "GET";
+  return consoleClient.request<T>(path, {
+    ...(init.method ? { method: init.method } : {}),
+    ...(typeof init.body === "string" ? { body: init.body } : {}),
+    headers: {
+      ...authenticatedConsoleHeaders(
+        durableLearningCredential,
+        consoleBaseUrl,
+        method
+      ),
+      ...(init.headers
+        ? Object.fromEntries(new Headers(init.headers).entries())
+        : {})
+    }
   });
 }
 
@@ -175,6 +205,7 @@ async function authorizedConsoleMutation<T>(
   );
 }
 
+if (fixtureModeEnabled) {
 server.registerTool(
   "get_build_plan",
   {
@@ -195,6 +226,7 @@ server.registerTool(
   },
   async () => result({ ...buildPlan, lanes: [...buildPlan.lanes] })
 );
+}
 
 server.registerTool(
   "get_mcp_health",
@@ -209,9 +241,27 @@ server.registerTool(
       consoleBaseUrl: z.string(),
       writeAuthorization: z.object({
         denyByDefault: z.literal(true),
+        fixtureModeEnabled: z.boolean(),
         configurationValid: z.boolean(),
         configuredGrantCount: z.number(),
         permissions: z.array(z.string())
+      }),
+      durableLearning: z.object({
+        dataMode: z.literal("durable"),
+        endpoints: z.array(z.string()),
+        toolCount: z.literal(5),
+        authorization: z.literal("process-bound bearer"),
+        credentialConfigured: z.boolean(),
+        configurationValid: z.boolean(),
+        status: z.enum(["ready", "credential_missing", "misconfigured"])
+      }),
+      legacyDevelopmentSurface: z.object({
+        dataMode: z.literal("fixture"),
+        routePrefix: z.literal("/api/dev"),
+        fixtureModeEnabled: z.boolean(),
+        exposedToolCount: z.number(),
+        availableFixtureToolCount: z.literal(27),
+        productionEvidence: z.literal(false)
       }),
       safeguards: z.array(z.string())
     },
@@ -222,20 +272,54 @@ server.registerTool(
   },
   async () =>
     result({
-      status: !authorizer.configurationValid
+      status:
+        !durableLearningCredential.configurationValid ||
+        (fixtureModeEnabled && !authorizer.configurationValid)
         ? ("misconfigured" as const)
-        : authorizer.configuredGrantCount > 0
+        : durableLearningCredential.configured ||
+            (fixtureModeEnabled && authorizer.configuredGrantCount > 0)
           ? ("ready" as const)
           : ("read_only" as const),
       transport: "stdio" as const,
       consoleBaseUrl,
       writeAuthorization: {
         denyByDefault: true as const,
-        configurationValid: authorizer.configurationValid,
-        configuredGrantCount: authorizer.configuredGrantCount,
-        permissions: [...WRITE_PERMISSIONS]
+        fixtureModeEnabled,
+        configurationValid:
+          !fixtureModeEnabled || authorizer.configurationValid,
+        configuredGrantCount: fixtureModeEnabled
+          ? authorizer.configuredGrantCount
+          : 0,
+        permissions: fixtureModeEnabled ? [...WRITE_PERMISSIONS] : []
+      },
+      durableLearning: {
+        dataMode: "durable" as const,
+        endpoints: [
+          "/api/learning/workspace",
+          "/api/learning/search",
+          "/api/learning/conversations",
+          "/api/learning/respond"
+        ],
+        toolCount: durableLearningToolCount as 5,
+        authorization: "process-bound bearer" as const,
+        credentialConfigured: durableLearningCredential.configured,
+        configurationValid: durableLearningCredential.configurationValid,
+        status: !durableLearningCredential.configurationValid
+          ? ("misconfigured" as const)
+          : durableLearningCredential.configured
+            ? ("ready" as const)
+            : ("credential_missing" as const)
+      },
+      legacyDevelopmentSurface: {
+        dataMode: "fixture" as const,
+        routePrefix: "/api/dev" as const,
+        fixtureModeEnabled,
+        exposedToolCount: fixtureModeEnabled ? fixtureToolCount : 0,
+        availableFixtureToolCount: fixtureToolCount as 27,
+        productionEvidence: false as const
       },
       safeguards: [
+        "fixture tools require exact process opt-in",
         "tenant-and-actor-bound grants",
         "grant expiry, rate limits and replay-safe budget reservation",
         "request correlation metadata",
@@ -246,6 +330,205 @@ server.registerTool(
     })
 );
 
+server.registerTool(
+  "get_authenticated_learning_workspace",
+  {
+    title: "Get authenticated durable learning workspace",
+    description:
+      "Read the durable courses, lesson structure, progress, branding and role for the verified Supabase user represented by this MCP process bearer credential. The selected tenant is resolved by the control plane and cannot be supplied or overridden by the caller.",
+    inputSchema: {},
+    outputSchema: {
+      workspace: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false
+    }
+  },
+  async () => {
+    try {
+      const workspace = await durableLearningRequest<Record<string, unknown>>(
+        "/api/learning/workspace"
+      );
+      return result({ workspace });
+    } catch (error: unknown) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "search_authenticated_learning",
+  {
+    title: "Search authenticated durable learning",
+    description:
+      "Search published durable learning sources for the verified user and selected tenant represented by this MCP process bearer credential. Results are tenant-bound source excerpts; the caller cannot override the tenant.",
+    inputSchema: {
+      query: z.string().trim().min(2).max(512),
+      courseId: z.string().uuid().optional(),
+      limit: z.number().int().min(1).max(12).default(6)
+    },
+    outputSchema: {
+      search: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false
+    }
+  },
+  async ({ query, courseId, limit }) => {
+    try {
+      const parameters = new URLSearchParams({
+        q: query,
+        limit: String(limit)
+      });
+      if (courseId) parameters.set("courseId", courseId);
+      const search = await durableLearningRequest<Record<string, unknown>>(
+        `/api/learning/search?${parameters.toString()}`
+      );
+      return result({ search });
+    } catch (error: unknown) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "get_authenticated_learning_conversations",
+  {
+    title: "Get authenticated durable learning conversations",
+    description:
+      "Read durable learning conversations and their persisted messages for the verified user and selected tenant. Optional identifiers only narrow the authenticated user's own tenant-bound records.",
+    inputSchema: {
+      conversationId: z.string().uuid().optional(),
+      courseId: z.string().uuid().optional(),
+      lessonId: z.string().uuid().optional()
+    },
+    outputSchema: {
+      conversations: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false
+    }
+  },
+  async ({ conversationId, courseId, lessonId }) => {
+    try {
+      const parameters = new URLSearchParams();
+      if (conversationId) parameters.set("conversationId", conversationId);
+      if (courseId) parameters.set("courseId", courseId);
+      if (lessonId) parameters.set("lessonId", lessonId);
+      const suffix = parameters.size ? `?${parameters.toString()}` : "";
+      const conversations = await durableLearningRequest<
+        Record<string, unknown>
+      >(`/api/learning/conversations${suffix}`);
+      return result({ conversations });
+    } catch (error: unknown) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "start_authenticated_learning_conversation",
+  {
+    title: "Start authenticated durable learning conversation",
+    description:
+      "Start a durable tenant-bound learning conversation for the verified user, optionally grounded to a course and lesson. The required idempotency key makes retries replay-safe.",
+    inputSchema: {
+      courseId: z.string().uuid().optional(),
+      lessonId: z.string().uuid().optional(),
+      idempotencyKey: z
+        .string()
+        .min(8)
+        .max(200)
+        .regex(/^[A-Za-z0-9:_-]+$/u)
+    },
+    outputSchema: {
+      conversation: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    }
+  },
+  async ({ courseId, lessonId, idempotencyKey }) => {
+    try {
+      const conversation = await durableLearningRequest<
+        Record<string, unknown>
+      >("/api/learning/conversations", {
+        method: "POST",
+        body: JSON.stringify({
+          courseId: courseId ?? null,
+          lessonId: lessonId ?? null,
+          idempotencyKey
+        })
+      });
+      return result({ conversation });
+    } catch (error: unknown) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "respond_in_authenticated_learning_conversation",
+  {
+    title: "Respond in authenticated grounded learning conversation",
+    description:
+      "Record a user question, retrieve tenant-bound published evidence, generate a provider-neutral grounded answer, and durably record the assistant response in the same authenticated conversation. The required idempotency key makes retries replay-safe.",
+    inputSchema: {
+      conversationId: z.string().uuid(),
+      message: z.string().trim().min(2).max(8_000),
+      courseId: z.string().uuid().optional(),
+      lessonId: z.string().uuid().optional(),
+      idempotencyKey: z
+        .string()
+        .min(8)
+        .max(160)
+        .regex(/^[A-Za-z0-9:_-]+$/u)
+    },
+    outputSchema: {
+      response: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true
+    }
+  },
+  async ({
+    conversationId,
+    message,
+    courseId,
+    lessonId,
+    idempotencyKey
+  }) => {
+    try {
+      const response = await durableLearningRequest<Record<string, unknown>>(
+        "/api/learning/respond",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            conversationId,
+            message,
+            courseId: courseId ?? null,
+            lessonId: lessonId ?? null,
+            idempotencyKey
+          })
+        }
+      );
+      return result({ response });
+    } catch (error: unknown) {
+      return errorResult(error);
+    }
+  }
+);
+
+if (fixtureModeEnabled) {
 server.registerTool(
   "list_platform_capabilities",
   {
@@ -1489,6 +1772,7 @@ server.registerTool(
     }
   }
 );
+}
 
 async function main() {
   const transport = new StdioServerTransport();

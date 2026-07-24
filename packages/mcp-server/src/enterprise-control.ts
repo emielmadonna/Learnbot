@@ -351,6 +351,71 @@ export interface ConsoleRequestOptions {
   headers?: Record<string, string>;
 }
 
+export class ProcessBearerCredential {
+  readonly configured: boolean;
+  readonly configurationValid: boolean;
+  readonly #authorizationHeader: string | undefined;
+
+  constructor(raw: string | undefined) {
+    this.configured = raw !== undefined;
+    const token = raw?.trim();
+    this.configurationValid =
+      raw === undefined ||
+      (token !== undefined &&
+        raw === token &&
+        token.length >= 16 &&
+        token.length <= 8_192 &&
+        /^[A-Za-z0-9\-._~+/]+=*$/.test(token));
+    this.#authorizationHeader =
+      this.configurationValid && token ? `Bearer ${token}` : undefined;
+  }
+
+  requestHeaders(requestId?: string): Record<string, string> {
+    if (!this.configurationValid) {
+      throw new McpSafeError({
+        code: "MCP_INVALID_CONFIGURATION",
+        message:
+          "The durable learning bearer credential is not configured correctly.",
+        retryable: false,
+        ...(requestId ? { requestId } : {}),
+      });
+    }
+    if (!this.#authorizationHeader) {
+      throw new McpSafeError({
+        code: "MCP_ACCESS_DENIED",
+        message:
+          "The durable learning bearer credential is not configured for this MCP process.",
+        retryable: false,
+        ...(requestId ? { requestId } : {}),
+      });
+    }
+    return { authorization: this.#authorizationHeader };
+  }
+}
+
+export function authenticatedConsoleHeaders(
+  credential: ProcessBearerCredential,
+  baseUrl: string,
+  method = "GET",
+  requestId?: string,
+): Record<string, string> {
+  const headers = credential.requestHeaders(requestId);
+  const normalizedMethod = method.toUpperCase();
+  if (normalizedMethod === "GET" || normalizedMethod === "HEAD") {
+    return headers;
+  }
+  try {
+    return { ...headers, origin: new URL(baseUrl).origin };
+  } catch {
+    throw new McpSafeError({
+      code: "MCP_INVALID_CONFIGURATION",
+      message: "The Course AI control-plane URL is not configured correctly.",
+      retryable: false,
+      ...(requestId ? { requestId } : {}),
+    });
+  }
+}
+
 type FetchLike = (
   input: string | URL | Request,
   init?: RequestInit,

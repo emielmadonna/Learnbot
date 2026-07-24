@@ -28,6 +28,10 @@ export type TenantBootstrap = {
   created: boolean;
 };
 
+export type TenantOwnerClaim = Omit<TenantBootstrap, "created"> & {
+  claimed: boolean;
+};
+
 export type TenantSelection = {
   selected: boolean;
   tenantId: string | null;
@@ -237,6 +241,54 @@ export async function bootstrapTenantOwner(
     principalId: String(row.principal_id),
     selectionVersion: Number(row.selection_version),
     created: row.created === true,
+  };
+}
+
+export async function claimPreprovisionedTenantOwner(
+  supabase: SupabaseClient,
+  input: {
+    slug: string;
+    claimToken: string;
+    requestId: string;
+    traceId: string;
+  },
+): Promise<TenantOwnerClaim> {
+  const slug = input.slug.trim().toLowerCase();
+  const claimToken = input.claimToken.trim();
+  if (
+    !/^[a-z0-9][a-z0-9-]{1,62}$/u.test(slug) ||
+    claimToken.length < 32 ||
+    claimToken.length > 256
+  ) {
+    throw new AuthenticationBoundaryError(
+      "auth.invalid_owner_claim",
+      "The owner claim is invalid.",
+    );
+  }
+  const { data, error } = await supabase.rpc(
+    "auth_claim_preprovisioned_tenant_owner",
+    {
+      requested_slug: slug,
+      claim_token: claimToken,
+      request_id: input.requestId,
+      trace_id: input.traceId,
+    },
+  );
+  const row = firstRow(
+    data as Array<Record<string, unknown>> | Record<string, unknown> | null,
+  );
+  if (error || !row || row.claimed !== true) {
+    throw new AuthenticationBoundaryError(
+      "auth.owner_claim_failed",
+      "The owner claim could not be verified.",
+    );
+  }
+  return {
+    tenantId: String(row.tenant_id),
+    membershipId: String(row.membership_id),
+    principalId: String(row.principal_id),
+    selectionVersion: Number(row.selection_version),
+    claimed: true,
   };
 }
 

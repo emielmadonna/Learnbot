@@ -53,8 +53,9 @@ export default async function SignInPage({
           <p className={styles.eyebrow}>Secure access</p>
           <h1 className={styles.title}>Welcome to your learning workspace.</h1>
           <p className={styles.lede}>
-            Use your verified work email. New owners can create a tenant after
-            sign-in; invited learners enter the tenant they were assigned.
+            Use your work email. We’ll send a secure sign-in link—no password
+            to remember. Owners can connect a prepared workspace and invited
+            learners go straight to their team.
           </p>
           {!configured ? (
             <p className={styles.error} role="alert">
@@ -75,9 +76,8 @@ export default async function SignInPage({
           ) : null}
           <SignInForm configured={configured} nextPath={nextPath} />
           <p className={styles.finePrint}>
-            This is the durable production sign-in path. The separate{" "}
-            <Link href="/dev/onboarding">fixture preview</Link> is labeled and
-            cannot provide production access.
+            Your sign-in and workspace access are kept private to your
+            organization.
           </p>
         </section>
       </div>

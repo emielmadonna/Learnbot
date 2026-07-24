@@ -72,19 +72,80 @@ const modules = [
   {
     name: "MCP Control Plane",
     description: "The same safe operations for Codex and authorized agents.",
-    status: "28 tools verified",
+    status: "33 fixture tools verified",
     href: "/dev/admin#mcp"
   }
 ];
 
 export default function HomePage() {
   const isFixturePreview = fixturePreviewEnabled();
+  const isProduction =
+    process.env.NODE_ENV === "production" && !isFixturePreview;
   const environmentLabel = isFixturePreview
     ? "Protected fixture preview"
     : process.env.NODE_ENV === "production"
       ? "Production shell"
       : "Local development";
   const buildIdentity = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local";
+
+  if (isProduction) {
+    return (
+      <main>
+        <header className="topbar">
+          <div className="brandMark">E</div>
+          <div>
+            <p className="eyebrow">Estie learning</p>
+            <h1>Learn with clarity. Apply with confidence.</h1>
+          </div>
+          <div className="environment">
+            <span aria-hidden="true" />
+            Secure workspace
+          </div>
+        </header>
+        <section className="hero">
+          <div>
+            <p className="eyebrow">Your learning companion</p>
+            <h2>Course knowledge, ready when you are.</h2>
+            <p className="lede">
+              Continue your courses, ask grounded questions by text or voice,
+              and keep your progress in one private workspace.
+            </p>
+            <div className="homeActions">
+              <Link className="homePrimary" href="/app">
+                Open my workspace
+              </Link>
+              <Link className="homeSecondary" href="/auth/sign-in">
+                Sign in
+              </Link>
+            </div>
+          </div>
+          <aside className="sprint">
+            <p className="eyebrow">For learning teams</p>
+            <strong>One source of truth</strong>
+            <p>
+              Tenant-isolated course content, learner progress, grounded
+              conversation and controlled publishing.
+            </p>
+          </aside>
+        </section>
+        <section className="launchStrip" aria-label="Product capabilities">
+          <article><strong>Text + voice</strong><span>one learning conversation</span></article>
+          <article><strong>Real progress</strong><span>course and lesson continuity</span></article>
+          <article><strong>Grounded</strong><span>answers tied to source material</span></article>
+          <article><strong>Private</strong><span>tenant-bound access controls</span></article>
+        </section>
+        <footer className="launchFooter">
+          <div>
+            <p className="eyebrow">Environment</p>
+            <strong>Production · build {buildIdentity}</strong>
+          </div>
+          <div>
+            <Link href="/api/health">Service status</Link>
+          </div>
+        </footer>
+      </main>
+    );
+  }
 
   return (
     <main>
@@ -125,8 +186,8 @@ export default function HomePage() {
 
       <section className="launchStrip" aria-label="Launch inventory">
         <article><strong>11</strong><span>visual product surfaces</span></article>
-        <article><strong>28</strong><span>management MCP tools</span></article>
-        <article><strong>41</strong><span>structurally verified tables</span></article>
+        <article><strong>33</strong><span>fixture-enabled MCP tools</span></article>
+        <article><strong>42</strong><span>RLS-enabled tenant tables</span></article>
         <article>
           <strong>{isFixturePreview ? "Protected" : "Durable Auth"}</strong>
           <span>{isFixturePreview ? "preview access boundary" : "production access boundary"}</span>

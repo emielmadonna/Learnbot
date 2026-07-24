@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
 import {
+  authenticatedConsoleHeaders,
   ConsoleApiClient,
   GrantAuthorizer,
   IdempotencyStore,
   McpSafeError,
   mutationHeaders,
   parseGrantConfiguration,
+  ProcessBearerCredential,
   safeError,
   type MutationContext,
 } from "./enterprise-control.js";
@@ -349,6 +351,103 @@ test("control-plane failures are safe and never expose upstream secrets", async 
   assert.equal(payload.retryable, true);
   assert.equal(payload.requestId, context.requestId);
   assert.doesNotMatch(JSON.stringify(payload), /super-secret|database password/i);
+});
+
+test("process bearer credentials are bounded, standard and fail closed", () => {
+  const token = "header.payload.signature";
+  const configured = new ProcessBearerCredential(token);
+  assert.equal(configured.configured, true);
+  assert.equal(configured.configurationValid, true);
+  assert.deepEqual(configured.requestHeaders("request-bearer"), {
+    authorization: `Bearer ${token}`,
+  });
+
+  const missing = new ProcessBearerCredential(undefined);
+  assert.equal(missing.configured, false);
+  assert.equal(missing.configurationValid, true);
+  assert.throws(
+    () => missing.requestHeaders(),
+    (error: unknown) =>
+      error instanceof McpSafeError && error.code === "MCP_ACCESS_DENIED",
+  );
+
+  const malformed = new ProcessBearerCredential("token with whitespace");
+  assert.equal(malformed.configured, true);
+  assert.equal(malformed.configurationValid, false);
+  assert.throws(
+    () => malformed.requestHeaders("request-malformed"),
+    (error: unknown) =>
+      error instanceof McpSafeError &&
+      error.code === "MCP_INVALID_CONFIGURATION" &&
+      error.requestId === "request-malformed" &&
+      !JSON.stringify(safeError(error)).includes("token with whitespace"),
+  );
+  assert.equal(
+    new ProcessBearerCredential(" header.payload.signature ")
+      .configurationValid,
+    false,
+  );
+});
+
+test("control-plane client forwards an authenticated bearer without returning it", async () => {
+  const token = "opaque-production-access-token";
+  let receivedAuthorization: string | null = null;
+  const client = new ConsoleApiClient(
+    "https://control.invalid",
+    async (_input, init) => {
+      receivedAuthorization = new Headers(init?.headers).get("authorization");
+      return new Response(JSON.stringify({ ok: true, dataMode: "durable" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  );
+  const credential = new ProcessBearerCredential(token);
+  const response = await client.request<{ ok: boolean }>(
+    "/api/learning/workspace",
+    { headers: credential.requestHeaders() },
+  );
+  assert.equal(receivedAuthorization, `Bearer ${token}`);
+  assert.deepEqual(response, { ok: true, dataMode: "durable" });
+  assert.doesNotMatch(JSON.stringify(response), new RegExp(token));
+});
+
+test("authenticated mutation headers satisfy the same-origin boundary", () => {
+  const credential = new ProcessBearerCredential(
+    "header.payload.signature",
+  );
+  assert.deepEqual(
+    authenticatedConsoleHeaders(
+      credential,
+      "https://learning.example/app",
+      "GET",
+    ),
+    { authorization: "Bearer header.payload.signature" },
+  );
+  assert.deepEqual(
+    authenticatedConsoleHeaders(
+      credential,
+      "https://learning.example/app",
+      "POST",
+    ),
+    {
+      authorization: "Bearer header.payload.signature",
+      origin: "https://learning.example",
+    },
+  );
+  assert.throws(
+    () =>
+      authenticatedConsoleHeaders(
+        credential,
+        "not a valid URL",
+        "POST",
+        "request-origin",
+      ),
+    (error: unknown) =>
+      error instanceof McpSafeError &&
+      error.code === "MCP_INVALID_CONFIGURATION" &&
+      error.requestId === "request-origin",
+  );
 });
 
 test("oversized control-plane output is rejected before reaching the MCP client", async () => {

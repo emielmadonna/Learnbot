@@ -4,12 +4,39 @@ Provider-agnostic management control surface over MCP stdio. It uses the same
 tenant-aware console APIs as the user interfaces; it never reads a database,
 provider credential, or Vault directly.
 
+The server now exposes five production-data learning tools:
+
+- `get_authenticated_learning_workspace`
+- `search_authenticated_learning`
+- `get_authenticated_learning_conversations`
+- `start_authenticated_learning_conversation`
+- `respond_in_authenticated_learning_conversation`
+
+They call authenticated `/api/learning/*` services with a standard bearer
+credential. The tools can read the durable workspace, search published source
+evidence, list or start persisted conversations, and record a grounded exchange
+through the configured provider adapter. The control plane resolves the active
+tenant from the verified principal; the MCP caller cannot submit or override a
+tenant identifier.
+
+The 27 fixture-only tools from the original development set are hidden by
+default. This includes `get_build_plan` and every tool bound to the fixed
+development tenant or `/api/dev/*` routes. They are available only when the MCP
+process sets the exact opt-in `COURSE_AI_MCP_FIXTURE_MODE=enabled`. Fixture
+course, authoring, ingestion, branding, intelligence, and privacy operations
+are not production-data or production-authorization evidence.
+`get_mcp_health` remains visible in every mode and reports fixture exposure as
+disabled with zero exposed tools unless the opt-in is active.
+
 ## Tools
 
 Read tools:
 
 - `get_build_plan`
 - `get_mcp_health`
+- `get_authenticated_learning_workspace` (durable, authenticated)
+- `search_authenticated_learning` (durable, authenticated)
+- `get_authenticated_learning_conversations` (durable, authenticated)
 - `list_platform_capabilities`
 - `list_courses`
 - `get_ingestion_job`
@@ -20,8 +47,10 @@ Read tools:
 - `get_intelligence_snapshot`
 - `get_privacy_operations_snapshot`
 
-Grant-controlled mutation tools:
+Mutation tools:
 
+- `start_authenticated_learning_conversation` (durable bearer identity)
+- `respond_in_authenticated_learning_conversation` (durable bearer identity)
 - `create_course_shell`
 - `update_course_shell`
 - `add_course_lesson`
@@ -43,9 +72,49 @@ Grant-controlled mutation tools:
 `get_mcp_health` reports capability and authorization readiness without exposing
 grant IDs, actors, tenants, or secrets.
 
+## Durable learning authorization
+
+Configure a verified user's short-lived bearer access token in the MCP process:
+
+```bash
+COURSE_AI_MCP_CONSOLE_BEARER_TOKEN="<short-lived-user-access-token>"
+```
+
+The token is forwarded only in the `Authorization: Bearer ...` request header.
+It is bounded and validated before use, is never returned in MCP output, and is
+not accepted as a tool argument. Missing or malformed configuration fails
+closed. Because the current stdio transport has one process-wide environment,
+this is a process-bound principal: run a separate MCP process per user and
+rotate the token when the Supabase session refreshes.
+
+This is a truthful authenticated learning lane, not the final remote MCP identity
+architecture. Durable conversation mutations additionally require explicit,
+bounded idempotency keys and send a same-origin header required by the console
+mutation boundary. Grounded response availability also depends on the console's
+server-side provider and conversation-operation-token configuration.
+Production multi-user remote transport still requires
+connection-bound token refresh, principal-filtered tool discovery, durable
+grants, metering, and idempotency. The legacy mutation grants below continue to
+authorize fixture operations only.
+
+## Fixture compatibility mode
+
+Production discovery exposes exactly six tools: general health plus the five
+durable authenticated learning tools. To run the legacy development fixture
+surface intentionally:
+
+```bash
+COURSE_AI_MCP_FIXTURE_MODE=enabled pnpm --filter @course-ai/mcp-server smoke
+```
+
+The value is exact and case-sensitive. Missing, empty, `true`, or any value
+other than `enabled` leaves fixture tools undiscoverable. The smoke client also
+passes this opt-in explicitly to its child MCP process. Never configure fixture
+mode in a deployed production MCP process.
+
 ## Write authorization
 
-Writes deny by default. Configure least-privilege grants through
+Legacy fixture writes deny by default. Configure their least-privilege grants through
 `COURSE_AI_MCP_GRANTS`:
 
 ```json
@@ -71,7 +140,7 @@ The example digest is SHA-256 for the illustrative token
 `correct-horse-battery-staple`; issue a random, high-entropy token in real
 environments and store only its digest in the grant configuration.
 
-Every mutation requires `tenantId`, `actorId`, `requestId`, `grantId`,
+Every legacy fixture mutation requires `tenantId`, `actorId`, `requestId`, `grantId`,
 `grantToken`, and an `idempotencyKey`. A grant is valid only for its exact
 tenant, actor, token digest, and permission. Missing, malformed, cross-tenant,
 cross-actor, invalid-token, expired, over-budget, and insufficient grants fail
@@ -119,12 +188,14 @@ pnpm --filter @course-ai/mcp-server smoke
 node packages/mcp-server/dist/server.js
 ```
 
-The smoke test expects the shared console API at
+The fixture smoke test expects the shared console API at
 `COURSE_AI_CONSOLE_URL` (default `http://127.0.0.1:3100`). Unit tests cover
 deny-by-default authorization, cross-tenant and cross-actor denial, malformed
 grant configuration, expiry and budget denial, idempotent reservation and
 rate enforcement, mutation replay/conflicts, bounded output, audit metadata,
-and safe upstream failures. The
-stdio smoke verifies all 28 tools, shared authoring, intelligence, and privacy
-API snapshots, authorized authoring, course, feedback, and manifest operations,
-and a denied write.
+and safe upstream failures. The stdio smoke verifies discovery of all 33 tools.
+When a durable bearer is provided, it also reads the authenticated workspace,
+searches published learning, and reads persisted conversations. The fixture
+portion continues to verify shared authoring, intelligence, and privacy
+snapshots, authorized authoring, course, feedback, and manifest operations, and
+a denied write.

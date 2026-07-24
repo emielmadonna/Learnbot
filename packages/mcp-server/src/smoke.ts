@@ -35,9 +35,16 @@ const transport = new StdioClientTransport({
   args: ["dist/server.js"],
   env: {
     ...getDefaultEnvironment(),
+    COURSE_AI_MCP_FIXTURE_MODE: "enabled",
     COURSE_AI_MCP_GRANTS: process.env.COURSE_AI_MCP_GRANTS,
     ...(process.env.COURSE_AI_CONSOLE_URL
       ? { COURSE_AI_CONSOLE_URL: process.env.COURSE_AI_CONSOLE_URL }
+      : {}),
+    ...(process.env.COURSE_AI_MCP_CONSOLE_BEARER_TOKEN
+      ? {
+          COURSE_AI_MCP_CONSOLE_BEARER_TOKEN:
+            process.env.COURSE_AI_MCP_CONSOLE_BEARER_TOKEN,
+        }
       : {}),
   },
 });
@@ -49,6 +56,11 @@ try {
   const expectedTools = [
     "get_build_plan",
     "get_mcp_health",
+    "get_authenticated_learning_workspace",
+    "search_authenticated_learning",
+    "get_authenticated_learning_conversations",
+    "start_authenticated_learning_conversation",
+    "respond_in_authenticated_learning_conversation",
     "list_platform_capabilities",
     "list_courses",
     "get_ingestion_job",
@@ -100,6 +112,41 @@ try {
 
   if (!health.structuredContent || health.isError) {
     throw new Error("MCP health call did not return structured content");
+  }
+
+  if (process.env.COURSE_AI_MCP_CONSOLE_BEARER_TOKEN) {
+    const durableWorkspace = await client.callTool({
+      name: "get_authenticated_learning_workspace",
+      arguments: {},
+    });
+    if (!durableWorkspace.structuredContent || durableWorkspace.isError) {
+      throw new Error(
+        "Authenticated durable workspace MCP call did not return structured content",
+      );
+    }
+
+    const durableSearch = await client.callTool({
+      name: "search_authenticated_learning",
+      arguments: { query: "learning", limit: 2 },
+    });
+    if (!durableSearch.structuredContent || durableSearch.isError) {
+      throw new Error(
+        "Authenticated durable search MCP call did not return structured content",
+      );
+    }
+
+    const durableConversations = await client.callTool({
+      name: "get_authenticated_learning_conversations",
+      arguments: {},
+    });
+    if (
+      !durableConversations.structuredContent ||
+      durableConversations.isError
+    ) {
+      throw new Error(
+        "Authenticated durable conversation MCP call did not return structured content",
+      );
+    }
   }
 
   const snapshot = await client.callTool({

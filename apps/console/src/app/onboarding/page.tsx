@@ -12,11 +12,13 @@ import { DurableWorkspace } from "./durable-workspace";
 
 const statusMessages: Record<string, string> = {
   workspace_created:
-    "Your durable tenant and owner membership were created successfully.",
+    "Your workspace is ready and you are signed in as its owner.",
   workspace_restored:
-    "Your existing tenant was restored. No duplicate workspace was created.",
-  tenant_selected: "Your active tenant was changed and the session was refreshed.",
-  session_refreshed: "Your authenticated tenant claims are now current.",
+    "Welcome back. We found your existing workspace and opened it safely.",
+  workspace_claimed:
+    "Estie’s prepared workspace is now connected to your account.",
+  tenant_selected: "Your learning workspace is now active.",
+  session_refreshed: "Your secure session is up to date.",
   profile_updated: "Company, identity mode, and brand settings were saved.",
   step_updated: "The durable readiness step was updated.",
   invitation_created:
@@ -28,11 +30,13 @@ const statusMessages: Record<string, string> = {
 
 const errorMessages: Record<string, string> = {
   bootstrap_failed:
-    "The workspace was not created. Verify the values and try again; no fixture fallback was used.",
+    "We could not create the workspace. Check the details and try again.",
+  owner_claim_failed:
+    "That one-time owner claim is invalid, expired, or already used.",
   selection_failed:
     "That tenant could not be selected. Its membership may no longer be active.",
   refresh_failed:
-    "The authenticated session could not be refreshed. Sign in again before continuing.",
+    "Your session could not be refreshed. Sign in again before continuing.",
   access_denied: "Your current role cannot perform that onboarding action.",
   idempotency_conflict:
     "That request conflicts with an earlier operation. Reload and try again.",
@@ -47,7 +51,7 @@ const errorMessages: Record<string, string> = {
   policy_decision_required:
     "This policy gate requires an approved human decision and cannot be completed here.",
   request_failed:
-    "The durable onboarding request failed. No fixture data was substituted.",
+    "That onboarding step could not be saved. Nothing was changed.",
   slug_conflict: "That workspace URL is already in use.",
   step_not_found: "That readiness step no longer exists.",
   tenant_selection_required: "Select a tenant before managing onboarding.",
@@ -106,11 +110,11 @@ export default async function OnboardingPage({
     return (
       <main className={styles.shell}>
         <section className={styles.card}>
-          <p className={styles.eyebrow}>Durable boundary unavailable</p>
+          <p className={styles.eyebrow}>Workspace unavailable</p>
           <h1 className={styles.title}>We could not verify your workspace.</h1>
           <p className={styles.error} role="alert">
-            The tenant bridge RPCs are unavailable or denied. Access remains
-            closed; no demo data was substituted.
+            Secure workspace access is temporarily unavailable. Your data
+            remains closed and unchanged.
           </p>
           <form action="/auth/sign-out" method="post">
             <button className={styles.secondaryButton} type="submit">
@@ -133,7 +137,7 @@ export default async function OnboardingPage({
       snapshot = await getOnboardingSnapshot(supabase);
     } catch {
       snapshotError =
-        "The durable onboarding snapshot could not be verified. Access remains closed and no fixture was substituted.";
+        "We could not load the latest workspace setup. Your data remains closed and unchanged.";
     }
   }
 
@@ -145,17 +149,17 @@ export default async function OnboardingPage({
           Estie learning
         </Link>
         <section className={styles.wideCard}>
-          <p className={styles.eyebrow}>Authenticated onboarding</p>
+          <p className={styles.eyebrow}>Workspace setup</p>
           <h1 className={styles.title}>
             {memberships.length === 0
-              ? "Create your company workspace."
+              ? "Let’s connect your learning workspace."
               : context.selected
-                ? "Prepare the client for launch."
-                : "Choose your learning workspace."}
+                ? "Make the workspace ready for your team."
+                : "Choose where you want to learn."}
           </h1>
           <p className={styles.lede}>
-            Signed in as {user.email ?? "a verified user"}. Tenant membership
-            and selection are checked against durable Supabase state.
+            Signed in as {user.email ?? "a verified user"}. Choose the path
+            that matches how you joined.
           </p>
           {statusMessages[status] ? (
             <p className={styles.notice} role="status">
@@ -173,32 +177,75 @@ export default async function OnboardingPage({
             </p>
           ) : null}
 
-          <section className={styles.acceptancePanel}>
-            <div>
-              <strong>Joining a client workspace?</strong>
-              <span>
-                Sign in with the exact invited email, then enter the opaque
-                invitation ID. The server never accepts an email override.
-              </span>
-            </div>
-            <form action="/onboarding/invitation/accept" method="post">
-              <label className={styles.field}>
-                Invitation ID
-                <input
-                  className={styles.input}
-                  name="invitationId"
-                  required
-                  maxLength={512}
-                  placeholder="onboarding-invite:…"
-                />
-              </label>
-              <button className={styles.secondaryButton} type="submit">
-                Accept invitation
-              </button>
-            </form>
-          </section>
-
           {memberships.length === 0 ? (
+            <>
+            <section className={styles.primaryAcceptancePanel}>
+              <div>
+                <p className={styles.optionLabel}>Workspace owner</p>
+                <strong>Estie’s learning library is already prepared.</strong>
+                <span>
+                  Enter the one-time owner code from your private handoff to
+                  connect the courses and learning assistant to this account.
+                </span>
+              </div>
+              <form action="/auth/claim-tenant" method="post">
+                <label className={styles.field}>
+                  Workspace
+                  <input
+                    className={styles.input}
+                    name="slug"
+                    required
+                    minLength={2}
+                    maxLength={63}
+                    defaultValue="estie-starr"
+                  />
+                </label>
+                <label className={styles.field}>
+                  One-time owner code
+                  <input
+                    className={styles.input}
+                    name="claimToken"
+                    required
+                    minLength={32}
+                    maxLength={256}
+                    type="password"
+                    autoComplete="one-time-code"
+                    placeholder="Paste your private code"
+                  />
+                </label>
+                <button className={styles.button} type="submit">
+                  Open Estie’s workspace
+                </button>
+              </form>
+            </section>
+            <section className={styles.acceptancePanel}>
+              <div>
+                <p className={styles.optionLabel}>Invited teammate</p>
+                <strong>Joining a client workspace?</strong>
+                <span>
+                  Sign in with the email that received the invitation, then
+                  paste the private invitation code.
+                </span>
+              </div>
+              <form action="/onboarding/invitation/accept" method="post">
+                <label className={styles.field}>
+                  Invitation code
+                  <input
+                    className={styles.input}
+                    name="invitationId"
+                    required
+                    maxLength={512}
+                    placeholder="Paste invitation code"
+                  />
+                </label>
+                <button className={styles.secondaryButton} type="submit">
+                  Join workspace
+                </button>
+              </form>
+            </section>
+            <div className={styles.divider}>
+              <span>or start a new company workspace</span>
+            </div>
             <form className={styles.form} action="/auth/bootstrap" method="post">
               <div className={styles.grid}>
                 <label className={styles.field}>
@@ -268,9 +315,10 @@ export default async function OnboardingPage({
                 </label>
               </div>
               <button className={styles.button} type="submit">
-                Create secure workspace
+                Create new workspace
               </button>
             </form>
+            </>
           ) : (
             <>
               <div className={styles.membershipList}>
@@ -319,6 +367,31 @@ export default async function OnboardingPage({
                   identityRole={context.identityRole}
                 />
               ) : null}
+              <section className={styles.acceptancePanel}>
+                <div>
+                  <p className={styles.optionLabel}>Another workspace</p>
+                  <strong>Have a team invitation?</strong>
+                  <span>
+                    Paste its private code to add that workspace to this
+                    account.
+                  </span>
+                </div>
+                <form action="/onboarding/invitation/accept" method="post">
+                  <label className={styles.field}>
+                    Invitation code
+                    <input
+                      className={styles.input}
+                      name="invitationId"
+                      required
+                      maxLength={512}
+                      placeholder="Paste invitation code"
+                    />
+                  </label>
+                  <button className={styles.secondaryButton} type="submit">
+                    Join workspace
+                  </button>
+                </form>
+              </section>
             </>
           )}
 
@@ -328,9 +401,6 @@ export default async function OnboardingPage({
                 Sign out
               </button>
             </form>
-            <Link className={styles.secondaryButton} href="/dev/onboarding">
-              View labeled fixture preview
-            </Link>
           </div>
         </section>
       </div>

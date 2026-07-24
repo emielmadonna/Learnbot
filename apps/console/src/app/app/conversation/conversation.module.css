@@ -1,0 +1,985 @@
+.shell {
+  --rail: 268px;
+  min-height: 100vh;
+  background: var(--brand-surface);
+  color: var(--brand-text);
+  font-family:
+    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+.closed {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background: #f5f4ef;
+  color: #17231e;
+}
+
+.closed section {
+  width: min(520px, 100%);
+  padding: 40px;
+  border: 1px solid #dfe2dc;
+  border-radius: 24px;
+  background: #fff;
+  text-align: center;
+}
+
+.closed h1 {
+  margin: 20px 0 8px;
+  font-family: Georgia, serif;
+  font-size: 34px;
+  font-weight: 500;
+}
+
+.closedMark,
+.brandMark {
+  display: grid;
+  width: 39px;
+  height: 39px;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--brand-primary, #234f40);
+  color: #fff;
+  font-family: Georgia, serif;
+}
+
+.workspace {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+}
+
+.contextRail {
+  position: sticky;
+  top: 0;
+  display: flex;
+  height: 100vh;
+  box-sizing: border-box;
+  flex-direction: column;
+  padding: 24px 18px;
+  border-right: 1px solid color-mix(in srgb, var(--brand-text) 10%, transparent);
+  background: color-mix(in srgb, var(--brand-surface) 94%, white);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 7px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand > span:last-child,
+.assistantIdentity > span:last-child,
+.identity > div {
+  display: grid;
+  min-width: 0;
+}
+
+.brand b {
+  font-family: Georgia, serif;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.brand small,
+.assistantIdentity small,
+.identity small {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--brand-text) 54%, transparent);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 34px 8px 0;
+  color: color-mix(in srgb, var(--brand-text) 62%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.contextCard {
+  display: grid;
+  gap: 14px;
+  margin-top: 31px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 13%, transparent);
+  border-radius: 18px;
+  background: rgb(255 255 255 / 70%);
+}
+
+.contextCard > p {
+  margin: 0;
+  color: var(--brand-primary);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.contextCard label {
+  display: grid;
+  gap: 6px;
+}
+
+.contextCard label > span {
+  color: color-mix(in srgb, var(--brand-text) 54%, transparent);
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.contextCard select {
+  width: 100%;
+  padding: 9px 28px 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--brand-text) 12%, transparent);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--brand-text);
+  font: inherit;
+  font-size: 10px;
+  outline: 0;
+}
+
+.contextCard select:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 9%, transparent);
+}
+
+.contextCard > small {
+  color: color-mix(in srgb, var(--brand-text) 48%, transparent);
+  font-size: 8px;
+  line-height: 1.55;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 12px 8px;
+}
+
+.identity > span {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand-primary);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.identity b {
+  font-size: 10px;
+}
+
+.conversation {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 100vh;
+  grid-template-rows: auto 1fr auto;
+  background:
+    radial-gradient(
+      circle at 50% -8%,
+      color-mix(in srgb, var(--brand-accent) 7%, transparent),
+      transparent 35%
+    ),
+    color-mix(in srgb, var(--brand-surface) 97%, white);
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  min-height: 72px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 30px;
+  border-bottom: 1px solid color-mix(in srgb, var(--brand-text) 8%, transparent);
+  background: color-mix(in srgb, var(--brand-surface) 86%, transparent);
+  backdrop-filter: blur(20px);
+}
+
+.assistantIdentity {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.assistantIdentity b {
+  font-family: Georgia, serif;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.orb,
+.messageOrb,
+.welcomeOrb {
+  display: block;
+  flex: 0 0 auto;
+  border-radius: 48% 52% 43% 57% / 58% 42% 58% 42%;
+  background: radial-gradient(
+    circle at 32% 28%,
+    color-mix(in srgb, var(--brand-accent) 75%, white),
+    var(--brand-primary) 62%,
+    #162c25
+  );
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--brand-primary) 7%, transparent);
+  animation: float 5s ease-in-out infinite;
+}
+
+.orb {
+  width: 31px;
+  height: 31px;
+}
+
+.modeSwitch {
+  display: flex;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--brand-text) 10%, transparent);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 75%);
+}
+
+.modeSwitch button {
+  padding: 7px 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--brand-text) 51%, transparent);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 730;
+}
+
+.modeSwitch button span {
+  margin-right: 4px;
+  color: #dc765c;
+  font-size: 6px;
+}
+
+.modeSwitch .modeActive {
+  background: #fff;
+  color: var(--brand-primary);
+  box-shadow: 0 2px 8px rgb(20 39 31 / 8%);
+}
+
+.mobileBack {
+  display: none;
+  color: inherit;
+  text-decoration: none;
+}
+
+.feed {
+  width: min(780px, 100%);
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 64px 34px 190px;
+}
+
+.loading {
+  display: grid;
+  min-height: 45vh;
+  place-items: center;
+  align-content: center;
+  gap: 16px;
+  color: color-mix(in srgb, var(--brand-text) 52%, transparent);
+  font-size: 11px;
+}
+
+.loading p {
+  margin: 0;
+}
+
+.welcome {
+  display: grid;
+  min-height: 48vh;
+  place-items: center;
+  align-content: center;
+  text-align: center;
+}
+
+.welcomeOrb {
+  width: 62px;
+  height: 62px;
+  margin-bottom: 25px;
+  box-shadow:
+    0 0 0 11px color-mix(in srgb, var(--brand-primary) 5%, transparent),
+    0 18px 40px color-mix(in srgb, var(--brand-primary) 16%, transparent);
+}
+
+.welcome > p,
+.voiceNotice > div > p {
+  margin: 0 0 10px;
+  color: var(--brand-primary);
+  font-size: 8px;
+  font-weight: 820;
+  letter-spacing: 0.15em;
+}
+
+.welcome h1,
+.voiceNotice h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(35px, 4vw, 50px);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+.welcome > span,
+.voiceNotice > div > span {
+  max-width: 520px;
+  margin-top: 14px;
+  color: color-mix(in srgb, var(--brand-text) 58%, transparent);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.welcome > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 28px;
+}
+
+.welcome button {
+  padding: 10px 13px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 13%, transparent);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 72%);
+  color: color-mix(in srgb, var(--brand-text) 68%, transparent);
+  font: inherit;
+  font-size: 9px;
+}
+
+.welcome button:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 30%, transparent);
+  color: var(--brand-primary);
+}
+
+.assistantMessage,
+.userMessage {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  margin: 0 0 34px;
+}
+
+.userMessage {
+  justify-content: flex-end;
+}
+
+.assistantMessage > div,
+.userMessage > div {
+  max-width: min(620px, 88%);
+}
+
+.assistantMessage > div > p,
+.userMessage > div > p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.assistantMessage > div > p {
+  color: color-mix(in srgb, var(--brand-text) 86%, transparent);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.userMessage > div {
+  padding: 12px 15px;
+  border-radius: 16px 16px 5px 16px;
+  background: var(--brand-primary);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.messageOrb {
+  width: 27px;
+  height: 27px;
+  margin-top: 2px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-primary) 6%, transparent);
+}
+
+.sources {
+  margin-top: 15px;
+}
+
+.sources summary {
+  color: var(--brand-primary);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 750;
+  list-style-position: inside;
+}
+
+.sources > div {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sources article {
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 11%, transparent);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 70%);
+}
+
+.sources article b,
+.sources article small {
+  display: block;
+}
+
+.sources article b {
+  font-size: 10px;
+}
+
+.sources article small {
+  margin-top: 2px;
+  color: color-mix(in srgb, var(--brand-text) 48%, transparent);
+  font-size: 8px;
+}
+
+.sources article p {
+  margin: 7px 0 0;
+  color: color-mix(in srgb, var(--brand-text) 66%, transparent);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.thinkingDots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+}
+
+.thinkingDots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-primary) 55%, transparent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.thinkingDots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.thinkingDots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+.composerArea {
+  position: fixed;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  left: var(--rail);
+  box-sizing: border-box;
+  padding: 18px 30px 20px;
+  background: linear-gradient(
+    transparent,
+    color-mix(in srgb, var(--brand-surface) 96%, white) 28%
+  );
+}
+
+.composerArea > p:not(.error) {
+  margin: 8px 0 0;
+  color: color-mix(in srgb, var(--brand-text) 46%, transparent);
+  font-size: 8px;
+  text-align: center;
+}
+
+.composer {
+  display: grid;
+  width: min(720px, 100%);
+  box-sizing: border-box;
+  grid-template-columns: 1fr auto auto;
+  align-items: end;
+  gap: 8px;
+  margin: 0 auto;
+  padding: 9px 9px 9px 17px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 16%, transparent);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 16px 55px rgb(19 42 32 / 11%);
+}
+
+.composer textarea {
+  min-height: 34px;
+  max-height: 140px;
+  box-sizing: border-box;
+  padding: 8px 0;
+  border: 0;
+  resize: none;
+  background: transparent;
+  color: var(--brand-text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  outline: 0;
+}
+
+.composer textarea::placeholder {
+  color: color-mix(in srgb, var(--brand-text) 40%, transparent);
+}
+
+.micButton,
+.sendButton {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  font: inherit;
+}
+
+.micButton {
+  background: color-mix(in srgb, var(--brand-primary) 8%, transparent);
+  color: #dd755a;
+  font-size: 8px;
+}
+
+.sendButton {
+  background: var(--brand-primary);
+  color: #fff;
+  font-size: 16px;
+}
+
+.sendButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.error {
+  width: min(720px, 100%);
+  box-sizing: border-box;
+  margin: 0 auto 9px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #fff0ed;
+  color: #873a2c;
+  font-size: 9px;
+}
+
+.voiceNotice {
+  display: grid;
+  min-height: calc(100vh - 72px);
+  box-sizing: border-box;
+  place-items: center;
+  align-content: center;
+  padding: 54px 30px 80px;
+  text-align: center;
+}
+
+.voiceNotice > div {
+  display: grid;
+  place-items: center;
+  margin-top: 34px;
+}
+
+.voiceOrb {
+  position: relative;
+  display: grid;
+  width: 136px;
+  height: 136px;
+  place-items: center;
+  border-radius: 46% 54% 58% 42% / 54% 43% 57% 46%;
+  background:
+    radial-gradient(circle at 31% 27%, #fff7d8 0%, transparent 22%),
+    radial-gradient(
+      circle at 55% 58%,
+      color-mix(in srgb, var(--brand-accent) 66%, white),
+      var(--brand-primary) 72%
+    );
+  box-shadow:
+    0 0 0 18px color-mix(in srgb, var(--brand-primary) 5%, transparent),
+    0 28px 70px color-mix(in srgb, var(--brand-primary) 19%, transparent);
+  animation: voiceFloat 7s ease-in-out infinite;
+}
+
+.voiceOrb i {
+  position: absolute;
+  width: 5px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 75%);
+}
+
+.voiceOrb i:nth-child(1) {
+  height: 17px;
+  transform: translateX(-12px);
+}
+
+.voiceOrb i:nth-child(2) {
+  height: 28px;
+}
+
+.voiceOrb i:nth-child(3) {
+  height: 12px;
+  transform: translateX(12px);
+}
+
+.voiceOrb_recording {
+  animation: voiceListening 1.15s ease-in-out infinite;
+}
+
+.voiceOrb_transcribing,
+.voiceOrb_thinking {
+  animation: thinking 1.4s ease-in-out infinite;
+}
+
+.voiceOrb_speaking {
+  animation: voiceSpeaking 0.9s ease-in-out infinite;
+}
+
+.voiceOrb_recording i,
+.voiceOrb_speaking i {
+  animation: voiceBar 0.8s ease-in-out infinite alternate;
+}
+
+.voiceOrb_recording i:nth-child(2),
+.voiceOrb_speaking i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.voiceOrb_recording i:nth-child(3),
+.voiceOrb_speaking i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+.voiceButton {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  margin-top: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-text) 9%, transparent);
+  color: color-mix(in srgb, var(--brand-text) 32%, transparent);
+  font-size: 10px;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.voiceButton:not(:disabled) {
+  background: var(--brand-primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+.voiceButton:not(:disabled):hover {
+  transform: scale(1.04);
+}
+
+.voiceButton:disabled {
+  cursor: wait;
+  opacity: 0.52;
+}
+
+.voiceButtonRecording {
+  background: #da7058 !important;
+  box-shadow: 0 0 0 8px rgb(218 112 88 / 11%);
+}
+
+.voiceTurn {
+  width: min(540px, 100%);
+  max-height: 180px;
+  box-sizing: border-box;
+  gap: 7px;
+  overflow: auto;
+  margin-top: 24px !important;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 11%, transparent);
+  border-radius: 15px;
+  background: rgb(255 255 255 / 66%);
+  text-align: left;
+}
+
+.voiceTurn small {
+  color: var(--brand-primary);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.voiceTurn p {
+  margin: 0 0 7px;
+  color: color-mix(in srgb, var(--brand-text) 78%, transparent);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.voiceTurn p:last-child {
+  margin-bottom: 0;
+}
+
+.voiceError {
+  width: min(480px, 100%);
+  box-sizing: border-box;
+  margin: 18px 0 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #fff0ed;
+  color: #873a2c;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.voiceDisclosure {
+  margin-top: 11px;
+  color: color-mix(in srgb, var(--brand-text) 42%, transparent);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.continueText {
+  margin-top: 14px;
+  padding: 9px 13px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 15%, transparent);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--brand-primary);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.orbThinking {
+  animation: thinking 1.4s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: rotate(-4deg) scale(1);
+  }
+  50% {
+    transform: rotate(7deg) scale(1.06);
+  }
+}
+
+@keyframes voiceFloat {
+  0%,
+  100% {
+    transform: rotate(-3deg) scale(1);
+    border-radius: 46% 54% 58% 42% / 54% 43% 57% 46%;
+  }
+  50% {
+    transform: rotate(5deg) scale(1.045);
+    border-radius: 55% 45% 43% 57% / 44% 57% 43% 56%;
+  }
+}
+
+@keyframes voiceListening {
+  0%,
+  100% {
+    transform: scale(0.96) rotate(-3deg);
+    box-shadow:
+      0 0 0 14px color-mix(in srgb, #da7058 5%, transparent),
+      0 22px 62px color-mix(in srgb, var(--brand-primary) 18%, transparent);
+  }
+  50% {
+    transform: scale(1.055) rotate(4deg);
+    box-shadow:
+      0 0 0 22px color-mix(in srgb, #da7058 9%, transparent),
+      0 30px 74px color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  }
+}
+
+@keyframes voiceSpeaking {
+  0%,
+  100% {
+    transform: scale(0.98) rotate(-2deg);
+  }
+  50% {
+    transform: scale(1.04) rotate(3deg);
+  }
+}
+
+@keyframes voiceBar {
+  from {
+    opacity: 0.5;
+    scale: 1 0.55;
+  }
+  to {
+    opacity: 1;
+    scale: 1 1.2;
+  }
+}
+
+@keyframes thinking {
+  0%,
+  100% {
+    transform: scale(0.92) rotate(-4deg);
+    filter: saturate(0.9);
+  }
+  50% {
+    transform: scale(1.08) rotate(7deg);
+    filter: saturate(1.25);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@media (max-width: 820px) {
+  .shell {
+    --rail: 0px;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .contextRail {
+    display: none;
+  }
+
+  .header {
+    min-height: 64px;
+    padding: 10px 14px;
+  }
+
+  .mobileBack {
+    display: grid;
+    width: 33px;
+    height: 33px;
+    place-items: center;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 65%);
+  }
+
+  .assistantIdentity {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .assistantIdentity .orb {
+    width: 26px;
+    height: 26px;
+  }
+
+  .assistantIdentity small {
+    display: none;
+  }
+
+  .modeSwitch button {
+    padding: 7px 9px;
+  }
+
+  .feed {
+    padding: 45px 18px 174px;
+  }
+
+  .composerArea {
+    left: 0;
+    padding: 15px 13px 15px;
+  }
+
+  .assistantMessage > div,
+  .userMessage > div {
+    max-width: 85%;
+  }
+
+  .voiceNotice {
+    min-height: calc(100vh - 64px);
+    padding: 45px 22px 72px;
+  }
+
+  .voiceOrb {
+    width: 112px;
+    height: 112px;
+  }
+}
+
+@media (max-width: 480px) {
+  .assistantIdentity b {
+    font-size: 13px;
+  }
+
+  .modeSwitch button:first-child {
+    display: none;
+  }
+
+  .welcome {
+    min-height: 43vh;
+  }
+
+  .welcomeOrb {
+    width: 54px;
+    height: 54px;
+  }
+
+  .welcome h1,
+  .voiceNotice h1 {
+    font-size: 34px;
+  }
+
+  .welcome > div {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .welcome button {
+    border-radius: 12px;
+  }
+
+  .assistantMessage > div > p {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb,
+  .messageOrb,
+  .welcomeOrb,
+  .voiceOrb,
+  .orbThinking,
+  .thinkingDots i,
+  .voiceOrb i {
+    animation: none;
+  }
+
+  .voiceButton {
+    transition: none;
+  }
+
+  .feed {
+    scroll-behavior: auto;
+  }
+}

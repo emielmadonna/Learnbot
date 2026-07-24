@@ -30,11 +30,12 @@ assistive-technology matrix, load test, restore, or legal policy.
 | WID-02, WID-08 | B / partial | The real custom element renders as a desktop panel and 390px mobile sheet, restores the same conversation after viewport changes, expands/restores, and passes deterministic pointer/keyboard/clamping fixtures. External host, assistive-technology, and browser-matrix evidence remains pending. | `pnpm --filter @course-ai/console smoke:widget`; Widget Lab browser QA; widget tests 3–4 |
 | WID-04, WID-06, WID-07 | B / partial | The real host simulator changes identity tier, tenant branding, and resolved/stale/ambiguous/unknown context at runtime; deterministic tests ensure the runtime never guesses. Production identity/context adapters remain pending. | Widget Lab browser QA; widget test 5 |
 | WID-05 | B / partial | Browser QA retains typed text/voice/evidence events and the conversation identifier across desktop/mobile/expanded changes; deterministic fixtures cover attachment/source/diagram/reconnect ordering. Live realtime media and signed uploads remain pending. | Widget Lab browser QA; widget tests 6–9 |
-| VOI-01, VOI-02 | B / partial | The unified Student conversation binds voice lifecycle to the authenticated tenant and actor, preserves the mounted text composer during voice presentation, restores draft/scroll/focus on exit, acknowledges interruption, and supports safe cancellation and text fallback. The integrated presentation expands from the real microphone origin; stale animation frames are cancelled during rapid reversals and reduced-motion mode has no artificial delay. Live low-latency speech/realtime providers, measured latency budgets, actual audio-energy animation, reconnect/resume, and production browser evidence remain pending. | `pnpm --filter @course-ai/console test`; `apps/console/test/voice-transition-contract.test.ts`; `/dev/chat` browser QA |
-| VOI-03–VOI-05 | Blocked / partial | Local controls do not retain raw audio by default and do not enable voice cloning. Approved O-07 recording policy, scope-specific cloning consent, live provider usage/cost telemetry, and production latency evidence remain unresolved; local fixtures are not evidence for these requirements. | Open decisions in `19-RISKS-AND-DECISIONS.md`; production adapter gap |
+| VOI-01, VOI-02 | B / partial | The authenticated `/app/conversation` supports a real bounded push-to-talk turn: ephemeral WebM is transcribed by `gpt-4o-mini-transcribe`, the transcript follows the same durable grounded response path as text, and the tenant-authorized saved answer is spoken by `gpt-4o-mini-tts` with the `marin` voice. The calm voice presentation exposes recording/transcribing/thinking/speaking state, supports playback interruption and text fallback, releases microphone/request/audio resources, and discloses both synthetic voice and the push-to-talk limitation. This is not yet continuous WebRTC Realtime voice or measured low-latency barge-in. | `pnpm --filter @course-ai/console test`, 37 cases; `apps/console/test/production-voice-turn-contract.test.ts`; production build |
+| VOI-03–VOI-05 | Blocked / partial | LearningBot does not persist the raw voice-turn audio and does not enable voice cloning. Approved O-07 recording policy, scope-specific cloning consent, durable provider usage/cost telemetry, production latency evidence, and full signed-in browser acceptance remain unresolved. | Open decisions in `19-RISKS-AND-DECISIONS.md`; production acceptance gap |
 | Identity verification | C / partial | The OIDC verifier enforces exact issuer, audience and algorithm policy; HTTPS local/remote JWKS selection and rotation; `exp`/`nbf`/`iat`/maximum-age/skew; bounded mapped identity claims; and stable non-leaking failures. Hostile tests prove that token tenant, role and scope claims never become authorization facts. Approved IdP registration, console wiring, SAML/client credentials and live login evidence remain pending. | `pnpm --filter @course-ai/identity-access test`; `packages/identity-access/src/oidc.ts` |
 | Secure upload intake | C / partial | The provider-neutral boundary requires an injected durable repository, atomically binds callback replay to an exact tenant/actor intent, issues only short-lived HTTPS grants bound to type/size, records magic-byte and malware results, and promotes only clean objects through an idempotent storage port. The memory repository is explicit test/local infrastructure. A PostgreSQL repository, signed-storage/scanner adapter, extraction worker and live upload evidence remain pending. | `pnpm --filter @course-ai/learning-pipeline test`; `packages/learning-pipeline/src/upload-boundary.ts` |
-| LLM provider adapter | C / partial | The OpenAI Responses adapter implements the neutral `LLMProvider`, resolves credentials through an injected server capability, requires HTTPS and a request-scoped model, sets `store: false`, propagates abort/deadline, parses bounded typed SSE, reports token usage and safe request correlation, and fails closed on provider failure, refusal, malformed or truncated output. No live credential, provider latency/cost or output-quality evidence is claimed. | `pnpm --filter @course-ai/provider-router test`; `packages/provider-router/src/openai-responses.ts`; official Responses API schema/stream contract reviewed 2026-07-24 |
+| LLM provider adapter | A/B / partial | The provider-neutral OpenAI Responses adapter is wired server-side to the durable learning conversation with `store: false`, bounded source-only prompting, deadlines, refusal/error handling, persisted citations and replay protection. A live request to `gpt-5.6-luna` succeeded and returned provider usage metadata. Signed-in browser quality/latency, durable cost-ledger writes and fallback-provider evidence remain pending. | Live provider adapter probe on 2026-07-24; `pnpm --filter @course-ai/provider-router test`; `apps/console/src/lib/learning-provider.ts` |
+| Durable Estie learning | A/B / partial | The hosted Estie tenant contains 6 published courses, 28 modules, 126 lessons, 126 learning documents, 2,757 searchable chunks and 6 active knowledge versions. Authenticated RPC suites prove selected-tenant workspace reads, authoring/progress mutations, published-only lexical retrieval, persisted conversations, citation-bound assistant writes, replay and cross-tenant/forged-assistant denial. Semantic vector retrieval, signed uploads and production extraction workers remain pending. | Hosted Supabase project inspection; migrations 0017–0022; four hosted transactional suites |
 | INT-01 | C | Unknown/malformed event versions quarantine; event and delivery keys deduplicate; conflicting reuse quarantines without stopping the batch. | `pnpm --filter @course-ai/intelligence-core test`, cases 1–3 |
 | INT-02 | C | Confusion, trailing-30-day content gap, stall, and same-tenant velocity fixtures match the documented formulas. | Intelligence core test, cases 5–9 |
 | INT-03 | C | Missing, degraded, or incomplete sources produce partial/unknown rather than a false known zero. | Intelligence core test, case 10 |
@@ -47,7 +48,7 @@ assistive-technology matrix, load test, restore, or legal policy.
 | SEC-08 | B / partial | `/api/dev/privacy` and `/dev/privacy` integrate exact-purpose previews, legal-hold-aware jobs, one-use exact confirmation for delete/retention, manifest verification, tombstones, and audit evidence. The UI clearly labels policy values as non-production fixtures and leaves O-07/O-13 unresolved. Durable queues/stores, real provider deletion, signed archives, approved policy, and tenant closure remain pending. | `pnpm --filter @course-ai/console smoke:privacy`; Privacy operations browser QA |
 | MCP-02, MCP-03 | C | Default/cross-tenant/cross-actor/invalid/expired/over-budget/over-rate calls deny before invocation; replays are idempotent; output and errors are bounded and safe. | `pnpm --filter @course-ai/mcp-server test`, 12 cases |
 | MCP-08 | C / partial | Invocation without the exact capability, budget, and unexpired grant denies. Per-principal tool-discovery filtering still requires a connection-bound production principal/registry adapter. | MCP authorization tests; production adapter gap |
-| MCP-06, MCP-07 | B | Twenty-eight tools use shared console API boundaries, including intelligence review/feedback and separately permissioned privacy lifecycle operations. Smoke covers shared authoring/intelligence/privacy snapshots, authorized course, feedback and manifest operations, plus a denied write. Delete/retention still require one-use exact confirmation. Durable multi-replica grant/idempotency stores and production service-principal provenance remain pending. | `pnpm --filter @course-ai/mcp-server smoke` |
+| MCP-06, MCP-07 | B / partial | Production discovery exposes exactly six tools: health plus five durable bearer-authenticated learning operations for workspace, retrieval and persisted conversations. The 27 legacy `/api/dev/*` and build-plan tools are undiscoverable unless the MCP process receives the exact local fixture opt-in, which produces 33 total tools only for explicit fixture smoke. Connection-bound remote identity, token refresh, durable multi-replica metering/idempotency and production service-principal provenance remain pending. | `pnpm --filter @course-ai/mcp-server test`, 18 cases; `packages/mcp-server/src/server-discovery.test.ts`; fixture smoke |
 | Build/runtime isolation | B / partial | Next.js development output is isolated in `.next-dev` while optimized production output remains in `.next`, preventing a parallel production build from replacing the running development server manifests. This is local integration evidence only; production deployment, CI/CD, migration gates, and live-host operational evidence remain pending. | `apps/console/next.config.ts`; local development and production build verification |
 | Production Auth/onboarding boundary | B / partial | The production `/auth/sign-in`, `/auth/callback`, `/app` and `/onboarding` routes use strict Supabase SSR clients and UID-bound database RPCs. Same-origin POST, verified non-anonymous users, durable tenant selection, exact membership checks and explicit failures replace any fixture fallback. Signed-in browser acceptance, production SMTP, invitation delivery, SSO/SCIM and deprovisioning remain pending. | `apps/console/AUTH.md`; `apps/console/src/lib/supabase`; `apps/console/src/app/onboarding`; console Auth/onboarding contract tests |
 | Durable execution | C / partial | Fingerprinted command receipts replay the same normalized JSON result or reject conflicting reuse; course revisions use a locked compare-and-swap head; telemetry uses tenant-scoped dedupe and bounded leases. The adapters require an injected transaction and have no process-memory fallback. They are not yet wired into every application service. | `pnpm --filter @course-ai/postgres-adapters test`; `packages/postgres-adapters` |
@@ -55,7 +56,7 @@ assistive-technology matrix, load test, restore, or legal policy.
 | Durable uploads | A/C / partial | Migration 0009 and `PostgresUploadIntentRepository` persist tenant/actor-bound upload intents and immutable callback receipts with exact row locks, atomic callback/state commits, optimistic versions and protected terminal facts. The focused adapter suite and hosted transactional upload SQL suite pass. No production object-store, signed-upload, malware-scanner or extraction-worker execution is claimed. | `pnpm --filter @course-ai/postgres-adapters test`; `packages/postgres-adapters/src/upload-intents.ts`; hosted `durable_upload_intents_verification.sql` |
 | OpenAI embeddings | C / partial | The server-side adapter uses request-scoped models, injected asynchronous credentials, HTTPS-only endpoints, absolute deadlines, bounded batches/bodies/dimensions, exact response model/index validation, finite vectors, usage and injected cost accounting. It fails closed without retrying or exposing provider bodies. No live credential/provider execution is claimed. | `pnpm --filter @course-ai/provider-router test`; `packages/provider-router/src/openai-embeddings.ts` |
 | Surface launchpad | B / non-production | The root launchpad links every visual preview route, distinguishes fixture status, reports its protected environment/build, repairs dead navigation, and provides a universal return control. Desktop and 390px browser checks found all ten visual routes reachable with no horizontal overflow after the Course Studio diagram fix. This is discoverability and responsive preview evidence only. | Browser route inventory and responsive geometry check; `apps/console/src/app/page.tsx`; `apps/console/src/app/preview-navigator.tsx` |
-| Durable schema | A/C / partial | Sixteen ordered migrations define the 41-table durable execution, identity, upload, onboarding and Supabase Auth/RPC foundation. Structural verification passes, the hosted migration ledger includes 0001–0016, and all seven hosted transactional suites pass with rolled-back fixtures. Migrations 0013–0016 are forward-only name-resolution corrections exposed by the hosted tests. Backup/PITR restore, load, failover and broader object/provider operations remain pending. | `pnpm supabase:verify`; `infra/supabase/migrations/0001`–`0016`; hosted SQL acceptance transcript |
+| Durable schema | A/C / partial | Twenty-two ordered migrations define 42 RLS-enabled public tables plus private operation/claim state for execution, identity, upload, onboarding, durable learning, owner claims, grounded retrieval and conversations. Structural verification passes, the hosted ledger includes 0001–0022, and all eleven hosted transactional suites pass with rolled-back fixtures. The live advisor reports only intentional signed-in `SECURITY DEFINER` RPC warnings at security level; performance indexing and policy-consolidation advisories remain operational backlog. Backup/PITR restore, load and failover evidence remain pending. | `pnpm supabase:verify`; hosted migration/advisor inspection; hosted SQL acceptance transcript |
 | Private fixture preview | A / non-production | Production builds deny fixture APIs by default. The Vercel Preview deployment requires Vercel Authentication, uses two exact branch-scoped fixture values, and exposes dependency-free `/api/health`. Unauthenticated health access redirects to login; authenticated health, fixture health and Student chat checks pass. This is live-host evidence for the protected preview boundary only, not production identity/data/provider evidence. | Vercel deployment `dpl_FcTh71b8KCq4WrrvVhhHuaS5QUpb`; GitHub Preview deployment `5583998909`; `apps/console/test/deployment-mode.test.ts` |
 
 ## Whole-repository gate
@@ -71,8 +72,9 @@ git diff --check
 ```
 
 `verify:dev` includes the development API, authoring, intelligence, privacy,
-Widget host, all 28 MCP tools, and the structural Supabase smoke suites. The
-intelligence and privacy entry points are respectively:
+Widget host, the explicitly opted-in 33-tool fixture-plus-durable MCP surface,
+and the structural Supabase smoke suites. Production MCP discovery remains
+limited to six durable tools. The intelligence and privacy entry points are:
 `pnpm --filter @course-ai/console smoke:intelligence` and
 `pnpm --filter @course-ai/console smoke:privacy`.
 
@@ -82,29 +84,40 @@ suite.
 
 ### 2026-07-24 current release checkpoint
 
-- The optimized local Next.js build generated **43 application routes**,
-  including the production Auth, authenticated application and durable
-  onboarding surfaces. This supersedes the smaller route counts in the dated
-  historical checkpoints below; it is build evidence, not proof that every
-  route has completed signed-in production-browser acceptance.
+- The optimized local Next.js build generated **54 application entries**,
+  including production Auth, authenticated onboarding, durable learning,
+  grounded conversation and the two real voice-turn APIs. This is build
+  evidence, not proof that every route has completed signed-in
+  production-browser acceptance.
 - Development and production compiler outputs remain isolated in `.next-dev`
   and `.next`. The development server therefore keeps its manifests while the
   optimized build runs.
 - `verify:dev` continues to cover the development API, authoring, Creator
-  intelligence, privacy operations, Widget host and all **28 management MCP
-  tools**. Intelligence and privacy remain explicitly exercised by
+  intelligence, privacy operations, Widget host and all **33 explicitly
+  fixture-enabled MCP tools**. Default production discovery is exactly six
+  tools and exposes no `/api/dev/*` operation. Intelligence and privacy remain explicitly exercised by
   `pnpm --filter @course-ai/console smoke:intelligence` and
   `pnpm --filter @course-ai/console smoke:privacy`.
-- `pnpm supabase:verify` passes for **16 ordered migrations and 41 tables**.
-  The hosted migration ledger includes 0001–0016 and all **seven hosted
-  transactional SQL suites pass** against the dedicated LearningBot Supabase
-  project. The suites roll back their fixed fixtures. Forward-only migrations
-  0013–0016 preserve the approved contract while correcting PostgreSQL
-  parameter/column name resolution found during hosted acceptance.
+- `pnpm supabase:verify` passes for **22 ordered migrations and 42 public
+  tables**. The hosted migration ledger includes 0001–0022 and all **eleven
+  hosted transactional SQL suites pass** against the dedicated LearningBot
+  Supabase project. The suites roll back their fixed fixtures. The hosted
+  Estie tenant contains 6 courses, 28 modules, 126 lessons, 126 documents,
+  2,757 searchable chunks and 6 active knowledge versions.
+- The live OpenAI Responses adapter completed a `gpt-5.6-luna` request with
+  usage metadata. The authenticated product path uses the same provider-neutral
+  adapter, persists grounded source citations and replays completed turns.
+  Signed-in browser latency/quality acceptance and durable cost-ledger writes
+  remain pending.
+- Authenticated voice routes use `gpt-4o-mini-transcribe` and
+  `gpt-4o-mini-tts` for bounded push-to-talk turns. The UI explicitly says this
+  is synthetic push-to-talk rather than continuous realtime voice, and
+  LearningBot does not persist the raw uploaded audio.
 - The `/dev/**` learning, onboarding, intelligence, privacy and administration
-  surfaces remain labeled development fixtures. The production `/auth/**`,
-  `/app` and `/onboarding` surfaces fail closed on missing environment, session
-  or durable RPC state and never silently substitute those fixtures.
+  surfaces return a non-discoverable 404 in production. The production
+  `/auth/**`, `/app`, `/app/conversation` and `/onboarding` surfaces fail closed
+  on missing environment, session, provider or durable RPC state and never
+  silently substitute fixtures.
 
 ### 2026-07-23 integration outcome
 
@@ -191,10 +204,11 @@ The repository does not yet claim grade-A evidence for:
 - signed-in production-browser Auth/onboarding acceptance, production SMTP,
   invitation delivery, SAML/service-principal verification, SCIM or
   deprovisioning;
-- comprehensive live RLS/storage negative coverage beyond the seven bounded
+- comprehensive live RLS/storage negative coverage beyond the eleven bounded
   transactional database suites, including signed object operations;
-- live LLM, embedding, transcription, speech, realtime, storage, malware, or
-  connector provider execution and credentials;
+- signed-in production-browser LLM/transcription/speech quality and latency,
+  plus live embedding, realtime WebRTC, storage, malware, or connector-provider
+  execution;
 - Circle/custom-code/CDN/CSP installation, browser matrix, screen-reader or
   usability acceptance;
 - live signed storage, malware scanning, extraction, and retention execution;

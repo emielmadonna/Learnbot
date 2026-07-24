@@ -1,8 +1,43 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  developmentFixturesAllowed,
+  fixturePreviewEnabled,
+} from "./lib/deployment-mode";
 import { readSupabasePublicConfig } from "./lib/supabase/config";
 
 export async function proxy(request: NextRequest) {
+  if (
+    request.nextUrl.pathname.startsWith("/dev") &&
+    !developmentFixturesAllowed()
+  ) {
+    return new NextResponse("Not found", {
+      status: 404,
+      headers: {
+        "Cache-Control": "no-store",
+        "X-Robots-Tag": "noindex, nofollow",
+      },
+    });
+  }
+
+  if (
+    request.nextUrl.pathname.startsWith("/dev") &&
+    process.env.NODE_ENV === "production" &&
+    fixturePreviewEnabled()
+  ) {
+    const authorization = request.headers.get("authorization");
+    const expected = process.env.LEARNINGBOT_FIXTURE_PREVIEW_AUTHORIZATION;
+    if (!expected || authorization !== `Bearer ${expected}`) {
+      return new NextResponse("Not found", {
+        status: 404,
+        headers: {
+          "Cache-Control": "no-store",
+          "X-Robots-Tag": "noindex, nofollow",
+        },
+      });
+    }
+  }
+
   let response = NextResponse.next({ request });
 
   try {
@@ -34,5 +69,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/onboarding/:path*", "/auth/:path*"],
+  matcher: ["/app/:path*", "/onboarding/:path*", "/auth/:path*", "/dev/:path*"],
 };

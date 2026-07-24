@@ -49,6 +49,38 @@ const authenticatedOnboardingRpcTests = await readFile(
   ),
   "utf8",
 );
+const durableLearningWorkspaceTests = await readFile(
+  resolve(
+    root,
+    "tests",
+    "durable_learning_workspace_verification.sql",
+  ),
+  "utf8",
+);
+const preprovisionedTenantClaimTests = await readFile(
+  resolve(
+    root,
+    "tests",
+    "preprovisioned_tenant_claim_verification.sql",
+  ),
+  "utf8",
+);
+const groundedLexicalRetrievalTests = await readFile(
+  resolve(
+    root,
+    "tests",
+    "grounded_lexical_retrieval_verification.sql",
+  ),
+  "utf8",
+);
+const durableLearningConversationTests = await readFile(
+  resolve(
+    root,
+    "tests",
+    "durable_learning_conversations_verification.sql",
+  ),
+  "utf8",
+);
 
 if (
   !sql.includes(
@@ -139,6 +171,7 @@ const onboardingTables = [
   "onboarding_steps",
   "identity_audit_events",
 ];
+const durableLearningTables = ["lesson_progress"];
 const expectedTables = [
   ...manifestTables,
   ...durableExecutionTables,
@@ -146,6 +179,7 @@ const expectedTables = [
   ...globalIdentityTables,
   ...durableUploadTables,
   ...onboardingTables,
+  ...durableLearningTables,
 ];
 
 function fail(message) {
@@ -245,6 +279,17 @@ for (const table of onboardingTables) {
   }
 }
 
+for (const table of durableLearningTables) {
+  for (const control of [
+    `alter table public.${table} enable row level security`,
+    `alter table public.${table} force row level security`,
+  ]) {
+    if (!sql.includes(control)) {
+      fail(`${table} is missing required learning control: ${control}`);
+    }
+  }
+}
+
 for (const required of [
   "enable row level security",
   "force row level security",
@@ -269,6 +314,57 @@ for (const acceptanceId of [
 ]) {
   if (!tests.includes(acceptanceId)) {
     fail(`missing verification coverage marker ${acceptanceId}`);
+  }
+}
+
+for (const acceptanceId of ["CLAIM-01", "CLAIM-02", "CLAIM-03"]) {
+  if (!preprovisionedTenantClaimTests.includes(acceptanceId)) {
+    fail(`missing preprovisioned owner claim marker ${acceptanceId}`);
+  }
+}
+
+for (const acceptanceId of [
+  "DLW-01",
+  "DLW-02",
+  "DLW-03",
+  "DLW-04",
+  "DLW-05",
+]) {
+  if (!durableLearningWorkspaceTests.includes(acceptanceId)) {
+    fail(`missing durable learning verification marker ${acceptanceId}`);
+  }
+}
+
+for (const acceptanceId of ["GSR-01", "GSR-02", "GSR-03", "GSR-04"]) {
+  if (!groundedLexicalRetrievalTests.includes(acceptanceId)) {
+    fail(`missing grounded retrieval verification marker ${acceptanceId}`);
+  }
+}
+
+for (const acceptanceId of [
+  "DLC-01",
+  "DLC-02",
+  "DLC-03",
+  "DLC-04",
+  "DLC-05",
+  "DLC-06",
+]) {
+  if (!durableLearningConversationTests.includes(acceptanceId)) {
+    fail(`missing durable conversation verification marker ${acceptanceId}`);
+  }
+}
+
+for (const required of [
+  "app_private.learning_operation_secrets",
+  "app_private.learning_operation_token_is_valid",
+  "public.learning_start_conversation",
+  "public.learning_get_conversations",
+  "public.learning_record_user_message",
+  "public.learning_record_assistant_message",
+  "public.learning_get_completed_turn",
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing durable conversation control: ${required}`);
   }
 }
 
@@ -371,6 +467,31 @@ for (const functionName of onboardingRpcFunctions) {
     fail(`${functionName} is missing its authenticated execute grant`);
   }
 }
+
+const learningRpcFunctions = [
+  "learning_get_workspace",
+  "learning_mark_lesson_progress",
+  "learning_create_course_draft",
+  "learning_publish_course",
+  "learning_search_chunks",
+];
+for (const functionName of learningRpcFunctions) {
+  const marker = `create or replace function public.${functionName}(`;
+  const start = sql.indexOf(marker);
+  if (start < 0) fail(`missing durable learning RPC ${functionName}`);
+  const end = sql.indexOf("$$;", start);
+  if (end < 0) fail(`unterminated durable learning RPC ${functionName}`);
+  const body = sql.slice(start, end);
+  if (!body.includes("security definer")) {
+    fail(`${functionName} must be SECURITY DEFINER`);
+  }
+  if (!body.includes("set search_path = pg_catalog")) {
+    fail(`${functionName} must fix search_path to pg_catalog`);
+  }
+  if (!sql.includes(`grant execute on function public.${functionName}(`)) {
+    fail(`${functionName} is missing its authenticated execute grant`);
+  }
+}
 for (const forbidden of [
   "grant execute on function public.onboarding_get_snapshot()\n  to service_role",
   "grant execute on function public.onboarding_update_tenant_profile",
@@ -387,6 +508,19 @@ for (const forbidden of [
           .includes("to service_role")
   ) {
     fail("authenticated onboarding RPCs must not grant service_role execution");
+  }
+}
+
+for (const required of [
+  "learning_chunks_body_fts_idx",
+  "websearch_to_tsquery('english', normalized_query)",
+  "querytree(parsed_query) in ('', 'T')",
+  "c.active_knowledge_version_id = ch.knowledge_version_id",
+  "kv.status = 'published'",
+  "d.status = 'ready'",
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing required grounded retrieval control: ${required}`);
   }
 }
 for (const required of [
@@ -461,5 +595,5 @@ for (const pattern of forbiddenCredentialAssignments) {
 }
 
 console.log(
-  `Verified ${migrationNames.length} ordered migrations, ${expectedTables.length} tables, 6 security controls, 3 durable execution controls, 3 identity controls, 3 upload controls, 3 onboarding controls, 5 auth controls and 5 onboarding RPC controls.`,
+  `Verified ${migrationNames.length} ordered migrations, ${expectedTables.length} tables, 6 security controls, 3 durable execution controls, 3 identity controls, 3 upload controls, 3 onboarding controls, 5 auth controls, 5 onboarding RPC controls, 5 durable learning controls and 4 grounded retrieval controls.`,
 );

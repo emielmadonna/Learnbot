@@ -5,6 +5,8 @@ import {
   developmentFixturesAllowed,
   fixturePreviewEnabled,
 } from "../src/lib/deployment-mode";
+import { proxy } from "../src/proxy";
+import { NextRequest } from "next/server";
 
 const acknowledgement =
   "I_UNDERSTAND_THIS_USES_EPHEMERAL_FIXTURES";
@@ -55,4 +57,20 @@ test("near-match values remain denied", () => {
   };
 
   assert.equal(developmentFixturesAllowed(environment), false);
+});
+
+test("production proxy returns a non-discoverable 404 for development surfaces", async () => {
+  const originalNodeEnvironment = process.env.NODE_ENV;
+  const mutableEnvironment = process.env as Record<string, string | undefined>;
+  mutableEnvironment.NODE_ENV = "production";
+  try {
+    const response = await proxy(
+      new NextRequest("https://learning.example/dev/chat"),
+    );
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
+  } finally {
+    if (originalNodeEnvironment === undefined) delete mutableEnvironment.NODE_ENV;
+    else mutableEnvironment.NODE_ENV = originalNodeEnvironment;
+  }
 });

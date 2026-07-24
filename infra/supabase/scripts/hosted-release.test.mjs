@@ -144,5 +144,9 @@ test("runs every tenant, auth and onboarding SQL acceptance suite", () => {
     "onboarding_verification.sql",
     "auth_tenant_bridge_verification.sql",
     "authenticated_onboarding_rpcs_verification.sql",
+    "durable_learning_workspace_verification.sql",
+    "preprovisioned_tenant_claim_verification.sql",
+    "grounded_lexical_retrieval_verification.sql",
+    "durable_learning_conversations_verification.sql",
   ]);
 });
