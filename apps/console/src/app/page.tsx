@@ -107,7 +107,7 @@ export default function HomePage() {
           <p className="lede">
             Open the Student experience, course operations, Creator and Teacher
             workspaces, tenant administration, privacy controls and the
-            embeddable companion from this protected integration environment.
+            embeddable companion from this release environment.
           </p>
         </div>
         <aside className="sprint">
@@ -116,9 +116,9 @@ export default function HomePage() {
             {isFixturePreview ? "Private preview · fixture data" : environmentLabel}
           </strong>
           <p>
-            The surfaces are integrated and testable. Live identity, durable
-            tenant data and provider credentials are still required for
-            production.
+            {isFixturePreview
+              ? "The visual surfaces are integrated and testable with explicitly labeled fixture data."
+              : "Durable Supabase identity and onboarding are live. Learning providers, storage operations and unresolved policy-dependent workflows remain labeled previews."}
           </p>
         </aside>
       </section>
@@ -126,8 +126,11 @@ export default function HomePage() {
       <section className="launchStrip" aria-label="Launch inventory">
         <article><strong>11</strong><span>visual product surfaces</span></article>
         <article><strong>28</strong><span>management MCP tools</span></article>
-        <article><strong>38</strong><span>structurally verified tables</span></article>
-        <article><strong>Protected</strong><span>preview access boundary</span></article>
+        <article><strong>41</strong><span>structurally verified tables</span></article>
+        <article>
+          <strong>{isFixturePreview ? "Protected" : "Durable Auth"}</strong>
+          <span>{isFixturePreview ? "preview access boundary" : "production access boundary"}</span>
+        </article>
       </section>
 
       <section aria-labelledby="modules-heading">
