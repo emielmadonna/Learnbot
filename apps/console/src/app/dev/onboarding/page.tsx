@@ -8,6 +8,7 @@ import {
   loadVerifiedFixtureIdentity,
   runOnboardingAction,
 } from "./onboarding-adapter";
+import WorkspaceShell from "../../../components/workspace-shell";
 import type {
   OnboardingAction,
   OnboardingInvitation,
@@ -154,35 +155,8 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <a className={styles.brandMark} href="/">
-          <span aria-hidden="true">L</span><b>Learning OS</b>
-        </a>
-        <p>Launch workspace</p>
-        <nav aria-label="Onboarding navigation">
-          <button
-            className={journey === "owner" ? styles.navActive : undefined}
-            onClick={() => setJourney("owner")}
-          >
-            Owner setup
-          </button>
-          <button
-            className={journey === "client" ? styles.navActive : undefined}
-            onClick={() => setJourney("client")}
-          >
-            Client preview
-          </button>
-          <a href="/dev/admin">Platform admin</a>
-          <a href="/dev/branding">Branding studio</a>
-          <a href="/dev/learning">Learning readiness</a>
-        </nav>
-        <div className={styles.identity}>
-          <span>{workspace.owner.displayName.slice(0, 2).toUpperCase()}</span>
-          <div><b>{workspace.owner.displayName}</b><small>Workspace owner</small></div>
-        </div>
-      </aside>
-
+    <WorkspaceShell active="admin">
+      <main className={`${styles.shell} unified-page`}>
       <section className={styles.workspace}>
         <header className={styles.header}>
           <div>
@@ -572,7 +546,8 @@ export default function OnboardingPage() {
           />
         )}
       </section>
-    </main>
+      </main>
+    </WorkspaceShell>
   );
 }
 
