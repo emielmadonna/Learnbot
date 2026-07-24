@@ -98,11 +98,20 @@ export default async function CircleInstallPage() {
         <article>
           <span>{installation ? 4 : 3}</span>
           <div>
-            <h2>Create member accounts</h2>
+            <h2>Connect Circle identity</h2>
             <p>
-              In LearningBot, open People &amp; access. Create each person’s
-              email and one-time password, then have them change it on first
-              sign-in.
+              Configure Circle Custom SSO with LearningBot’s authorization,
+              token, and user-info endpoints. After the one-time Circle
+              client is created, Circle passes each member’s verified email to
+              the tenant they belong to. Keep the Circle login option enabled
+              while testing the connection.
+            </p>
+            <p>
+              Circle admin path: community name → Settings → Single sign-on.
+              Use OAuth 2.0, scope <b>openid email profile</b>, and map the
+              user ID to <b>sub</b>, email to <b>email</b>, and name to
+              <b>name</b>. The client secret is shown once by the LearningBot
+              setup endpoint and is never recoverable.
             </p>
           </div>
         </article>
