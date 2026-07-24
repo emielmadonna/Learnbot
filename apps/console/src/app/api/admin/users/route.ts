@@ -76,6 +76,11 @@ export async function POST(request: Request) {
     ) {
       return response({ ok: false, code: "invalid_request" }, 400);
     }
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) {
+      return response({ ok: false, code: "authentication_required" }, 401);
+    }
     const invoked = await supabase.functions.invoke("learning-admin-users", {
       body: {
         email,
@@ -83,6 +88,7 @@ export async function POST(request: Request) {
         role,
         idempotencyKey: `managed-account:${crypto.randomUUID()}`,
       },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     const result = invoked.data as Record<string, unknown> | null;
     if (invoked.error || !result || result.ok !== true) {

@@ -39,4 +39,6 @@ test("admin route keeps provisioning failures tenant-admin protected", () => {
   assert.match(adminRoute, /tenant_owner/,);
   assert.match(adminRoute, /tenant_admin/);
   assert.match(adminRoute, /learning-admin-users/);
+  assert.match(adminRoute, /getSession\(\)/);
+  assert.match(adminRoute, /Authorization: `Bearer \$\{accessToken\}`/);
 });
