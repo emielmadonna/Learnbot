@@ -38,6 +38,7 @@ site_url = "https://learningbot-estie-preview-emiel-madonnas-projects.vercel.app
 additional_redirect_urls = [
   "http://127.0.0.1:3100",
   "http://127.0.0.1:3100/auth/callback",
+  "https://learningbot-estie-preview.vercel.app/auth/callback",
   "https://learningbot-estie-preview-emiel-madonnas-projects.vercel.app/auth/callback",
   "https://learningbot-estie-preview-git-co-984d79-emiel-madonnas-projects.vercel.app/auth/callback",
   "https://learningbot-estie-preview-h48grnkd8-emiel-madonnas-projects.vercel.app/auth/callback",
