@@ -2,9 +2,10 @@
   min-height: 100vh;
   padding: clamp(24px, 5vw, 72px);
   background:
-    radial-gradient(circle at 80% 8%, #dcefe5, transparent 30rem),
-    #f5f6f2;
-  color: #17261f;
+    radial-gradient(circle at 82% 8%, rgb(191 226 255 / 42%), transparent 30rem),
+    radial-gradient(circle at 12% 84%, rgb(218 255 151 / 18%), transparent 26rem),
+    #f7fbff;
+  color: #122033;
 }
 
 .hero,
@@ -20,14 +21,14 @@
   height: 46px;
   place-items: center;
   border-radius: 15px;
-  background: #205b46;
+  background: #143f5d;
   color: white;
   font-weight: 800;
 }
 
 .hero > p {
   margin: 44px 0 12px;
-  color: #39745b;
+  color: #286482;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.13em;
@@ -48,7 +49,7 @@
   display: block;
   max-width: 650px;
   margin-top: 24px;
-  color: #5f7068;
+  color: #5b7180;
   font-size: 17px;
   line-height: 1.7;
 }
@@ -62,16 +63,16 @@
 
 .actions a {
   padding: 13px 18px;
-  border: 1px solid #cbd9d1;
+  border: 1px solid #c9dce9;
   border-radius: 999px;
-  color: #24533f;
+  color: #17486b;
   font-weight: 750;
   text-decoration: none;
 }
 
 .actions a:first-child {
-  border-color: #205b46;
-  background: #205b46;
+  border-color: #143f5d;
+  background: #143f5d;
   color: white;
 }
 
@@ -80,9 +81,9 @@
   gap: 1px;
   margin-top: 72px;
   overflow: hidden;
-  border: 1px solid #d9e2dc;
+  border: 1px solid #d5e4ee;
   border-radius: 26px;
-  background: #d9e2dc;
+  background: #d5e4ee;
 }
 
 .steps article {
@@ -99,8 +100,8 @@
   height: 36px;
   place-items: center;
   border-radius: 50%;
-  background: #e5f1ea;
-  color: #205b46;
+  background: #e2f2ff;
+  color: #17577d;
   font-weight: 800;
 }
 
@@ -111,7 +112,7 @@
 
 .steps p {
   margin-top: 8px;
-  color: #637169;
+  color: #607581;
   line-height: 1.65;
 }
 
@@ -120,8 +121,8 @@
   padding: 18px;
   overflow: auto;
   border-radius: 15px;
-  background: #17261f;
-  color: #e8f4ed;
+  background: #122033;
+  color: #e4f3ff;
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -131,13 +132,13 @@
   box-sizing: border-box;
   margin-top: 18px;
   padding: 22px;
-  border: 1px solid #d7e0da;
+  border: 1px solid #d5e4ee;
   border-radius: 18px;
-  background: #eef4f0;
+  background: #eef7ff;
 }
 
 .note p {
   margin: 7px 0 0;
-  color: #5d6d65;
+  color: #607581;
   line-height: 1.6;
 }

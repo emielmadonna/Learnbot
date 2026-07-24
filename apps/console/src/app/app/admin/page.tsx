@@ -249,7 +249,7 @@ export default async function AdminOverviewPage() {
           <Link href="/onboarding#client-access">Clients</Link>
           <Link href="/app#courses">Learning</Link>
           <Link href="#people-signals">Signals</Link>
-          <Link href="/onboarding#brand">Assistant</Link>
+          <Link href="/install/circle">Assistant</Link>
           <Link href="/onboarding">Settings</Link>
         </div>
         <Link className={styles.exitLink} href="/app">
@@ -293,7 +293,7 @@ export default async function AdminOverviewPage() {
           </div>
           <b aria-hidden="true">→</b>
         </Link>
-        <Link className={styles.priorityCard} href="/onboarding#brand" id="bot-setup">
+        <Link className={styles.priorityCard} href="/install/circle" id="bot-setup">
           <span className={styles.priorityNumber}>03</span>
           <div>
             <p>Configure assistant</p>

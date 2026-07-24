@@ -219,7 +219,7 @@ export default async function TeacherWorkspacePage() {
           <a href="#questions">Questions</a>
           <Link href="/app#courses">Course</Link>
           <Link href="/app/conversation">Assistant</Link>
-          <a href="/dev/widget">Widget / snippet</a>
+          <Link href="/install/circle">Widget / snippet</Link>
         </nav>
         <div className={styles.account}>
           <Link href="/app/conversation?mode=voice">Voice</Link>
@@ -320,7 +320,7 @@ export default async function TeacherWorkspacePage() {
       <section className={styles.footerActions} aria-label="Teacher tools">
         <Link href="/app#create-course"><span>＋</span><div><b>Add learning</b><small>Write or import the next lesson.</small></div></Link>
         <Link href="/onboarding#brand"><span>◌</span><div><b>Brand the assistant</b><small>Update its identity, colors, and learner-facing setup.</small></div></Link>
-        <Link href="/dev/widget"><span>⌘</span><div><b>Install the widget</b><small>Open the existing preview and embed snippet flow.</small></div></Link>
+        <Link href="/install/circle"><span>⌘</span><div><b>Install the widget</b><small>Copy a client-specific Circle snippet and configure the launcher.</small></div></Link>
       </section>
     </main>
   );
