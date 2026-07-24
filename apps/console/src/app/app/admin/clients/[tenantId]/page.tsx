@@ -11,6 +11,7 @@ import {
 } from "../../../../../lib/supabase/platform-admin-rpc";
 import { createServerSupabaseClient } from "../../../../../lib/supabase/server";
 import styles from "../clients.module.css";
+import WorkspaceAssistant from "./workspace-assistant";
 
 function roleLabel(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/gu, (letter) => letter.toUpperCase());
@@ -145,16 +146,7 @@ export default async function PlatformClientDetailPage({
         </section>
         <p className={styles.actionNote}>Every action is labeled for {client.displayName} and carries this workspace id. The assistant only answers from this client&apos;s authorized learning context.</p>
 
-        <section className={styles.assistantPanel} aria-labelledby="workspace-assistant-heading">
-          <div>
-            <p className={styles.eyebrow}>Workspace assistant</p>
-            <h2 id="workspace-assistant-heading">Ask about {client.displayName}</h2>
-            <p>Open a fresh, workspace-labeled conversation to ask about learning, knowledge sources, and the student signals available to this client.</p>
-          </div>
-          <Link className={styles.assistantAction} href={`${surfaceHref("/app/conversation", tenantId)}&new=1&scope=workspace`}>
-            Open scoped assistant <span aria-hidden="true">↗</span>
-          </Link>
-        </section>
+        <WorkspaceAssistant tenantId={tenantId} clientName={client.displayName} />
 
         {!directDetail ? (
           <p className={styles.summaryFallback} role="status">

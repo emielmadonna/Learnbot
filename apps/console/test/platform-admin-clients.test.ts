@@ -49,6 +49,10 @@ test("client detail route is platform-gated and links tenant surfaces", () => {
     new URL("../src/lib/supabase/platform-admin-rpc.ts", import.meta.url),
     "utf8",
   );
+  const assistant = readFileSync(
+    new URL("../src/app/app/admin/clients/[tenantId]/workspace-assistant.tsx", import.meta.url),
+    "utf8",
+  );
 
   assert.equal(isTenantId("71000000-0000-4000-8000-000000000001"), true);
   assert.equal(isTenantId("not-a-tenant"), false);
@@ -56,7 +60,8 @@ test("client detail route is platform-gated and links tenant surfaces", () => {
   assert.match(rpc, /platform_admin_client_detail/);
   assert.match(page, /getPlatformOverview/);
   assert.match(page, /summaryFallback/);
-  assert.match(page, /scope=workspace/);
+  assert.match(page, /WorkspaceAssistant/);
+  assert.match(assistant, /learners, published courses/);
   assert.match(page, /Client summary is online/);
   assert.match(page, /href="\/app\/platform"/);
   assert.doesNotMatch(page, /href="\/app\/admin\/clients"/);
