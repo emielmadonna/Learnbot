@@ -81,74 +81,89 @@ function LearningBotMark() {
   );
 }
 
-function ProductPreview() {
+function ProductSurface() {
   return (
     <div
-      className="lbProductPreview"
+      className="lbProductSurface"
       role="img"
-      aria-label="LearningBot workspace showing a grounded learning conversation, course context and voice control"
+      aria-label="LearningBot learner workspace showing course navigation, a grounded answer, learning sources, and continuous voice"
     >
-      <div className="lbPreviewGlow" aria-hidden="true" />
-      <div className="lbPreviewWindow">
-        <header>
-          <div>
-            <LearningBotMark />
-            <span>LearningBot</span>
+      <div className="lbSurfaceBar">
+        <div className="lbSurfaceBrand">
+          <LearningBotMark />
+          <strong>LearningBot</strong>
+        </div>
+        <span>Leadership Essentials</span>
+        <span className="lbSurfaceAvatar">JD</span>
+      </div>
+      <div className="lbSurfaceBody">
+        <aside className="lbSurfaceNav">
+          <small>COURSE</small>
+          <strong>Leadership Essentials</strong>
+          <nav aria-label="Preview course modules">
+            <span className="active"><b>01</b> Foundations</span>
+            <span><b>02</b> Leading change</span>
+            <span><b>03</b> Team practice</span>
+          </nav>
+          <div className="lbSurfaceProgress">
+            <span><b /> Learning in progress</span>
           </div>
-          <p>Foundations of Leadership</p>
-          <span className="lbPreviewAvatar">AM</span>
-        </header>
-        <div className="lbPreviewBody">
-          <aside aria-hidden="true">
-            <span className="active" />
-            <span />
-            <span />
-            <span />
-            <span />
-          </aside>
-          <section>
-            <div className="lbPreviewContext">
-              <span>MODULE 2</span>
-              <strong>Leading through change</strong>
+        </aside>
+        <section className="lbSurfaceConversation">
+          <header>
+            <div>
+              <small>MODULE 2 · LEADING CHANGE</small>
+              <strong>Your learning conversation</strong>
             </div>
-            <div className="lbPreviewQuestion">
-              How do I help a team move through uncertainty?
-            </div>
-            <div className="lbPreviewAnswer">
+            <span className="lbVoiceStatus"><i /> Voice available</span>
+          </header>
+          <div className="lbSurfaceThread">
+            <p className="lbLearnerMessage">
+              How can I help my team move through uncertainty?
+            </p>
+            <div className="lbAssistantMessage">
               <LearningBotMark />
               <div>
                 <p>
-                  Start by making the unknown visible. Separate what the team can
-                  influence from what it cannot, then choose one concrete next
-                  action.
+                  Start by separating what the team knows, what is still
+                  uncertain, and what it can influence now. Then agree on one
+                  small action that creates useful evidence.
                 </p>
-                <div className="lbPreviewSteps">
-                  <span><b>1</b> Name the uncertainty</span>
-                  <span><b>2</b> Find the controllable</span>
-                  <span><b>3</b> Move together</span>
-                </div>
-                <small>2 grounded learning sources</small>
+                <ol>
+                  <li><b>1</b><span>Name the uncertainty clearly.</span></li>
+                  <li><b>2</b><span>Identify what the team can influence.</span></li>
+                  <li><b>3</b><span>Choose the next observable action.</span></li>
+                </ol>
+                <span className="lbGroundedLabel">Grounded in 2 course sources</span>
               </div>
             </div>
-            <div className="lbPreviewComposer">
-              <span>Ask about your learning…</span>
-              <i aria-hidden="true">●</i>
-              <b aria-hidden="true">↑</b>
+          </div>
+          <div className="lbSurfaceComposer">
+            <span>Ask a question about this course…</span>
+            <button type="button" tabIndex={-1} aria-hidden="true">Voice</button>
+            <i aria-hidden="true">↑</i>
+          </div>
+        </section>
+        <aside className="lbSurfaceSources">
+          <small>SOURCES</small>
+          <article>
+            <span>Lesson 2</span>
+            <strong>Working with uncertainty</strong>
+            <p>Published course content</p>
+          </article>
+          <article>
+            <span>Guide</span>
+            <strong>From clarity to action</strong>
+            <p>Tenant learning library</p>
+          </article>
+          <div className="lbSurfaceVoice">
+            <span aria-hidden="true"><i /><i /><i /></span>
+            <div>
+              <strong>Continuous voice</strong>
+              <p>Same course. Same conversation.</p>
             </div>
-          </section>
-        </div>
-      </div>
-      <div className="lbVoiceCard">
-        <span className="lbVoiceCloud" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-        <div>
-          <small>CONTINUOUS VOICE</small>
-          <strong>Listening naturally</strong>
-          <p>Grounded in the same conversation.</p>
-        </div>
+          </div>
+        </aside>
       </div>
     </div>
   );
@@ -157,267 +172,263 @@ function ProductPreview() {
 function PlatformLanding() {
   return (
     <main className="lbLanding">
-      <nav className="lbNav" aria-label="Primary navigation">
-        <Link className="lbBrand" href="/" aria-label="LearningBot home">
-          <LearningBotMark />
-          <b>LearningBot</b>
-        </Link>
-        <div className="lbNavLinks">
-          <a href="#product">Product</a>
-          <a href="#workflow">How it works</a>
-          <a href="#enterprise">Enterprise</a>
-        </div>
-        <div className="lbNavActions">
-          <Link className="lbNavSignIn" href="/auth/sign-in">
-            Sign in
+      <header className="lbHeader">
+        <nav className="lbNav" aria-label="Primary navigation">
+          <Link className="lbBrand" href="/" aria-label="LearningBot home">
+            <LearningBotMark />
+            <b>LearningBot</b>
           </Link>
-          <Link className="lbNavPrimary" href="/app">
-            Open workspace
-          </Link>
-        </div>
-      </nav>
+          <div className="lbNavLinks">
+            <a href="#product">Product</a>
+            <a href="#voice">Voice</a>
+            <a href="#platform">Platform</a>
+            <a href="#security">Security</a>
+          </div>
+          <div className="lbNavActions">
+            <Link className="lbNavSignIn" href="/auth/sign-in">Sign in</Link>
+            <Link className="lbButton lbButtonSmall" href="/auth/sign-in">
+              Get started
+            </Link>
+          </div>
+        </nav>
+      </header>
 
       <section className="lbHero">
         <div className="lbHeroCopy">
-          <p className="lbKicker">
-            <span aria-hidden="true" />
-            Enterprise learning, made conversational
-          </p>
-          <h1>Learning that<br />answers back.</h1>
+          <p className="lbEyebrow">Enterprise learning platform</p>
+          <h1>Turn company knowledge into learning people can use.</h1>
           <p className="lbHeroLede">
-            Turn trusted course knowledge into a private learning companion
-            people can talk to, learn with and return to—across every course,
-            team and moment of work.
+            LearningBot gives every organization a secure learning workspace
+            where people can ask questions, practice, and build understanding
+            through text or voice.
           </p>
           <div className="lbHeroActions">
-            <Link className="lbPrimaryButton" href="/auth/sign-in">
-              Enter LearningBot <span aria-hidden="true">→</span>
+            <Link className="lbButton" href="/auth/sign-in">
+              Sign in <span aria-hidden="true">→</span>
             </Link>
-            <a className="lbTextButton" href="#product">
-              Explore the platform <span aria-hidden="true">↓</span>
+            <a className="lbButton lbButtonSecondary" href="#product">
+              Explore the product
             </a>
           </div>
-          <div className="lbHeroTrust" aria-label="Platform principles">
-            <span>Grounded in your knowledge</span>
-            <span>Private by design</span>
-            <span>Built for every tenant</span>
+          <p className="lbHeroNote">
+            Grounded in your published learning content. Isolated by organization.
+          </p>
+        </div>
+      </section>
+
+      <section className="lbSurfaceSection" id="product">
+        <div className="lbSectionIntro">
+          <p className="lbEyebrow">The learner workspace</p>
+          <h2>One place to learn, ask, and keep moving.</h2>
+          <p>
+            Courses, source-backed answers, progress, and voice stay together in
+            one continuous learning experience.
+          </p>
+        </div>
+        <ProductSurface />
+      </section>
+
+      <section className="lbPillars" aria-labelledby="pillars-title">
+        <div className="lbSectionIntro">
+          <p className="lbEyebrow">One connected system</p>
+          <h2 id="pillars-title">Built for everyone who makes learning work.</h2>
+        </div>
+        <div className="lbPillarGrid">
+          <article>
+            <span className="lbPillarIcon" aria-hidden="true">01</span>
+            <h3>Learn</h3>
+            <p>
+              Give learners a focused place for courses, conversation, practice,
+              evidence, and progress—without switching tools.
+            </p>
+            <ul>
+              <li>Grounded text and voice conversation</li>
+              <li>Course and module context</li>
+              <li>Sources beside the answer</li>
+            </ul>
+          </article>
+          <article>
+            <span className="lbPillarIcon" aria-hidden="true">02</span>
+            <h3>Create</h3>
+            <p>
+              Turn trusted material into structured learning, review it with
+              collaborators, and publish controlled versions.
+            </p>
+            <ul>
+              <li>Course and lesson authoring</li>
+              <li>Source ingestion and review</li>
+              <li>Publish and rollback controls</li>
+            </ul>
+          </article>
+          <article>
+            <span className="lbPillarIcon" aria-hidden="true">03</span>
+            <h3>Operate</h3>
+            <p>
+              Manage organizations, people, providers, privacy, and learning
+              operations from clear role-specific workspaces.
+            </p>
+            <ul>
+              <li>Tenant and access administration</li>
+              <li>Audit and privacy operations</li>
+              <li>Provider-neutral infrastructure</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section className="lbVoiceSection" id="voice">
+        <div className="lbVoiceDemo" aria-hidden="true">
+          <div className="lbVoiceOrb"><i /><i /><i /></div>
+          <div>
+            <span>LISTENING</span>
+            <strong>“Can you give me an example?”</strong>
+            <p>Leadership Essentials · Module 2</p>
           </div>
         </div>
-        <ProductPreview />
-      </section>
-
-      <section className="lbProof" aria-label="LearningBot capabilities">
-        <p>One learning system</p>
-        <div>
-          <span>Conversation</span>
-          <i aria-hidden="true" />
-          <span>Voice</span>
-          <i aria-hidden="true" />
-          <span>Course creation</span>
-          <i aria-hidden="true" />
-          <span>Progress</span>
-          <i aria-hidden="true" />
-          <span>Operations</span>
-        </div>
-      </section>
-
-      <section className="lbProduct" id="product">
-        <header className="lbSectionHeader">
-          <p>THE LEARNING EXPERIENCE</p>
-          <h2>Knowledge becomes useful<br />when it can meet you.</h2>
-          <span>
-            LearningBot brings the course, the conversation and the learner
-            together without turning learning into another dashboard.
-          </span>
-        </header>
-
-        <div className="lbBento">
-          <article className="lbFeature lbFeatureConversation">
-            <div className="lbFeatureCopy">
-              <span className="lbFeatureNumber">01</span>
-              <h3>One continuous learning conversation.</h3>
-              <p>
-                Text, rich answers, learning sources and progress stay together.
-                Every response is grounded in published tenant knowledge.
-              </p>
-            </div>
-            <div className="lbMiniThread" aria-hidden="true">
-              <p>Can you explain this another way?</p>
-              <div>
-                <LearningBotMark />
-                <span>
-                  Think of momentum as evidence you can feel. A small completed
-                  action makes the next action easier to trust.
-                </span>
-              </div>
-              <small>Grounded in Lesson 4 · Building Momentum</small>
-            </div>
-          </article>
-
-          <article className="lbFeature lbFeatureVoice">
-            <div className="lbFeatureCopy">
-              <span className="lbFeatureNumber">02</span>
-              <h3>Voice that stays in the lesson.</h3>
-              <p>
-                Move naturally between text and low-latency voice. Interrupt,
-                ask a follow-up and keep the same grounded thread.
-              </p>
-            </div>
-            <div className="lbVoiceScene" aria-hidden="true">
-              <span className="lbLargeCloud">
-                <i />
-                <i />
-                <i />
-              </span>
-              <small>Listening</small>
-            </div>
-          </article>
-
-          <article className="lbFeature lbFeatureCreate">
-            <div className="lbFeatureCopy">
-              <span className="lbFeatureNumber">03</span>
-              <h3>Create learning at the speed of the work.</h3>
-              <p>
-                Shape courses, lessons and source material with clear drafts,
-                controlled publishing and recoverable versions.
-              </p>
-            </div>
-            <div className="lbCourseStack" aria-hidden="true">
-              <div><span>01</span><b>Foundation</b><small>Published</small></div>
-              <div><span>02</span><b>Practice</b><small>In review</small></div>
-              <div><span>03</span><b>Application</b><small>Draft</small></div>
-            </div>
-          </article>
-
-          <article className="lbFeature lbFeatureOperate">
-            <div className="lbFeatureCopy">
-              <span className="lbFeatureNumber">04</span>
-              <h3>Operate the whole learning environment.</h3>
-              <p>
-                Give creators, teachers and administrators focused controls for
-                learners, access, evidence, providers and privacy.
-              </p>
-            </div>
-            <div className="lbOpsSignals" aria-hidden="true">
-              <span><i /> Tenant isolated</span>
-              <span><i /> Access controlled</span>
-              <span><i /> Activity auditable</span>
-              <span><i /> Providers adaptable</span>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section className="lbWorkflow" id="workflow">
-        <header className="lbSectionHeader lbSectionHeaderLight">
-          <p>FROM KNOWLEDGE TO LEARNING</p>
-          <h2>A clear path from source<br />to understanding.</h2>
-        </header>
-        <div className="lbWorkflowSteps">
-          <article>
-            <span>01</span>
-            <div>
-              <h3>Bring the knowledge</h3>
-              <p>
-                Organize trusted courses, lessons and source material inside the
-                tenant boundary.
-              </p>
-            </div>
-          </article>
-          <article>
-            <span>02</span>
-            <div>
-              <h3>Shape the experience</h3>
-              <p>
-                Set the learning structure, assistant identity, voice and
-                publishing controls.
-              </p>
-            </div>
-          </article>
-          <article>
-            <span>03</span>
-            <div>
-              <h3>Learn in conversation</h3>
-              <p>
-                Learners ask, practice and check understanding with evidence
-                close at hand.
-              </p>
-            </div>
-          </article>
-          <article>
-            <span>04</span>
-            <div>
-              <h3>Improve with evidence</h3>
-              <p>
-                Use progress, questions and source health to strengthen the
-                learning system over time.
-              </p>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section className="lbEnterprise" id="enterprise">
-        <div className="lbEnterpriseCopy">
-          <p className="lbKicker">ENTERPRISE BY CONSTRUCTION</p>
-          <h2>Private knowledge.<br />Clear boundaries.</h2>
+        <div className="lbVoiceCopy">
+          <p className="lbEyebrow">Continuous voice</p>
+          <h2>A natural conversation, still grounded in the course.</h2>
           <p>
-            LearningBot is designed around tenant-scoped identity, durable
-            records and explicit authorization. Teams can choose providers and
-            operating policies without changing the learner experience.
+            Move between typing and speaking without starting over. Learners can
+            interrupt, ask a follow-up, and return to the same conversation with
+            course context and sources intact.
           </p>
-          <Link className="lbTextButton" href="/auth/sign-in">
-            Access your organization <span aria-hidden="true">→</span>
-          </Link>
+          <div className="lbInlineChecks">
+            <span>Text and voice in one thread</span>
+            <span>Interruption and barge-in</span>
+            <span>Tenant-selected assistant voice</span>
+          </div>
         </div>
-        <div className="lbTrustGrid">
+      </section>
+
+      <section className="lbPlatformSection" id="platform">
+        <div className="lbSectionIntro">
+          <p className="lbEyebrow">Platform and organizations</p>
+          <h2>One platform. A distinct learning environment for every client.</h2>
+          <p>
+            LearningBot supplies the shared product and operating controls.
+            Each organization keeps its own identity, people, knowledge, and policy.
+          </p>
+        </div>
+        <div className="lbPlatformGrid">
+          <article className="lbPlatformCard">
+            <span>LEARNINGBOT PLATFORM</span>
+            <h3>Shared product foundation</h3>
+            <p>
+              Learning, authoring, administration, privacy, provider contracts,
+              and operational tooling evolve as one managed platform.
+            </p>
+            <div>
+              <small>Learning runtime</small>
+              <small>Creator tools</small>
+              <small>Enterprise controls</small>
+              <small>Management MCP</small>
+            </div>
+          </article>
+          <article className="lbTenantCard">
+            <span>EACH ORGANIZATION</span>
+            <h3>Private tenant environment</h3>
+            <p>
+              Every client configures its own brand, assistant, courses, members,
+              providers, and policies inside an isolated tenant boundary.
+            </p>
+            <div>
+              <small>Brand and assistant</small>
+              <small>Courses and sources</small>
+              <small>Members and roles</small>
+              <small>Privacy and policy</small>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section className="lbSecuritySection" id="security">
+        <div className="lbSecurityCopy">
+          <p className="lbEyebrow">Enterprise foundations</p>
+          <h2>Designed around clear boundaries and accountable operations.</h2>
+          <p>
+            Identity, content, conversations, and administrative actions resolve
+            inside the selected organization. High-impact operations use explicit
+            permissions and durable evidence.
+          </p>
+        </div>
+        <div className="lbSecurityGrid">
           <article>
             <span aria-hidden="true">◎</span>
-            <h3>Tenant isolation</h3>
-            <p>Identity, data and operations resolve inside the selected tenant.</p>
+            <div>
+              <h3>Tenant-scoped access</h3>
+              <p>People and services act only within their authorized organization.</p>
+            </div>
           </article>
           <article>
             <span aria-hidden="true">◇</span>
-            <h3>Grounded responses</h3>
-            <p>Published learning sources remain visible beside the answer.</p>
+            <div>
+              <h3>Grounded learning</h3>
+              <p>Published course sources stay visible beside learning answers.</p>
+            </div>
           </article>
           <article>
             <span aria-hidden="true">↻</span>
-            <h3>Provider-neutral</h3>
-            <p>Model, voice, embedding and storage choices stay behind contracts.</p>
+            <div>
+              <h3>Provider flexibility</h3>
+              <p>Model, voice, storage, and embedding choices remain behind contracts.</p>
+            </div>
           </article>
           <article>
-            <span aria-hidden="true">⌁</span>
-            <h3>Auditable operations</h3>
-            <p>Consequential actions use bounded permissions and durable evidence.</p>
+            <span aria-hidden="true">✓</span>
+            <div>
+              <h3>Auditable operations</h3>
+              <p>Administrative and privacy workflows preserve durable evidence.</p>
+            </div>
           </article>
         </div>
       </section>
 
-      <section className="lbFinalCta">
-        <LearningBotMark />
-        <p>YOUR LEARNING SYSTEM, READY TO TALK</p>
-        <h2>Make every course<br />a living conversation.</h2>
+      <section className="lbFinalCta" id="contact">
         <div>
-          <Link className="lbPrimaryButton lbPrimaryButtonLight" href="/app">
-            Open your workspace <span aria-hidden="true">→</span>
+          <p className="lbEyebrow">Start learning</p>
+          <h2>Your organization&apos;s knowledge, ready to teach.</h2>
+          <p>
+            Enter your LearningBot workspace or explore how the platform brings
+            learning, creation, and operations together.
+          </p>
+        </div>
+        <div className="lbFinalActions">
+          <Link className="lbButton lbButtonLight" href="/auth/sign-in">
+            Sign in <span aria-hidden="true">→</span>
           </Link>
-          <Link className="lbCtaSignIn" href="/auth/sign-in">
-            Sign in
-          </Link>
+          <a className="lbButton lbButtonDarkSecondary" href="#product">
+            Explore product
+          </a>
         </div>
       </section>
 
       <footer className="lbFooter">
-        <Link className="lbBrand" href="/">
-          <LearningBotMark />
-          <b>LearningBot</b>
-        </Link>
-        <p>Enterprise learning that answers back.</p>
-        <div>
-          <Link href="/auth/sign-in">Sign in</Link>
-          <Link href="/api/health">Service status</Link>
+        <div className="lbFooterLead">
+          <Link className="lbBrand" href="/">
+            <LearningBotMark />
+            <b>LearningBot</b>
+          </Link>
+          <p>Enterprise learning that stays connected to your knowledge.</p>
         </div>
+        <div className="lbFooterColumn">
+          <strong>Product</strong>
+          <a href="#product">Learning workspace</a>
+          <a href="#voice">Continuous voice</a>
+          <a href="#platform">Platform</a>
+        </div>
+        <div className="lbFooterColumn">
+          <strong>Enterprise</strong>
+          <a href="#security">Security</a>
+          <Link href="/api/health">Service status</Link>
+          <Link href="/auth/sign-in">Sign in</Link>
+        </div>
+        <div className="lbFooterColumn">
+          <strong>Get started</strong>
+          <Link href="/auth/sign-in">Access your workspace</Link>
+          <a href="#product">Explore the product</a>
+        </div>
+        <p className="lbFooterLegal">© {new Date().getFullYear()} LearningBot</p>
       </footer>
     </main>
   );
