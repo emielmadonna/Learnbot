@@ -8,6 +8,7 @@ build/
 coverage/
 .turbo/
 .wrangler/
+.vercel/
 *.tsbuildinfo
 
 .env
