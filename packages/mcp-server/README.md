@@ -17,6 +17,8 @@ Read tools:
 - `resolve_learning_context`
 - `get_course_authoring_snapshot`
 - `validate_course_draft`
+- `get_intelligence_snapshot`
+- `get_privacy_operations_snapshot`
 
 Grant-controlled mutation tools:
 
@@ -31,6 +33,12 @@ Grant-controlled mutation tools:
 - `start_learning_ingestion`
 - `publish_learning_version`
 - `publish_tenant_branding`
+- `review_student_opportunity`
+- `record_opportunity_feedback`
+- `preview_privacy_job`
+- `create_privacy_job`
+- `execute_privacy_job`
+- `verify_privacy_export_manifest`
 
 `get_mcp_health` reports capability and authorization readiness without exposing
 grant IDs, actors, tenants, or secrets.
@@ -95,6 +103,13 @@ principal/registry adapter to hide tools the connected principal cannot
 discover; this development stdio server lists its schemas but still denies
 unauthorized invocation before the control plane is called.
 
+Intelligence review requires `intelligence.opportunity.review`. Privacy grants
+are separated by risk: `privacy.access_export.manage`,
+`privacy.delete.manage`, `privacy.retention.manage`, and
+`privacy.manifest.verify`. Delete and retention creation also require the exact
+one-use preview token and confirmation phrase returned by
+`preview_privacy_job`; an MCP grant alone cannot bypass that confirmation.
+
 ## Run and verify
 
 ```bash
@@ -110,5 +125,6 @@ deny-by-default authorization, cross-tenant and cross-actor denial, malformed
 grant configuration, expiry and budget denial, idempotent reservation and
 rate enforcement, mutation replay/conflicts, bounded output, audit metadata,
 and safe upstream failures. The
-stdio smoke verifies all 20 tools, shared API snapshots, an authorized
-authoring dry-run, and a denied write.
+stdio smoke verifies all 28 tools, shared authoring, intelligence, and privacy
+API snapshots, authorized authoring, course, feedback, and manifest operations,
+and a denied write.

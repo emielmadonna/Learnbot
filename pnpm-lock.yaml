@@ -26,9 +26,15 @@ importers:
       '@course-ai/identity-access':
         specifier: workspace:*
         version: link:../../packages/identity-access
+      '@course-ai/intelligence-core':
+        specifier: workspace:*
+        version: link:../../packages/intelligence-core
       '@course-ai/learning-pipeline':
         specifier: workspace:*
         version: link:../../packages/learning-pipeline
+      '@course-ai/privacy-lifecycle':
+        specifier: workspace:*
+        version: link:../../packages/privacy-lifecycle
       '@course-ai/provider-router':
         specifier: workspace:*
         version: link:../../packages/provider-router

@@ -89,6 +89,22 @@ const authoringSnapshotOutput = {
   diagramCandidate: z.record(z.string(), z.unknown())
 };
 
+type PrivacyOperation = "access" | "export" | "delete" | "retention";
+
+function privacyPermissionFor(
+  operation: PrivacyOperation,
+): WritePermission {
+  if (operation === "delete") return "privacy.delete.manage";
+  if (operation === "retention") return "privacy.retention.manage";
+  return "privacy.access_export.manage";
+}
+
+function privacyPurposeFor(operation: PrivacyOperation) {
+  return operation === "retention"
+    ? "retention_enforcement"
+    : "tenant_privacy_administration";
+}
+
 function contextFrom(input: {
   tenantId: string;
   actorId: string;
@@ -444,6 +460,405 @@ server.registerTool(
       validation: snapshot.validation,
       publishValidation: snapshot.publishValidation
     });
+  }
+);
+
+server.registerTool(
+  "get_intelligence_snapshot",
+  {
+    title: "Get Creator intelligence snapshot",
+    description:
+      "Read tenant-scoped source health, known/partial/unknown learning metrics, same-tenant opportunity evidence, suppression reasons, human review state and audit facts.",
+    inputSchema: tenantInput,
+    outputSchema: {
+      snapshot: z.record(z.string(), z.unknown()),
+      session: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false
+    }
+  },
+  async () => {
+    const snapshot = await consoleRequest<{
+      snapshot: Record<string, unknown>;
+      session: Record<string, unknown>;
+    }>("/api/dev/intelligence");
+    return result(snapshot);
+  }
+);
+
+server.registerTool(
+  "review_student_opportunity",
+  {
+    title: "Review a Student opportunity",
+    description:
+      "Commit a human-only, audited lifecycle transition for one tenant-scoped opportunity. This tool cannot send outreach or take consequential action.",
+    inputSchema: {
+      ...mutationContextInput,
+      opportunityId: z.string().min(1).max(128),
+      expectedStatus: z.enum([
+        "new",
+        "seen",
+        "actioned",
+        "dismissed",
+        "converted",
+        "expired"
+      ]),
+      nextStatus: z.enum([
+        "seen",
+        "actioned",
+        "dismissed",
+        "converted",
+        "expired"
+      ]),
+      reason: z.string().max(500).optional()
+    },
+    outputSchema: {
+      snapshot: z.record(z.string(), z.unknown()),
+      session: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    }
+  },
+  async (input) => {
+    const context = contextFrom(input);
+    try {
+      const response = await authorizedConsoleMutation<{
+        snapshot: Record<string, unknown>;
+        session: Record<string, unknown>;
+      }>(
+        context,
+        "intelligence.opportunity.review",
+        "review_student_opportunity",
+        "/api/dev/intelligence",
+        {
+          action: "status",
+          opportunityId: input.opportunityId,
+          expectedStatus: input.expectedStatus,
+          nextStatus: input.nextStatus,
+          ...(input.reason === undefined ? {} : { reason: input.reason })
+        },
+        0.01
+      );
+      return result(response);
+    } catch (error: unknown) {
+      return errorResult(error, context.requestId);
+    }
+  }
+);
+
+server.registerTool(
+  "record_opportunity_feedback",
+  {
+    title: "Record opportunity review feedback",
+    description:
+      "Record audited human feedback on one tenant-scoped opportunity without changing a score, policy, offer match or outreach behavior.",
+    inputSchema: {
+      ...mutationContextInput,
+      opportunityId: z.string().min(1).max(128),
+      kind: z.enum([
+        "dismissed_false_positive",
+        "wrong_offer",
+        "helpful"
+      ]),
+      note: z.string().max(500).optional()
+    },
+    outputSchema: {
+      snapshot: z.record(z.string(), z.unknown()),
+      session: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    }
+  },
+  async (input) => {
+    const context = contextFrom(input);
+    try {
+      const response = await authorizedConsoleMutation<{
+        snapshot: Record<string, unknown>;
+        session: Record<string, unknown>;
+      }>(
+        context,
+        "intelligence.opportunity.review",
+        "record_opportunity_feedback",
+        "/api/dev/intelligence",
+        {
+          action: "feedback",
+          opportunityId: input.opportunityId,
+          kind: input.kind,
+          ...(input.note === undefined ? {} : { note: input.note })
+        },
+        0.01
+      );
+      return result(response);
+    } catch (error: unknown) {
+      return errorResult(error, context.requestId);
+    }
+  }
+);
+
+server.registerTool(
+  "get_privacy_operations_snapshot",
+  {
+    title: "Get privacy operations snapshot",
+    description:
+      "Read the tenant-scoped development privacy fixture, including policy boundaries, legal holds, jobs, manifests, tombstones and audit evidence. Fixture policy is not production compliance evidence.",
+    inputSchema: tenantInput,
+    outputSchema: {
+      fixture: z.record(z.string(), z.unknown()),
+      tenant: z.record(z.string(), z.unknown()),
+      policies: z.record(z.string(), z.unknown()),
+      subjects: z.array(z.record(z.string(), z.unknown())),
+      holds: z.array(z.record(z.string(), z.unknown())),
+      jobs: z.array(z.record(z.string(), z.unknown())),
+      manifests: z.array(z.record(z.string(), z.unknown())),
+      tombstones: z.array(z.record(z.string(), z.unknown())),
+      audit: z.array(z.record(z.string(), z.unknown())),
+      exactGrantPolicyVersion: z.string()
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false
+    }
+  },
+  async () => {
+    const snapshot = await consoleRequest<Record<string, unknown>>(
+      "/api/dev/privacy",
+    );
+    return result(snapshot);
+  }
+);
+
+server.registerTool(
+  "preview_privacy_job",
+  {
+    title: "Preview a privacy lifecycle job",
+    description:
+      "Create an exact-purpose, tenant-scoped preview. Delete and retention previews return the required phrase and one-use confirmation token; previewing never executes deletion.",
+    inputSchema: {
+      ...mutationContextInput,
+      operation: z.enum(["access", "export", "delete", "retention"]),
+      subjectId: z.string().min(1).max(128).optional(),
+      dataThrough: z.string().datetime().optional()
+    },
+    outputSchema: {
+      preview: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    }
+  },
+  async (input) => {
+    const context = contextFrom(input);
+    try {
+      const response = await authorizedConsoleMutation<{
+        preview: Record<string, unknown>;
+      }>(
+        context,
+        privacyPermissionFor(input.operation),
+        `preview_privacy_${input.operation}`,
+        "/api/dev/privacy",
+        {
+          action: "preview",
+          operation: input.operation,
+          purpose: privacyPurposeFor(input.operation),
+          ...(input.subjectId === undefined
+            ? {}
+            : { subjectId: input.subjectId }),
+          ...(input.dataThrough === undefined
+            ? {}
+            : { dataThrough: input.dataThrough })
+        },
+        0.005
+      );
+      return result(response);
+    } catch (error: unknown) {
+      return errorResult(error, context.requestId);
+    }
+  }
+);
+
+server.registerTool(
+  "create_privacy_job",
+  {
+    title: "Create a privacy lifecycle job",
+    description:
+      "Create an idempotent tenant privacy job. Delete and retention require the exact one-use preview token and confirmation phrase returned by preview_privacy_job.",
+    inputSchema: {
+      ...mutationContextInput,
+      operation: z.enum(["access", "export", "delete", "retention"]),
+      subjectId: z.string().min(1).max(128).optional(),
+      dataThrough: z.string().datetime().optional(),
+      previewToken: z.string().min(1).max(128).optional(),
+      confirmationPhrase: z.string().min(1).max(256).optional()
+    },
+    outputSchema: {
+      job: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false
+    }
+  },
+  async (input) => {
+    const context = contextFrom(input);
+    try {
+      const response = await authorizedConsoleMutation<{
+        job: Record<string, unknown>;
+      }>(
+        context,
+        privacyPermissionFor(input.operation),
+        `create_privacy_${input.operation}`,
+        "/api/dev/privacy",
+        {
+          action: "create",
+          operation: input.operation,
+          purpose: privacyPurposeFor(input.operation),
+          ...(input.subjectId === undefined
+            ? {}
+            : { subjectId: input.subjectId }),
+          ...(input.dataThrough === undefined
+            ? {}
+            : { dataThrough: input.dataThrough }),
+          ...(input.previewToken === undefined
+            ? {}
+            : { previewToken: input.previewToken }),
+          ...(input.confirmationPhrase === undefined
+            ? {}
+            : { confirmationPhrase: input.confirmationPhrase })
+        },
+        input.operation === "delete" || input.operation === "retention"
+          ? 0.02
+          : 0.01
+      );
+      return result(response);
+    } catch (error: unknown) {
+      return errorResult(error, context.requestId);
+    }
+  }
+);
+
+server.registerTool(
+  "execute_privacy_job",
+  {
+    title: "Execute a privacy lifecycle job",
+    description:
+      "Resume one previously created tenant privacy job. The caller must state its immutable operation so the exact access, delete or retention grant is checked before execution.",
+    inputSchema: {
+      ...mutationContextInput,
+      jobId: z.string().min(1).max(128),
+      operation: z.enum(["access", "export", "delete", "retention"])
+    },
+    outputSchema: {
+      job: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false
+    }
+  },
+  async (input) => {
+    const context = contextFrom(input);
+    try {
+      const response = await authorizedMutation(
+        context,
+        privacyPermissionFor(input.operation),
+        `execute_privacy_${input.operation}`,
+        { jobId: input.jobId, operation: input.operation },
+        async () => {
+          const snapshot = await consoleRequest<{ jobs?: unknown }>(
+            "/api/dev/privacy",
+          );
+          const jobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
+          const job = jobs.find(
+            (candidate) =>
+              typeof candidate === "object" &&
+              candidate !== null &&
+              Reflect.get(candidate, "jobId") === input.jobId,
+          );
+          if (
+            job === undefined ||
+            Reflect.get(job, "kind") !== input.operation
+          ) {
+            throw new Error("Privacy job operation does not match.");
+          }
+          return consoleClient.request<{ job: Record<string, unknown> }>(
+            "/api/dev/privacy",
+            {
+              method: "POST",
+              headers: mutationHeaders(context),
+              body: controlPlaneMutationBody(context, {
+                action: "execute",
+                jobId: input.jobId
+              })
+            },
+            context.requestId,
+          );
+        },
+        0.02
+      );
+      return result(response);
+    } catch (error: unknown) {
+      return errorResult(error, context.requestId);
+    }
+  }
+);
+
+server.registerTool(
+  "verify_privacy_export_manifest",
+  {
+    title: "Verify a privacy export manifest",
+    description:
+      "Recompute and record the integrity result for one tenant-scoped privacy export manifest.",
+    inputSchema: {
+      ...mutationContextInput,
+      manifestId: z.string().min(1).max(128)
+    },
+    outputSchema: {
+      verification: z.record(z.string(), z.unknown())
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    }
+  },
+  async (input) => {
+    const context = contextFrom(input);
+    try {
+      const response = await authorizedConsoleMutation<{
+        verification: Record<string, unknown>;
+      }>(
+        context,
+        "privacy.manifest.verify",
+        "verify_privacy_export_manifest",
+        "/api/dev/privacy",
+        {
+          action: "verify_manifest",
+          manifestId: input.manifestId
+        },
+        0.005
+      );
+      return result(response);
+    } catch (error: unknown) {
+      return errorResult(error, context.requestId);
+    }
   }
 );
 

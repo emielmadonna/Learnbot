@@ -20,6 +20,12 @@ const modules = [
     href: "/dev/creator"
   },
   {
+    name: "Creator Intelligence",
+    description: "Evidence, source health, unknown metrics and human review.",
+    status: "Validated fixture",
+    href: "/dev/intelligence"
+  },
+  {
     name: "Teacher Console",
     description: "Cohort pulse, learner questions, progress and safe follow-up.",
     status: "Interactive",
@@ -38,9 +44,21 @@ const modules = [
     href: "/dev/branding"
   },
   {
+    name: "Privacy Operations",
+    description: "Access, export, deletion, retention, legal holds and audit.",
+    status: "Validated fixture",
+    href: "/dev/privacy"
+  },
+  {
+    name: "Embeddable Widget",
+    description: "Shadow-DOM assistant runtime, resize, theme and host events.",
+    status: "Verified",
+    href: "/dev/widget"
+  },
+  {
     name: "MCP Control Plane",
     description: "The same safe operations for Codex and authorized agents.",
-    status: "20 tools verified",
+    status: "28 tools verified",
     href: "/dev/admin#mcp"
   }
 ];

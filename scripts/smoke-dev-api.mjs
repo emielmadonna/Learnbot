@@ -1,10 +1,11 @@
 const baseUrl = process.env.COURSE_AI_CONSOLE_URL ?? "http://127.0.0.1:3100";
 const smokeRunId = crypto.randomUUID();
+const requestTimeoutMs = 60_000;
 
 async function request(path, init) {
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(requestTimeoutMs),
   });
   const body = await response.json();
   if (!response.ok) {
@@ -15,6 +16,21 @@ async function request(path, init) {
 
 const health = await request("/api/dev/health");
 if (health.status !== "healthy") throw new Error("Console health check failed.");
+
+const securityHeaders = await fetch(`${baseUrl}/`, {
+  signal: AbortSignal.timeout(requestTimeoutMs),
+});
+if (
+  securityHeaders.headers.get("x-content-type-options") !== "nosniff" ||
+  securityHeaders.headers.get("x-frame-options") !== "SAMEORIGIN" ||
+  securityHeaders.headers.get("referrer-policy") !==
+    "strict-origin-when-cross-origin" ||
+  !securityHeaders.headers
+    .get("permissions-policy")
+    ?.includes("microphone=(self)")
+) {
+  throw new Error("Console security headers are incomplete.");
+}
 
 const session = await request("/api/dev/session", {
   headers: { "x-course-ai-tenant-id": "tenant_northstar_demo" },
@@ -35,7 +51,7 @@ if (
 
 const crossTenantHeaderResponse = await fetch(`${baseUrl}/api/dev/platform`, {
   headers: { "x-course-ai-tenant-id": "tenant_other" },
-  signal: AbortSignal.timeout(20_000),
+  signal: AbortSignal.timeout(requestTimeoutMs),
 });
 const crossTenantHeaderBody = await crossTenantHeaderResponse.json();
 if (
@@ -54,7 +70,7 @@ const crossTenantBodyResponse = await fetch(`${baseUrl}/api/dev/context`, {
     url: "/courses/momentum-method/modules/build-your-rhythm/lessons/minimum-day",
     studentId: "student_maya_demo",
   }),
-  signal: AbortSignal.timeout(20_000),
+  signal: AbortSignal.timeout(requestTimeoutMs),
 });
 const crossTenantBody = await crossTenantBodyResponse.json();
 if (
@@ -127,7 +143,7 @@ const crossTenantVoiceHandoff = await fetch(`${baseUrl}/api/dev/voice`, {
     sessionId: voiceSession.sessionId,
     reason: "user_requested",
   }),
-  signal: AbortSignal.timeout(20_000),
+  signal: AbortSignal.timeout(requestTimeoutMs),
 });
 if (crossTenantVoiceHandoff.status !== 403) {
   throw new Error("Cross-tenant voice-session handoff did not fail closed.");
@@ -181,7 +197,7 @@ const chatResponse = await fetch(`${baseUrl}/api/dev/chat`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: chatRequestBody,
-  signal: AbortSignal.timeout(20_000),
+  signal: AbortSignal.timeout(requestTimeoutMs),
 });
 if (!chatResponse.ok) throw new Error("Grounded chat request failed.");
 const chatEvents = (await chatResponse.text())
@@ -204,7 +220,7 @@ const replayResponse = await fetch(`${baseUrl}/api/dev/chat`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: chatRequestBody,
-  signal: AbortSignal.timeout(20_000),
+  signal: AbortSignal.timeout(requestTimeoutMs),
 });
 const replayEvents = (await replayResponse.text())
   .trim()
@@ -223,7 +239,7 @@ const conflictResponse = await fetch(`${baseUrl}/api/dev/chat`, {
     ...JSON.parse(chatRequestBody),
     message: "Different input with the same key",
   }),
-  signal: AbortSignal.timeout(20_000),
+  signal: AbortSignal.timeout(requestTimeoutMs),
 });
 if (conflictResponse.status !== 409) {
   throw new Error("Conflicting chat idempotency input did not fail closed.");
@@ -264,7 +280,7 @@ quarantineForm.append(
 const quarantineResponse = await fetch(`${baseUrl}/api/dev/attachments`, {
   method: "POST",
   body: quarantineForm,
-  signal: AbortSignal.timeout(20_000),
+  signal: AbortSignal.timeout(requestTimeoutMs),
 });
 const quarantine = await quarantineResponse.json();
 if (

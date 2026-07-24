@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 
-const baseUrl = process.env.WIDGET_SMOKE_BASE_URL ?? "http://127.0.0.1:3100";
+const baseUrl =
+  process.env.WIDGET_SMOKE_BASE_URL ??
+  process.env.COURSE_AI_CONSOLE_URL ??
+  "http://127.0.0.1:3100";
 
 async function read(pathname) {
   const response = await fetch(`${baseUrl}${pathname}`, {
     headers: { accept: "text/html,application/xhtml+xml,image/svg+xml" },
+    signal: AbortSignal.timeout(60_000),
   });
   assert.equal(response.status, 200, `${pathname} should return 200`);
   return {

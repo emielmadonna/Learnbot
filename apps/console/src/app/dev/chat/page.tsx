@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
+  type TransitionEvent as ReactTransitionEvent,
   useEffect,
   useRef,
   useState,
@@ -540,6 +541,7 @@ type VoicePhase =
   | "speaking";
 
 type VoiceTransport = "browser-realtime" | "interactive-demo";
+type VoicePresentation = "text" | "entering" | "voice" | "exiting";
 type AttachmentStatus =
   | "idle"
   | "validating"
@@ -630,6 +632,8 @@ const voiceLabels: Record<Exclude<VoicePhase, "off">, string> = {
 export default function StudentChatPrototype() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
+  const companionRef = useRef<HTMLDivElement>(null);
+  const voiceTriggerRef = useRef<HTMLButtonElement>(null);
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -654,6 +658,13 @@ export default function StudentChatPrototype() {
   const voiceSessionIdRef = useRef<string | null>(null);
   const voiceGenerationRef = useRef(0);
   const voiceRestartTimersRef = useRef<Set<number>>(new Set());
+  const voicePresentationRef = useRef<VoicePresentation>("text");
+  const voiceTransitionTimerRef = useRef<number | null>(null);
+  const voiceTransitionFramesRef = useRef<Set<number>>(new Set());
+  const interruptionTimerRef = useRef<number | null>(null);
+  const lastVoicePhaseRef =
+    useRef<Exclude<VoicePhase, "off">>("connecting");
+  const focusTextAfterVoiceRef = useRef(false);
   const [draft, setDraft] = useState("");
   const [runtimeBranding, setRuntimeBranding] = useState<RuntimeBranding>(
     DEFAULT_RUNTIME_BRANDING,
@@ -666,6 +677,12 @@ export default function StudentChatPrototype() {
   const [voiceTransport, setVoiceTransport] =
     useState<VoiceTransport>("browser-realtime");
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voicePresentation, setVoicePresentation] =
+    useState<VoicePresentation>("text");
+  const [voiceOrigin, setVoiceOrigin] = useState({
+    x: "56%",
+    y: "calc(100% - 50px)",
+  });
   const [microphoneStream, setMicrophoneStream] =
     useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -696,10 +713,129 @@ export default function StudentChatPrototype() {
     "Assistant is ready. Type, speak, or attach a file.",
   );
   const voiceActive = voicePhase !== "off";
+  const voiceVisible = voicePresentation !== "text";
+  const renderedVoicePhase =
+    voicePhase === "off" ? lastVoicePhaseRef.current : voicePhase;
+
+  function userPrefersReducedMotion() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  }
+
+  function scheduleVoiceFrame(callback: () => void) {
+    const frame = window.requestAnimationFrame(() => {
+      voiceTransitionFramesRef.current.delete(frame);
+      callback();
+    });
+    voiceTransitionFramesRef.current.add(frame);
+  }
+
+  function clearVoicePresentationSchedule() {
+    if (voiceTransitionTimerRef.current !== null) {
+      window.clearTimeout(voiceTransitionTimerRef.current);
+      voiceTransitionTimerRef.current = null;
+    }
+    voiceTransitionFramesRef.current.forEach((frame) =>
+      window.cancelAnimationFrame(frame),
+    );
+    voiceTransitionFramesRef.current.clear();
+  }
+
+  function completeVoiceExit() {
+    if (
+      voicePresentationRef.current !== "exiting" ||
+      voicePhaseRef.current !== "off"
+    ) {
+      return;
+    }
+    clearVoicePresentationSchedule();
+    voicePresentationRef.current = "text";
+    setVoicePresentation("text");
+  }
+
+  function captureVoiceOrigin() {
+    const frame = companionRef.current?.getBoundingClientRect();
+    const trigger = voiceTriggerRef.current?.getBoundingClientRect();
+    if (!frame || !trigger) return;
+    setVoiceOrigin({
+      x: `${trigger.left + trigger.width / 2 - frame.left}px`,
+      y: `${trigger.top + trigger.height / 2 - frame.top}px`,
+    });
+  }
+
+  function handleVoiceTransitionEnd(
+    event: ReactTransitionEvent<HTMLDivElement>,
+  ) {
+    if (
+      event.target === event.currentTarget &&
+      event.propertyName === "clip-path" &&
+      voicePresentationRef.current === "exiting"
+    ) {
+      completeVoiceExit();
+    }
+  }
 
   useEffect(() => {
     voicePhaseRef.current = voicePhase;
+    if (voicePhase !== "off") lastVoicePhaseRef.current = voicePhase;
   }, [voicePhase]);
+
+  useEffect(() => {
+    clearVoicePresentationSchedule();
+
+    if (voiceActive) {
+      if (
+        voicePresentationRef.current === "text" ||
+        voicePresentationRef.current === "exiting"
+      ) {
+        if (userPrefersReducedMotion()) {
+          voicePresentationRef.current = "voice";
+          setVoicePresentation("voice");
+          return;
+        }
+        voicePresentationRef.current = "entering";
+        setVoicePresentation("entering");
+        scheduleVoiceFrame(() => {
+          scheduleVoiceFrame(() => {
+            if (
+              voicePhaseRef.current !== "off" &&
+              voicePresentationRef.current === "entering"
+            ) {
+              voicePresentationRef.current = "voice";
+              setVoicePresentation("voice");
+            }
+          });
+        });
+      }
+      return;
+    }
+
+    if (voicePresentationRef.current !== "text") {
+      voicePresentationRef.current = "exiting";
+      setVoicePresentation("exiting");
+      if (userPrefersReducedMotion()) {
+        completeVoiceExit();
+        return;
+      }
+      voiceTransitionTimerRef.current = window.setTimeout(() => {
+        completeVoiceExit();
+      }, 460);
+    }
+  }, [voiceActive]);
+
+  useEffect(() => {
+    if (
+      voicePresentation !== "text" ||
+      !focusTextAfterVoiceRef.current ||
+      voicePhaseRef.current !== "off"
+    ) {
+      return;
+    }
+    focusTextAfterVoiceRef.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      messageInputRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [voicePresentation]);
 
   useEffect(() => {
     if (!diagramOpen) return;
@@ -905,6 +1041,10 @@ export default function StudentChatPrototype() {
       microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
       window.speechSynthesis?.cancel();
       handoffVoiceSession("user_requested");
+      clearVoicePresentationSchedule();
+      if (interruptionTimerRef.current !== null) {
+        window.clearTimeout(interruptionTimerRef.current);
+      }
     };
   }, []);
 
@@ -1112,6 +1252,8 @@ export default function StudentChatPrototype() {
   }
 
   async function startVoice() {
+    captureVoiceOrigin();
+    focusTextAfterVoiceRef.current = false;
     const generation = voiceGenerationRef.current + 1;
     voiceGenerationRef.current = generation;
     clearVoiceRestartTimers();
@@ -1119,6 +1261,10 @@ export default function StudentChatPrototype() {
     setVoiceRound(0);
     setVoiceFinal("");
     setVoiceCaption("Requesting microphone access…");
+    if (interruptionTimerRef.current !== null) {
+      window.clearTimeout(interruptionTimerRef.current);
+      interruptionTimerRef.current = null;
+    }
     setWasInterrupted(false);
     setIsMuted(false);
     setVoiceError(null);
@@ -1292,9 +1438,9 @@ export default function StudentChatPrototype() {
       handoffVoiceSession("voice_unavailable");
       shouldListenRef.current = false;
       setVoiceError(reason);
+      focusTextAfterVoiceRef.current = true;
       setVoicePhase("off");
       setAnnouncement(`${reason} Text mode is still ready.`);
-      window.requestAnimationFrame(() => messageInputRef.current?.focus());
     }
   }
 
@@ -1313,10 +1459,13 @@ export default function StudentChatPrototype() {
     setVoiceCaption("");
     setVoiceFinal("");
     setIsMuted(false);
-    setAnnouncement("Voice ended. The same conversation is ready in text.");
-    if (focusText) {
-      window.requestAnimationFrame(() => messageInputRef.current?.focus());
+    if (interruptionTimerRef.current !== null) {
+      window.clearTimeout(interruptionTimerRef.current);
+      interruptionTimerRef.current = null;
     }
+    setWasInterrupted(false);
+    focusTextAfterVoiceRef.current = focusText;
+    setAnnouncement("Voice ended. The same conversation is ready in text.");
   }
 
   function handoffVoiceSession(
@@ -1343,7 +1492,14 @@ export default function StudentChatPrototype() {
   function interruptVoice() {
     window.speechSynthesis?.cancel();
     recognitionRef.current?.abort();
+    if (interruptionTimerRef.current !== null) {
+      window.clearTimeout(interruptionTimerRef.current);
+    }
     setWasInterrupted(true);
+    interruptionTimerRef.current = window.setTimeout(() => {
+      interruptionTimerRef.current = null;
+      setWasInterrupted(false);
+    }, 1_200);
     setVoiceRound((round) => round + 1);
     setVoiceFinal("");
     setVoiceCaption("Go ahead — I stopped speaking and I’m listening.");
@@ -1561,10 +1717,14 @@ export default function StudentChatPrototype() {
     "--companion-x": `${position.x}px`,
     "--companion-y": `${position.y}px`,
   } as CSSProperties;
+  const voiceExperienceStyle = {
+    "--voice-origin-x": voiceOrigin.x,
+    "--voice-origin-y": voiceOrigin.y,
+  } as CSSProperties;
 
   const companionClasses = [
     styles.appFrame,
-    voiceActive ? styles.voiceActiveFrame : "",
+    voiceVisible ? styles.voiceActiveFrame : "",
     isExpanded ? styles.expanded : "",
     isMoving ? styles.moving : "",
     isResizing ? styles.resizing : "",
@@ -1596,7 +1756,7 @@ export default function StudentChatPrototype() {
 
   return (
     <main className={pageClasses}>
-      <div className={companionClasses} style={companionStyle}>
+      <div ref={companionRef} className={companionClasses} style={companionStyle}>
         <div className={styles.sheetGrabber} aria-hidden="true" />
         <header
           className={styles.topbar}
@@ -1669,24 +1829,28 @@ export default function StudentChatPrototype() {
           className={styles.conversation}
           aria-label={`Conversation with ${assistantName}`}
         >
-          {voicePhase !== "off" ? (
+          {voiceVisible ? (
             <div
               className={styles.voiceExperience}
-              data-phase={voicePhase}
+              data-phase={renderedVoicePhase}
+              data-transition={voicePresentation}
+              data-interrupted={wasInterrupted ? "true" : undefined}
+              style={voiceExperienceStyle}
               role="region"
               aria-label="Voice conversation"
+              onTransitionEnd={handleVoiceTransitionEnd}
             >
               <div className={styles.orbStage}>
                 <LiquidVoiceOrb
                   color={runtimeBranding.primary}
                   isMuted={isMuted}
-                  phase={voicePhase}
+                  phase={renderedVoicePhase}
                   stream={microphoneStream}
                 />
               </div>
 
               <div className={styles.srOnly} aria-live="polite" aria-atomic="true">
-                {isMuted ? "Muted" : voiceLabels[voicePhase]}.{" "}
+                {isMuted ? "Muted" : voiceLabels[renderedVoicePhase]}.{" "}
                 {voiceCaption || `${assistantName} voice conversation active.`}
               </div>
 
@@ -1720,8 +1884,12 @@ export default function StudentChatPrototype() {
                 </button>
               </div>
             </div>
-          ) : (
-            <>
+          ) : null}
+          <div
+            className={styles.textExperience}
+            aria-hidden={voiceVisible ? true : undefined}
+            inert={voiceVisible ? true : undefined}
+          >
               <div className={styles.thread}>
             <div className={styles.dayMarker}>
               <span>Today</span>
@@ -1821,6 +1989,7 @@ export default function StudentChatPrototype() {
                       Momentum returns through a small action and visible evidence.
                     </span>
                     <button
+                      ref={voiceTriggerRef}
                       type="button"
                       aria-label="Open diagram full screen"
                       onClick={() => {
@@ -2096,8 +2265,7 @@ export default function StudentChatPrototype() {
               </span>
             </div>
               </div>
-            </>
-          )}
+          </div>
         </section>
 
         {diagramOpen ? (

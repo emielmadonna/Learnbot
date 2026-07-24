@@ -7,9 +7,14 @@ export const WRITE_PERMISSIONS = [
   "course.authoring.diagram.approve",
   "course.authoring.publish",
   "course.authoring.rollback",
+  "intelligence.opportunity.review",
   "learning.ingestion.start",
   "learning.version.publish",
   "branding.publish",
+  "privacy.access_export.manage",
+  "privacy.delete.manage",
+  "privacy.retention.manage",
+  "privacy.manifest.verify",
 ] as const;
 
 export type WritePermission = (typeof WRITE_PERMISSIONS)[number];

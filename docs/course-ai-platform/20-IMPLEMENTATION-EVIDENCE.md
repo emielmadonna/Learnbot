@@ -30,16 +30,22 @@ assistive-technology matrix, load test, restore, or legal policy.
 | WID-02, WID-08 | B / partial | The real custom element renders as a desktop panel and 390px mobile sheet, restores the same conversation after viewport changes, expands/restores, and passes deterministic pointer/keyboard/clamping fixtures. External host, assistive-technology, and browser-matrix evidence remains pending. | `pnpm --filter @course-ai/console smoke:widget`; Widget Lab browser QA; widget tests 3–4 |
 | WID-04, WID-06, WID-07 | B / partial | The real host simulator changes identity tier, tenant branding, and resolved/stale/ambiguous/unknown context at runtime; deterministic tests ensure the runtime never guesses. Production identity/context adapters remain pending. | Widget Lab browser QA; widget test 5 |
 | WID-05 | B / partial | Browser QA retains typed text/voice/evidence events and the conversation identifier across desktop/mobile/expanded changes; deterministic fixtures cover attachment/source/diagram/reconnect ordering. Live realtime media and signed uploads remain pending. | Widget Lab browser QA; widget tests 6–9 |
+| VOI-01, VOI-02 | B / partial | The unified Student conversation binds voice lifecycle to the authenticated tenant and actor, preserves the mounted text composer during voice presentation, restores draft/scroll/focus on exit, acknowledges interruption, and supports safe cancellation and text fallback. The integrated presentation expands from the real microphone origin; stale animation frames are cancelled during rapid reversals and reduced-motion mode has no artificial delay. Live low-latency speech/realtime providers, measured latency budgets, actual audio-energy animation, reconnect/resume, and production browser evidence remain pending. | `pnpm --filter @course-ai/console test`; `apps/console/test/voice-transition-contract.test.ts`; `/dev/chat` browser QA |
+| VOI-03–VOI-05 | Blocked / partial | Local controls do not retain raw audio by default and do not enable voice cloning. Approved O-07 recording policy, scope-specific cloning consent, live provider usage/cost telemetry, and production latency evidence remain unresolved; local fixtures are not evidence for these requirements. | Open decisions in `19-RISKS-AND-DECISIONS.md`; production adapter gap |
 | INT-01 | C | Unknown/malformed event versions quarantine; event and delivery keys deduplicate; conflicting reuse quarantines without stopping the batch. | `pnpm --filter @course-ai/intelligence-core test`, cases 1–3 |
 | INT-02 | C | Confusion, trailing-30-day content gap, stall, and same-tenant velocity fixtures match the documented formulas. | Intelligence core test, cases 5–9 |
 | INT-03 | C | Missing, degraded, or incomplete sources produce partial/unknown rather than a false known zero. | Intelligence core test, case 10 |
+| INT-01–INT-03 | B / partial | The Creator intelligence API and `/dev/intelligence` use the package runtime through a membership-derived tenant session, preserve known/partial/unknown semantics, expose source health/evidence/suppression, bound mutation input, and reject conflicting idempotency reuse. Durable event/warehouse sources and production identity remain pending. | `pnpm --filter @course-ai/console smoke:intelligence`; Creator intelligence browser QA |
 | OPP-01, OPP-02 | C | Same-tenant evidence, identity, consent, coverage, freshness, policy, confidence, and expiry gates are required; ineligible cases suppress. | Intelligence core test, cases 11–14 |
 | OPP-03 | C | Lifecycle and false-positive feedback require a human Creator/Owner and commit with an audit record; the package exposes no autonomous consequential action. | Intelligence core test, case 15 |
+| OPP-01–OPP-03 | B / partial | The Creator operations surface supports audited human-only lifecycle review and feedback against same-tenant evidence. It exposes no autonomous outreach or consequential action. Production policy/calibration and durable audit storage remain pending. | `/dev/intelligence`; intelligence API smoke |
 | OPP-04 | Blocked | No score, threshold, expiry duration, offer match, or calibration gate is invented. | Open decision O-09 in `19-RISKS-AND-DECISIONS.md` |
 | SEC-08 | C / partial | Exact-grant subject access/export/delete and retention jobs are tenant-scoped, resumable, idempotent, legal-hold aware, tombstoned, and integrity-checked. Approved O-07/O-13 policy, real RLS/storage/vector deletion, archive delivery/expiry, tenant closure, and live production evidence remain pending. | `pnpm --filter @course-ai/privacy-lifecycle test`, 17 adversarial cases |
+| SEC-08 | B / partial | `/api/dev/privacy` and `/dev/privacy` integrate exact-purpose previews, legal-hold-aware jobs, one-use exact confirmation for delete/retention, manifest verification, tombstones, and audit evidence. The UI clearly labels policy values as non-production fixtures and leaves O-07/O-13 unresolved. Durable queues/stores, real provider deletion, signed archives, approved policy, and tenant closure remain pending. | `pnpm --filter @course-ai/console smoke:privacy`; Privacy operations browser QA |
 | MCP-02, MCP-03 | C | Default/cross-tenant/cross-actor/invalid/expired/over-budget/over-rate calls deny before invocation; replays are idempotent; output and errors are bounded and safe. | `pnpm --filter @course-ai/mcp-server test`, 12 cases |
 | MCP-08 | C / partial | Invocation without the exact capability, budget, and unexpired grant denies. Per-principal tool-discovery filtering still requires a connection-bound production principal/registry adapter. | MCP authorization tests; production adapter gap |
-| MCP-06, MCP-07 | B | Twenty tools use shared console API boundaries; smoke covers shared snapshots, authorized course create and authoring dry-run, and a denied write. Durable multi-replica grant/idempotency stores and production service-principal provenance remain pending. | `pnpm --filter @course-ai/mcp-server smoke` |
+| MCP-06, MCP-07 | B | Twenty-eight tools use shared console API boundaries, including intelligence review/feedback and separately permissioned privacy lifecycle operations. Smoke covers shared authoring/intelligence/privacy snapshots, authorized course, feedback and manifest operations, plus a denied write. Delete/retention still require one-use exact confirmation. Durable multi-replica grant/idempotency stores and production service-principal provenance remain pending. | `pnpm --filter @course-ai/mcp-server smoke` |
+| Build/runtime isolation | B / partial | Next.js development output is isolated in `.next-dev` while optimized production output remains in `.next`, preventing a parallel production build from replacing the running development server manifests. This is local integration evidence only; production deployment, CI/CD, migration gates, and live-host operational evidence remain pending. | `apps/console/next.config.ts`; local development and production build verification |
 
 ## Whole-repository gate
 
@@ -49,13 +55,15 @@ The root integration gate for this increment is:
 pnpm install
 pnpm check
 pnpm build
-pnpm smoke:dev
-pnpm --filter @course-ai/console smoke:authoring
-pnpm --filter @course-ai/console smoke:widget
-pnpm --filter @course-ai/mcp-server smoke
-pnpm supabase:verify
+COURSE_AI_CONSOLE_URL=http://127.0.0.1:3100 pnpm verify:dev
 git diff --check
 ```
+
+`verify:dev` includes the development API, authoring, intelligence, privacy,
+Widget host, all 28 MCP tools, and the structural Supabase smoke suites. The
+intelligence and privacy entry points are respectively:
+`pnpm --filter @course-ai/console smoke:intelligence` and
+`pnpm --filter @course-ai/console smoke:privacy`.
 
 The final integration handoff must record the actual outcome. A structural
 Supabase verifier is not equivalent to executing the PostgreSQL negative-policy
@@ -63,17 +71,35 @@ suite.
 
 ### 2026-07-23 integration outcome
 
-- `pnpm check`: **passed** after the root integration typecheck corrected two
+- Before the final development-cache isolation and smoke environment/timeout
+  changes, `pnpm check`: **passed** after the root integration typecheck corrected two
   Widget host ref initializers and one over-narrowed intelligence assertion.
-- `pnpm build`: **passed**, including the optimized Next.js production build
-  and all 23 application routes.
-- `pnpm verify:dev`: **passed**, including authenticated/cross-tenant API
-  fixtures, authoring restore, Widget host/assets, all 20 MCP tools, and the
+- Before those final configuration changes, `pnpm build`: **passed**, including
+  the optimized Next.js production build and all 27 application routes.
+- Before those final configuration changes,
+  `COURSE_AI_CONSOLE_URL=http://127.0.0.1:3101 pnpm verify:dev`: **passed** after
+  warm-up, including authenticated/cross-tenant API fixtures, authoring restore,
+  intelligence and privacy smoke, Widget host/assets, all 28 MCP tools, and the
   Supabase structural verifier.
 - Fresh Widget Lab browser QA: **passed** at 1440px desktop and 390px mobile
   with the same conversation ID/item count restored; a fresh reload produced
   no new warning/error log. The post-build development server restarted
   successfully and `/api/dev/health` plus the Widget route smoke passed.
+- Fresh `/dev/chat` browser QA at 1200×952 **passed** for the desktop text
+  presentation, connecting-state voice entry, rapid connecting-state reversal,
+  draft and nonzero-scroll preservation, textarea focus restoration, and the
+  permission-failure recovery path, with no browser console warning or error.
+  Chrome denied microphone access and the available browser could not emulate
+  mobile geometry or reduced motion, so listening/thinking/speaking visuals,
+  live audio-energy behavior, mobile geometry, and reduced-motion browser
+  behavior remain unclaimed here; their deterministic transition contracts pass
+  in the focused console suite.
+- Post-configuration revalidation at port 3100 **passed**:
+  `pnpm check`; `pnpm build`, including all 27 application routes;
+  `COURSE_AI_CONSOLE_URL=http://127.0.0.1:3100 pnpm verify:dev`, including all
+  28 MCP tools and the intelligence/privacy smoke suites; and
+  `git diff --check`. These remain local grade-B/C integration and contract
+  results, not live-host or production-provider evidence.
 
 ## Explicitly unproven
 

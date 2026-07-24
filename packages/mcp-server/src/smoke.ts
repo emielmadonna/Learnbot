@@ -15,7 +15,10 @@ process.env.COURSE_AI_MCP_GRANTS = JSON.stringify([
     permissions: [
       "course.create",
       "course.authoring.edit",
-      "branding.publish"
+      "branding.publish",
+      "intelligence.opportunity.review",
+      "privacy.access_export.manage",
+      "privacy.manifest.verify"
     ],
     expiresAt: "2099-01-01T00:00:00.000Z",
     budgetUsd: 1,
@@ -33,6 +36,9 @@ const transport = new StdioClientTransport({
   env: {
     ...getDefaultEnvironment(),
     COURSE_AI_MCP_GRANTS: process.env.COURSE_AI_MCP_GRANTS,
+    ...(process.env.COURSE_AI_CONSOLE_URL
+      ? { COURSE_AI_CONSOLE_URL: process.env.COURSE_AI_CONSOLE_URL }
+      : {}),
   },
 });
 
@@ -50,6 +56,14 @@ try {
     "resolve_learning_context",
     "get_course_authoring_snapshot",
     "validate_course_draft",
+    "get_intelligence_snapshot",
+    "review_student_opportunity",
+    "record_opportunity_feedback",
+    "get_privacy_operations_snapshot",
+    "preview_privacy_job",
+    "create_privacy_job",
+    "execute_privacy_job",
+    "verify_privacy_export_manifest",
     "create_course_shell",
     "update_course_shell",
     "add_course_lesson",
@@ -175,6 +189,83 @@ try {
     );
   }
 
+  const intelligence = await client.callTool({
+    name: "get_intelligence_snapshot",
+    arguments: { tenantId: "tenant_northstar_demo" }
+  });
+  const intelligenceContent = intelligence.structuredContent as
+    | { snapshot?: { opportunity?: { id?: string } } }
+    | undefined;
+  const opportunityId = intelligenceContent?.snapshot?.opportunity?.id;
+  if (
+    intelligence.isError ||
+    typeof opportunityId !== "string" ||
+    opportunityId.length === 0
+  ) {
+    throw new Error(
+      `Intelligence snapshot omitted its tenant-scoped opportunity: ${JSON.stringify(intelligence)}`,
+    );
+  }
+
+  const feedback = await client.callTool({
+    name: "record_opportunity_feedback",
+    arguments: {
+      tenantId: "tenant_northstar_demo",
+      actorId: "actor_creator_smoke",
+      requestId: "request-smoke-intelligence-feedback",
+      grantId: "grant_smoke_creator",
+      grantToken,
+      idempotencyKey: "idempotency-smoke-intelligence-feedback",
+      opportunityId,
+      kind: "helpful",
+      note: "Deterministic MCP integration evidence."
+    }
+  });
+  if (!feedback.structuredContent || feedback.isError) {
+    throw new Error(
+      `Authorized MCP intelligence feedback failed: ${JSON.stringify(feedback)}`,
+    );
+  }
+
+  const privacy = await client.callTool({
+    name: "get_privacy_operations_snapshot",
+    arguments: { tenantId: "tenant_northstar_demo" }
+  });
+  const privacyContent = privacy.structuredContent as
+    | { manifests?: Array<{ manifestId?: string }> }
+    | undefined;
+  const manifestId = privacyContent?.manifests?.[0]?.manifestId;
+  if (
+    privacy.isError ||
+    typeof manifestId !== "string" ||
+    manifestId.length === 0
+  ) {
+    throw new Error(
+      `Privacy snapshot omitted its fixture export manifest: ${JSON.stringify(privacy)}`,
+    );
+  }
+
+  const manifestVerification = await client.callTool({
+    name: "verify_privacy_export_manifest",
+    arguments: {
+      tenantId: "tenant_northstar_demo",
+      actorId: "actor_creator_smoke",
+      requestId: "request-smoke-privacy-manifest",
+      grantId: "grant_smoke_creator",
+      grantToken,
+      idempotencyKey: "idempotency-smoke-privacy-manifest",
+      manifestId
+    }
+  });
+  if (
+    !manifestVerification.structuredContent ||
+    manifestVerification.isError
+  ) {
+    throw new Error(
+      `Authorized MCP privacy verification failed: ${JSON.stringify(manifestVerification)}`,
+    );
+  }
+
   const deniedMutation = await client.callTool({
     name: "publish_tenant_branding",
     arguments: {
@@ -204,7 +295,7 @@ try {
   }
 
   console.log(
-    `MCP smoke passed: ${expectedTools.length} tools, shared API snapshots, authorized authoring dry-run/course create and denied write`
+    `MCP smoke passed: ${expectedTools.length} tools, shared authoring/intelligence/privacy snapshots, authorized authoring/course/feedback/privacy writes and denied write`
   );
 } finally {
   await client.close();

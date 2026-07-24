@@ -29,7 +29,7 @@
   width: min(var(--companion-width, 1120px), calc(100vw - 48px));
   height: min(var(--companion-height, 900px), calc(100dvh - 48px));
   min-height: min(680px, calc(100dvh - 48px));
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: 68px minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid rgb(63 83 73 / 16%);
   border-radius: 24px;
@@ -44,20 +44,29 @@
   transition:
     width 180ms ease,
     height 180ms ease,
+    grid-template-rows 360ms cubic-bezier(0.22, 1, 0.36, 1),
     border-radius 180ms ease,
     box-shadow 180ms ease;
 }
 
 .voiceActiveFrame {
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: 0 minmax(0, 1fr);
 }
 
 .voiceActiveFrame .topbar {
-  display: none;
+  min-height: 0;
+  max-height: 0;
+  padding-block: 0;
+  overflow: hidden;
+  border-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-12px);
 }
 
 .voiceActiveFrame .resizeHandle {
-  display: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .moving,
@@ -94,10 +103,18 @@
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   min-height: 68px;
+  max-height: 68px;
   padding: 0 20px;
   border-bottom: 1px solid var(--chat-line);
   background: rgb(255 255 255 / 96%);
   cursor: grab;
+  transition:
+    min-height 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease,
+    opacity 220ms ease,
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
   touch-action: none;
 }
 
@@ -274,6 +291,15 @@
       transparent 31px,
       #e8ece8 32px
     );
+}
+
+.textExperience {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .thread {
@@ -1046,6 +1072,7 @@
 
 .voiceExperience {
   position: relative;
+  z-index: 5;
   display: grid;
   min-width: 0;
   min-height: 0;
@@ -1060,19 +1087,76 @@
     ),
     #fbfaf7;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  isolation: isolate;
+  clip-path: circle(150% at var(--voice-origin-x) var(--voice-origin-y));
+  filter: blur(0) saturate(1);
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transform-origin: var(--voice-origin-x) var(--voice-origin-y);
+  transition:
+    clip-path 560ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 260ms ease,
+    transform 560ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: clip-path, filter, opacity, transform;
+}
+
+.voiceExperience::before {
+  position: absolute;
+  z-index: -1;
+  inset: 22% 20%;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--chat-green-soft) 48%, transparent);
+  content: "";
+  filter: blur(58px);
+  opacity: 0.72;
+  transform: scale(0.82);
+}
+
+.voiceExperience[data-transition="entering"] {
+  clip-path: circle(24px at var(--voice-origin-x) var(--voice-origin-y));
+  filter: blur(8px) saturate(0.82);
+  opacity: 0;
+  transform: translateY(10px) scale(0.985);
+}
+
+.voiceExperience[data-transition="exiting"] {
+  clip-path: circle(24px at var(--voice-origin-x) var(--voice-origin-y));
+  filter: blur(7px) saturate(0.84);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px) scale(0.985);
+  transition-duration: 380ms, 300ms, 220ms, 380ms;
+  transition-timing-function: cubic-bezier(0.55, 0, 0.85, 0.36);
 }
 
 .orbStage {
+  position: relative;
   display: grid;
   min-height: 0;
   place-items: center;
+  filter: blur(0);
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    filter 520ms 50ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 360ms 70ms ease,
+    transform 600ms 50ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.liquidOrb {
-  display: block;
-  width: min(390px, 78vw);
-  height: min(390px, 48vh);
-  max-height: 100%;
+.voiceExperience[data-transition="entering"] .orbStage {
+  filter: blur(18px);
+  opacity: 0;
+  transform: translateY(24px) scale(0.68);
+}
+
+.voiceExperience[data-transition="exiting"] .orbStage {
+  filter: blur(14px);
+  opacity: 0;
+  transform: translateY(16px) scale(0.78);
+  transition-delay: 0ms;
+  transition-duration: 280ms;
+  transition-timing-function: ease-in;
 }
 
 .voiceExperience .voiceControls {
@@ -1081,6 +1165,43 @@
   justify-content: center;
   gap: 18px;
   margin-top: 6px;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 300ms 150ms ease,
+    transform 380ms 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.voiceExperience[data-transition="entering"] .voiceControls {
+  opacity: 0;
+  transform: translateY(18px) scale(0.92);
+}
+
+.voiceExperience[data-transition="exiting"] .voiceControls {
+  opacity: 0;
+  transform: translateY(10px) scale(0.94);
+  transition-delay: 0ms;
+  transition-duration: 180ms;
+  transition-timing-function: ease-in;
+}
+
+.voiceExperience[data-interrupted="true"] .orbStage::after {
+  position: absolute;
+  width: min(360px, 72vw);
+  height: min(360px, 45vh);
+  border: 1px solid color-mix(in srgb, var(--chat-green) 36%, transparent);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+  animation: interruptionAcknowledged 900ms cubic-bezier(0.16, 1, 0.3, 1)
+    both;
+}
+
+.liquidOrb {
+  display: block;
+  width: min(390px, 78vw);
+  height: min(390px, 48vh);
+  max-height: 100%;
 }
 
 .voiceExperience .voiceControls button {
@@ -1155,6 +1276,7 @@
   background: transparent;
   cursor: nwse-resize;
   touch-action: none;
+  transition: opacity 180ms ease;
 }
 
 .resizeHandle span {
@@ -1218,6 +1340,22 @@
   }
 }
 
+@keyframes interruptionAcknowledged {
+  0% {
+    opacity: 0;
+    transform: scale(0.74);
+  }
+
+  32% {
+    opacity: 0.72;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+
 @media (max-width: 720px) {
   .page {
     display: grid;
@@ -1230,9 +1368,14 @@
     width: 100%;
     height: calc(100dvh - 16px);
     min-height: 560px;
+    grid-template-rows: 65px minmax(0, 1fr);
     border-width: 1px 0 0;
     border-radius: 22px 22px 0 0;
     transform: none;
+  }
+
+  .voiceActiveFrame {
+    grid-template-rows: 0 minmax(0, 1fr);
   }
 
   .expanded {
@@ -1376,6 +1519,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .appFrame,
+  .topbar,
+  .resizeHandle,
+  .voiceExperience,
+  .voiceExperience .orbStage,
+  .voiceExperience .voiceControls,
+  .voiceExperience[data-interrupted="true"] .orbStage::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
   .voiceExperience .voiceControls button {
     transition: none;
   }
