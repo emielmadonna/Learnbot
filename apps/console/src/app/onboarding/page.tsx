@@ -146,13 +146,13 @@ export default async function OnboardingPage({
       <div className={styles.frame}>
         <nav className={styles.floatingNav} aria-label="Workspace setup">
           <Link className={styles.brand} href="/">
-            <span className={styles.brandMark}>E</span>
+            <span className={styles.brandMark} aria-hidden="true" />
             <span>
-              <b>Estie</b>
-              <small>Native learning</small>
+              <b>LearningBot</b>
+              <small>Learning, connected</small>
             </span>
           </Link>
-          <span className={styles.secureLabel}>Private workspace setup</span>
+          <span className={styles.secureLabel}>Tenant-scoped setup</span>
         </nav>
         <section className={styles.wideCard}>
           <div className={styles.progress} aria-label="First sign-in progress">
@@ -165,20 +165,20 @@ export default async function OnboardingPage({
             </span>
             <i data-complete="true" />
             <span data-active="true">
-              <b>3</b> Enter
+              <b>3</b> Set up
             </span>
           </div>
-          <p className={styles.eyebrow}>Workspace setup</p>
+          <p className={styles.eyebrow}>Your learning workspace</p>
           <h1 className={styles.title}>
             {memberships.length === 0
-              ? "Let’s connect your learning workspace."
+              ? "Start with the place your team learns."
               : context.selected
-                ? "Make the workspace ready for your team."
-                : "Choose where you want to learn."}
+                ? "Make your workspace feel like yours."
+                : "Choose a workspace to continue."}
           </h1>
           <p className={styles.lede}>
-            Signed in as {user.email ?? "a verified user"}. Choose the path
-            that matches how you joined.
+            Signed in as {user.email ?? "a verified user"}. Connect an existing
+            workspace, accept an invitation, or start a new one.
           </p>
           {statusMessages[status] ? (
             <p className={styles.notice} role="status">

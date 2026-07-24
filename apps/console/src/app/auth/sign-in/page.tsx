@@ -13,6 +13,12 @@ const messages: Record<string, string> = {
   signed_out: "You have been signed out securely.",
 };
 
+const localDemoLinks = [
+  { label: "Learner", detail: "Ask, listen, and practice", href: "/dev/chat" },
+  { label: "Teacher", detail: "See cohort signals", href: "/dev/teacher" },
+  { label: "Creator", detail: "Shape a learning path", href: "/dev/learning" },
+];
+
 export default async function SignInPage({
   searchParams,
 }: {
@@ -48,27 +54,30 @@ export default async function SignInPage({
       <div className={styles.frame}>
         <nav className={styles.floatingNav} aria-label="Secure access">
           <Link className={styles.brand} href="/">
-            <span className={styles.brandMark}>L</span>
+            <span className={styles.brandMark} aria-hidden="true" />
             <span>
               <b>LearningBot</b>
-              <small>Enterprise learning</small>
+              <small>Learning, connected</small>
             </span>
           </Link>
-          <span className={styles.secureLabel}>Administrator-managed access</span>
+          <span className={styles.secureLabel}>Private workspace access</span>
         </nav>
         <div className={styles.authLayout}>
           <section className={styles.authIntro}>
-            <p className={styles.eyebrow}>One place to learn</p>
+            <div className={styles.introKicker}>
+              <span className={styles.introDot} aria-hidden="true" />
+              LearningBot workspace
+            </div>
             <h1 className={styles.displayTitle}>
-              Knowledge that moves with your work.
+              Pick up where the good work left off.
             </h1>
             <p>
-              Ask, listen, practice, and keep making progress in one private
-              learning workspace grounded in your organization’s knowledge.
+              A quiet place for your team to learn from the knowledge you already
+              trust—through courses, conversation, and a little momentum.
             </p>
             <div className={styles.trustLine}>
-              <span aria-hidden="true">✓</span>
-              Your workspace and learning sources appear after secure sign-in.
+              <span aria-hidden="true">✦</span>
+              Your organization, sources, and role stay together after sign-in.
             </div>
           </section>
           <section className={styles.card}>
@@ -113,6 +122,29 @@ export default async function SignInPage({
               Need access, forgot your password, or received an expired temporary
               password? Your organization’s LearningBot administrator can help.
             </p>
+            {process.env.NODE_ENV !== "production" ? (
+              <aside className={styles.demoPanel} aria-label="Local demo">
+                <div>
+                  <span className={styles.demoEyebrow}>Local demo</span>
+                  <strong>See the product before connecting Supabase.</strong>
+                  <p>
+                    Fixture-only previews for local development. No account,
+                    session, or production data is created.
+                  </p>
+                </div>
+                <div className={styles.demoLinks}>
+                  {localDemoLinks.map((demo) => (
+                    <Link href={demo.href} key={demo.href}>
+                      <span>
+                        <b>{demo.label}</b>
+                        <small>{demo.detail}</small>
+                      </span>
+                      <span aria-hidden="true">↗</span>
+                    </Link>
+                  ))}
+                </div>
+              </aside>
+            ) : null}
           </section>
         </div>
       </div>
