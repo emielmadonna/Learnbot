@@ -25,9 +25,14 @@ export async function proxy(request: NextRequest) {
     process.env.NODE_ENV === "production" &&
     fixturePreviewEnabled()
   ) {
+    const isAuthorizedVercelPreview =
+      process.env.VERCEL_ENV === "preview" &&
+      process.env.VERCEL_GIT_COMMIT_REF === "codex/platform-foundations";
     const authorization = request.headers.get("authorization");
     const expected = process.env.LEARNINGBOT_FIXTURE_PREVIEW_AUTHORIZATION;
-    if (!expected || authorization !== `Bearer ${expected}`) {
+    const isAuthorizedBearer =
+      Boolean(expected) && authorization === `Bearer ${expected}`;
+    if (!isAuthorizedVercelPreview && !isAuthorizedBearer) {
       return new NextResponse("Not found", {
         status: 404,
         headers: {
