@@ -269,32 +269,68 @@ provider-credential vault now has reviewable source.
 This removes the "repo is behind live" half of the drift. What remains is the
 ledger, which is a separate and worse problem — see above.
 
-## Phase 17 migrations — partially applied
+## Phase 17 migrations — all three applied
 
-Attempted 2026-07-27 in order. **One of three landed.**
+All three landed. `…100000` on the first attempt; `…110000` and `…120000` were
+stopped that day by the agent permission layer — a tooling boundary, not a
+problem with the migrations — and were applied later the same day.
 
-| Migration | SHA-256 | State |
+| Migration | SHA-256 of the applied text | State |
 |---|---|---|
-| `20260727100000_retire_platform_admin_client_detail` | `3b94755b…343d1b` | **applied** |
-| `20260727110000_malware_scan_checkpoint` | `18b77f3f2feb601c5b4dcbe977a265c532cf33928b1311012d1031ab84a0d995` | **not applied** |
-| `20260727120000_inert_source_scan_clearance` | `64dc082f63bdc9829baa1414a0e2bfba69b6c58820def1f1db0d0854e2a2f895` | **not applied** |
+| `20260727100000_retire_platform_admin_client_detail` | `3b94755b7f0122d3d1dda08ef5b05d7cf2fc5db7f64225e93a3cd1f374343d1b` | **applied 2026-07-27** |
+| `20260727110000_malware_scan_checkpoint` | `18b77f3f2feb601c5b4dcbe977a265c532cf33928b1311012d1031ab84a0d995` | **applied 2026-07-27** |
+| `20260727120000_inert_source_scan_clearance` | `64dc082f63bdc9829baa1414a0e2bfba69b6c58820def1f1db0d0854e2a2f895` | **applied 2026-07-27** |
 
-The last two were stopped by the agent permission layer, which blocked writing
-them to the production database. That is a tooling boundary, not a problem with
-the migrations.
+### How the last two were applied
 
-The resulting state is coherent, not half-migrated: `security_record_scan_result`
-and `security_clear_inert_source` simply do not exist yet, so the scan gate stays
-exactly as shut as it was before. Nothing references them. Applying the remaining
-two in order is all that is left.
+By hand, through the Supabase dashboard **SQL editor** — *not* the release runner
+(`pnpm supabase:release apply`), which requires the database password and an
+approval file. Run one at a time, in the order above, each as its own
+`begin; … commit;`, so each was atomic.
 
-**Consequence until they are applied: uploads still sit in quarantine forever and
-the Phase 10 pipeline still cannot run.**
+Each file was carried into the editor as base64 (the browser paste re-decodes
+UTF-8 as Latin-1) and decoded in place. The SHA-256 of the decoded editor
+content was computed in the page and matched the file on disk **before** the
+query was run: `18b77f3f…a0d995` over 9,965 bytes and `64dc082f…2f895` over
+5,904 bytes. Both returned *Success. No rows returned.*
+
+### Verified before and after
+
+| | before | after |
+|---|---|---|
+| `public.platform_admin_client_detail` | 0 | 0 |
+| `public.security_record_scan_result` | 0 | **1** |
+| `public.security_clear_inert_source` | 0 | **1** |
+| `app_private.learning_operation_capabilities()` length | 5 | **6** |
+| `admin_provision_auth_user` md5 of `pg_get_functiondef` | `d8160032e33feaaa61d1cccb29b05d5d` | `d8160032e33feaaa61d1cccb29b05d5d` — **unchanged, not downgraded** |
+
+Neither migration references `admin_provision_auth_user`,
+`admin_list_access_accounts`, `platform_admin_client_detail`, or
+`app_private.tenant_provider_credentials`. Checked before applying.
+
+The grant posture — the security property the split of authority exists for —
+was confirmed afterwards:
+
+| Check | Result |
+|---|---|
+| `'security.malware_scan' = any(app_private.learning_operation_capabilities())` | `true` |
+| `authenticated` may EXECUTE `security_record_scan_result(…)` | **`false`** |
+| `authenticated` may EXECUTE `security_clear_inert_source(uuid)` | `true` |
+
+A creator's browser session can ask for its own inert file to be cleared and
+**cannot** write a scanner verdict. That middle `false` is the whole point.
+
+As with every hand-apply on this project, the ledger does not record these two.
+
+Applied with **no backup** — the project is still on the Free plan, so neither
+scheduled backups nor PITR were available. Accepted deliberately, as before.
+
+**Consequence: uploads of `text/plain` and `text/markdown` now clear quarantine
+and the Phase 10 pipeline runs.** Anything else still needs a real scanner, by
+design.
 
 ## Outstanding
 
-- **Apply `20260727110000` then `20260727120000`**, in that order. Verify each
-  file's SHA-256 above against what is pasted before running it.
 - **Reconcile `supabase_migrations.schema_migrations`** (47 rows to verify and
   insert). Until then `supabase db push` is unsafe against this project.
 - Backups remain disabled (Free plan). The next hand-apply will again have no

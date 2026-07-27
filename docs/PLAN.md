@@ -76,7 +76,7 @@ switched off, and the platform admin still sees their data.
 limiting were listed here until 2026-07-27. All three have shipped and moved up to
 **Real**.)*
 
-### Built, reachable once the migrations are applied
+### Built and reachable — the migrations are applied
 
 - **Upload processing and knowledge cleaning.** Section 4 shipped in Phase 10:
   `api/ingestion/extract`, `clean`, `review`, `publish`, plus `lib/ingestion/`, the
@@ -93,8 +93,11 @@ limiting were listed here until 2026-07-27. All three have shipped and moved up 
     the caller. When extraction learns PDF or DOCX, those types are absent from the
     allowlist, so the gate closes again by itself and a real scanner becomes required.
 
-  **Neither migration is applied to the live database yet**, so uploads are still stuck
-  in production. Applying them is what makes Phase 10 run.
+  **Both migrations were applied to the live database by hand on 2026-07-27**, through
+  the dashboard SQL editor rather than the release runner. Uploads of `text/plain` and
+  `text/markdown` now flow with no scanner deployed. See
+  `infra/supabase/SCHEMA-DRIFT.md` for the applied hashes and the before/after
+  verification.
 
 ### Absent — no code path at all
 
@@ -587,9 +590,9 @@ Status is maintained here — update it in the same commit as the work.
 | 15 | Billing, margins, Stripe | L | **done** |
 | 9 | Character avatars | M | **done** |
 | 7 | The assistant / embeddable widget | XL | **done** |
-| 10 | Knowledge pipeline | XL | **built; gate opens once 20260727110000 + 20260727120000 are applied** |
+| 10 | Knowledge pipeline | XL | **done** — gate opened 2026-07-27 when `20260727110000` + `20260727120000` were applied |
 | 12 | Operational debt | M | partial — rate limiting + outbox drain done; audit coverage and invitation email not |
-| 17 | Malware scan checkpoint | M | **done in code — migrations not yet applied to the live database** |
+| 17 | Malware scan checkpoint | M | **done** — both migrations applied to the live database 2026-07-27 |
 | 11 | Figures in chat | M | not started |
 | 13 | Management MCP | M | not started |
 
