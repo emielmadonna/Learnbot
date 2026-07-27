@@ -13,7 +13,18 @@ const linkedRefFile = resolve(supabaseRoot, ".temp", "project-ref");
 const evidenceRoot = resolve(supabaseRoot, ".release-evidence");
 const forbiddenProjectName = /\b(?:hook\s*lab|midway)\b/i;
 const projectRefPattern = /^[a-z0-9]{20}$/;
-const migrationNamePattern = /^(\d{4})_[a-z0-9_]+\.sql$/;
+// Two naming schemes exist in this repository and both are legitimate.
+//
+// `0001_`..`0028_` is the original hand-ordered block. `20260724182939_` and
+// later use the Supabase CLI's timestamp convention, adopted on 2026-07-24.
+//
+// This runner previously accepted only the 4-digit form AND required an
+// unbroken 1..N sequence, so from the moment the timestamp convention was
+// adopted it refused to inspect, plan or apply anything. The nine unrecorded
+// migrations in SCHEMA-DRIFT.md were applied by hand that same evening. A
+// safety gate that cannot run is not a safety gate; it is the reason someone
+// reaches for the SQL editor instead.
+const migrationNamePattern = /^(\d{4}|\d{14})_[a-z0-9_]+\.sql$/;
 const maxApprovalLifetimeMs = 72 * 60 * 60 * 1000;
 const maxPlanAgeMs = 30 * 60 * 1000;
 const actions = new Set(["link", "plan", "apply", "verify"]);
@@ -169,14 +180,47 @@ async function migrationManifest() {
     .filter((name) => name.endsWith(".sql"))
     .sort();
   if (names.length === 0) throw new Error("no migrations found");
-  const numbers = names.map((name) => {
+  const ordinals = names.map((name) => {
     const match = migrationNamePattern.exec(name);
     if (!match) throw new Error(`invalid migration filename ${name}`);
-    return Number(match[1]);
+    return { name, value: match[1], sequenced: match[1].length === 4 };
   });
-  numbers.forEach((number, index) => {
-    if (number !== index + 1) {
-      throw new Error("migrations must be an unbroken sequence beginning at 0001");
+
+  // The sequenced block keeps its original, stronger guarantee: an unbroken
+  // 1..N run, so a deleted file in that range is still caught.
+  const sequenced = ordinals.filter((entry) => entry.sequenced);
+  sequenced.forEach((entry, index) => {
+    if (Number(entry.value) !== index + 1) {
+      throw new Error(
+        "sequenced migrations must be an unbroken run beginning at 0001",
+      );
+    }
+  });
+
+  // The two schemes must not interleave, or filename sort order stops matching
+  // apply order and the fingerprint would cover a set the database never saw
+  // in that sequence.
+  const firstTimestamp = ordinals.findIndex((entry) => !entry.sequenced);
+  if (firstTimestamp !== -1) {
+    const trailing = ordinals.slice(firstTimestamp);
+    if (trailing.some((entry) => entry.sequenced)) {
+      throw new Error(
+        "sequenced migrations must all precede timestamped migrations",
+      );
+    }
+  }
+
+  // Timestamps cannot prove nothing is missing, so enforce what they can:
+  // strictly increasing, never duplicated. A repeated or out-of-order
+  // timestamp means two migrations could apply in the wrong order.
+  const timestamped = ordinals.filter((entry) => !entry.sequenced);
+  timestamped.forEach((entry, index) => {
+    if (index === 0) return;
+    const previous = timestamped[index - 1];
+    if (entry.value <= previous.value) {
+      throw new Error(
+        `timestamped migrations must strictly increase: ${previous.name} then ${entry.name}`,
+      );
     }
   });
   const hash = createHash("sha256");
