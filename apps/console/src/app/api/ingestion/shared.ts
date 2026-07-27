@@ -11,6 +11,14 @@ const safeCodes = new Set([
   "course_not_found",
   "unsupported_media_type",
   "object_not_found",
+  // Phase 17 scan checkpoint. Each of these means "the gate stayed shut", and
+  // a creator staring at a stuck upload deserves to know which one it was --
+  // "no scanner is configured" and "your file is too big to scan" are very
+  // different problems, and collapsing both to request_failed hides an
+  // operator misconfiguration behind what looks like a user error.
+  "scanner_not_configured",
+  "unscannable_size",
+  "scan_record_failed",
 ]);
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -45,7 +53,14 @@ export function ingestionErrorResponse(error: unknown) {
           ? 409
           : code === "extraction_not_found" || code === "course_not_found"
             ? 404
-            : 400;
+            : // An unconfigured scanner is the operator's problem, not the
+              // caller's, and a failed verdict write is an upstream failure.
+              // Both are retryable; neither is a malformed request.
+              code === "scanner_not_configured"
+              ? 503
+              : code === "scan_record_failed"
+                ? 502
+                : 400;
     return NextResponse.json(
       { ok: false, code },
       { status, headers: { "Cache-Control": "no-store" } },
