@@ -1,0 +1,516 @@
+/*
+  Assistant configuration panel.
+
+  Every colour here resolves from the five brand custom properties the shell
+  emits (--brand-primary/-accent/-surface/-text/-on-primary) or from a neutral
+  mixed out of them. Nothing is hardcoded, so the panel re-themes with the
+  tenant — and the preview block re-declares the same derivations against its
+  own locally overridden brand values, which is what makes the miniature react
+  to an unsaved colour edit.
+*/
+
+/*
+  The host panel body is the flex child that owns the height, so the editor
+  claims all of it: the frame's own body becomes the single scroll container and
+  its action footer stays reachable without scrolling to the end of the form.
+*/
+.editorRoot {
+  height: 100%;
+}
+
+.frame {
+  height: 100%;
+}
+
+.viewSwitch {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-3);
+}
+
+.layout {
+  display: grid;
+  align-items: start;
+  gap: var(--space-6);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1000px) {
+  .layout {
+    grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+  }
+}
+
+.form {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-6);
+}
+
+/* ------------------------------------------------------------ form groups */
+
+.group {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid color-mix(in srgb, var(--n-ink) 9%, var(--n-canvas));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--n-ink) 3%, var(--n-canvas));
+}
+
+.groupTitle {
+  margin: 0;
+  color: var(--n-ink);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-snug);
+}
+
+.groupNote {
+  margin: calc(var(--space-3) * -1) 0 0;
+  color: color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas));
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.pair {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+}
+
+/* --------------------------------------------------------- course scoping */
+
+.courseList {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.courseLegend {
+  padding: 0 0 var(--space-2);
+  color: color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas));
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.courseRow {
+  display: grid;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.courseRow:hover {
+  border-color: color-mix(in srgb, var(--n-ink) 9%, var(--n-canvas));
+  background: color-mix(in srgb, var(--n-ink) 5%, var(--n-canvas));
+}
+
+.courseRow input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-primary);
+}
+
+.courseTitle {
+  overflow: hidden;
+  color: var(--n-ink);
+  font-size: var(--text-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.courseStatus {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--n-ink) 8%, var(--n-canvas));
+  color: color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas));
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* -------------------------------------------------------- status messages */
+
+.error {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, #a3352c 34%, var(--n-canvas));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, #a3352c 10%, var(--n-canvas));
+  color: color-mix(in srgb, #a3352c 78%, var(--n-ink));
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+.conflict {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, #a3352c 40%, var(--n-canvas));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, #a3352c 10%, var(--n-canvas));
+}
+
+.conflict p {
+  margin: 0;
+  color: color-mix(in srgb, #a3352c 80%, var(--n-ink));
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+/*
+ * A saved draft is invisible to everyone but this panel: learning_get_workspace
+ * prefers the published branding row and agent_directive_for_tenant reads only
+ * the published row. Saying so has to be impossible to miss, so this sits above
+ * the fields rather than in the footer.
+ */
+.draftNotice {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, #8a6a12 36%, var(--n-canvas));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, #c8912c 12%, var(--n-canvas));
+  color: color-mix(in srgb, #8a6a12 82%, var(--n-ink));
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.draftNotice strong {
+  font-size: var(--text-md);
+}
+
+.statusLine {
+  display: block;
+  color: color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas));
+  font-size: var(--text-xs);
+}
+
+.boundary {
+  margin: 0;
+  padding: var(--space-4);
+  border-left: 3px solid var(--brand-accent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--n-ink) 4%, var(--n-canvas));
+  color: color-mix(in srgb, var(--n-ink) 72%, var(--n-canvas));
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.closeRow {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* ------------------------------------------------------------ live preview
+
+   EXCEPTION, and the only kind there is: everything under .preview* renders a
+   miniature of the LEARNER-facing assistant. Its whole job is to show the
+   admin what their tenant's colours actually look like, so brand belongs on
+   these planes. The panel chrome around it stays neutral. See the brand rule
+   at the top of app-shell/shell.module.css.                                 */
+
+.previewColumn {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+@media (min-width: 1000px) {
+  .previewColumn {
+    position: sticky;
+    top: 0;
+  }
+}
+
+.previewHead {
+  display: grid;
+  gap: 2px;
+}
+
+.previewEyebrow {
+  margin: 0;
+  color: color-mix(in srgb, var(--n-ink) 64%, var(--n-canvas));
+  font-size: var(--text-xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.previewNote {
+  margin: 0;
+  color: color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas));
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.previewFoot {
+  margin: 0;
+  color: color-mix(in srgb, var(--n-ink) 64%, var(--n-canvas));
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+/*
+  The preview root carries locally overridden --brand-* values, so every
+  neutral used inside it must be re-derived here rather than inherited from the
+  panel above — otherwise the miniature would keep the saved theme's greys.
+*/
+.preview {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--n-ink) 12%, var(--n-canvas));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--n-ink) 6%, var(--n-canvas));
+}
+
+.previewShell {
+  display: grid;
+  overflow: hidden;
+  min-width: 0;
+  gap: 0;
+  border: 1px solid color-mix(in srgb, var(--n-ink) 9%, var(--n-canvas));
+  border-radius: var(--radius-md);
+  background: var(--n-canvas);
+  color: var(--n-ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.previewHeader {
+  display: grid;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--n-ink) 12%, var(--n-canvas));
+  background: color-mix(in srgb, var(--brand-primary) 8%, var(--n-canvas));
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+
+.previewMark,
+.previewAvatar,
+.previewChatMark {
+  display: grid;
+  overflow: hidden;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-heavy);
+  line-height: 1;
+  place-items: center;
+}
+
+.previewAvatar {
+  border-radius: 50%;
+  background: var(--brand-accent);
+  color: var(--brand-on-accent, var(--n-ink));
+}
+
+.previewMark img,
+.previewAvatar img,
+.previewChatMark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.previewBrandText {
+  display: grid;
+  min-width: 0;
+  gap: 0;
+}
+
+.previewBrandText b {
+  overflow: hidden;
+  color: var(--n-ink);
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewBrandText small {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--n-ink) 68%, var(--n-canvas));
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewNav {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.previewNav span {
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-pill);
+  color: color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas));
+  font-size: var(--text-xs);
+}
+
+.previewNav span[data-active="true"] {
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+  font-weight: var(--weight-strong);
+}
+
+.previewChat {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-3);
+}
+
+.previewChatHead {
+  display: grid;
+  align-items: center;
+  gap: var(--space-2);
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.previewChatMark {
+  border-radius: 50%;
+  background: var(--brand-accent);
+  color: var(--brand-on-accent, var(--n-ink));
+}
+
+.previewChatTitle {
+  display: grid;
+  min-width: 0;
+}
+
+.previewChatTitle b {
+  overflow: hidden;
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewChatTitle small {
+  color: color-mix(in srgb, var(--n-ink) 68%, var(--n-canvas));
+  font-size: var(--text-xs);
+  text-transform: capitalize;
+}
+
+.previewAssistantBubble {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--brand-accent) 45%, transparent);
+  border-radius: var(--radius-md) var(--radius-md) var(--radius-md)
+    var(--radius-sm);
+  background: color-mix(in srgb, var(--brand-accent) 14%, var(--n-canvas));
+  color: var(--n-ink);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+
+.previewLearnerBubble {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  max-width: 85%;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md) var(--radius-md) var(--radius-sm)
+    var(--radius-md);
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+.previewSampleTag {
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--brand-on-primary) 24%, transparent);
+  color: var(--brand-on-primary);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.previewScope {
+  display: flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 3px var(--space-3);
+  border: 1px dashed
+    color-mix(in srgb, var(--n-ink) 26%, var(--n-canvas));
+  border-radius: var(--radius-pill);
+  color: color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas));
+  font-size: var(--text-xs);
+}
+
+.previewComposer {
+  display: grid;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--n-ink) 12%, var(--n-canvas));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--n-ink) 4%, var(--n-canvas));
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.previewGlyph {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-accent) 30%, var(--n-canvas));
+  color: var(--n-ink);
+  font-size: var(--text-xs);
+  line-height: 1;
+  place-items: center;
+}
+
+.previewComposerText {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--n-ink) 64%, var(--n-canvas));
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewSend {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+  font-size: var(--text-xs);
+  line-height: 1;
+  place-items: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview,
+  .previewShell {
+    transition: none;
+  }
+}

@@ -1,0 +1,84 @@
+.trend {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.caption {
+  color: var(--ui-faint);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.latest {
+  color: var(--ui-text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-strong);
+}
+
+.plot {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.area {
+  fill: var(--ui-primary);
+  opacity: 0.13;
+}
+
+.line {
+  fill: none;
+  stroke: var(--ui-primary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.baseline {
+  stroke: var(--ui-line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.marker {
+  stroke: var(--ui-primary);
+  stroke-linecap: round;
+  stroke-width: 7;
+  vector-effect: non-scaling-stroke;
+}
+
+.axis {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ui-faint);
+  font-size: var(--text-2xs);
+}
+
+.gap {
+  color: var(--ui-warning);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-strong);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

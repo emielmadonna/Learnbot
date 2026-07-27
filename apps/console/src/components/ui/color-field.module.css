@@ -1,0 +1,136 @@
+.colorField {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.label {
+  display: block;
+  color: var(--ui-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: 0.02em;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1);
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-surface);
+}
+
+.row:focus-within {
+  border-color: var(--ui-primary);
+  box-shadow: 0 0 0 3px var(--ui-focus);
+}
+
+.invalid {
+  border-color: var(--ui-danger);
+}
+
+.swatch {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--ui-line);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.swatch::-webkit-color-swatch {
+  border: 0;
+  border-radius: 5px;
+}
+
+.swatch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.hex {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--ui-text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hex:focus {
+  outline: none;
+}
+
+.hex:disabled {
+  color: var(--ui-faint);
+}
+
+.help {
+  margin: 0;
+  color: var(--ui-faint);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.error {
+  margin: 0;
+  color: var(--ui-danger);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+}
+
+.contrast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--ui-positive);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-positive-soft);
+  color: var(--ui-positive);
+}
+
+.contrastFail {
+  border-color: var(--ui-warning);
+  background: var(--ui-warning-soft);
+  color: var(--ui-warning);
+}
+
+.contrastUnknown {
+  border-color: var(--ui-line-strong);
+  background: var(--ui-sunken);
+  color: var(--ui-muted);
+}
+
+.ratio {
+  flex: 0 0 auto;
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-strong);
+  letter-spacing: -0.02em;
+}
+
+.contrast strong {
+  display: block;
+  font-size: var(--text-xs);
+}
+
+.contrast p {
+  margin: 2px 0 0;
+  font-size: var(--text-2xs);
+  line-height: var(--leading-normal);
+  opacity: 0.86;
+}

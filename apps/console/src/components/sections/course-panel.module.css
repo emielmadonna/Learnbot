@@ -1,0 +1,541 @@
+/*
+ * Course editor surface.
+ *
+ * Owned by course-panel.tsx only. Every colour resolves from the same five
+ * brand custom properties the shared primitives use, so the outline restyles
+ * with the tenant and never hardcodes a hue. Status colours (danger, warning)
+ * are semantic and deliberately do not inherit the brand.
+ */
+
+.editorRoot {
+  --edge: color-mix(in srgb, var(--n-ink) 9%, var(--n-canvas));
+  --edge-strong: color-mix(in srgb, var(--n-ink) 20%, var(--n-canvas));
+  --muted: color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas));
+  --raised: color-mix(in srgb, var(--n-ink) 4%, var(--n-canvas));
+  --sunken: color-mix(in srgb, var(--n-ink) 7%, var(--n-canvas));
+  --danger: color-mix(in srgb, #b23a22 78%, var(--n-ink));
+  --danger-soft: color-mix(in srgb, #b23a22 11%, var(--n-canvas));
+  --warning: color-mix(in srgb, #9a6f18 78%, var(--n-ink));
+  --warning-soft: color-mix(in srgb, #c8912c 16%, var(--n-canvas));
+  --positive: color-mix(in srgb, #1f7a55 78%, var(--n-ink));
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-block);
+}
+
+/* --- messages ------------------------------------------------------------ */
+
+.conflict,
+.failure,
+.notice,
+.readOnly {
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.conflict {
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.failure {
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.notice {
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  color: var(--muted);
+}
+
+.readOnly {
+  border: 1px dashed var(--edge-strong);
+  background: transparent;
+  color: var(--muted);
+}
+
+.messageBody {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.messageBody strong {
+  display: block;
+  font-size: var(--text-md);
+}
+
+/* --- toolbar ------------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.toolbarSpacer {
+  flex: 1 1 auto;
+}
+
+.versionStamp {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- outline ------------------------------------------------------------- */
+
+.outline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moduleCard {
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  background: var(--n-canvas);
+  overflow: hidden;
+}
+
+.moduleHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  background: var(--raised);
+  border-bottom: 1px solid var(--edge);
+}
+
+.headText {
+  flex: 1 1 14rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.headTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.headMeta {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.moveGroup {
+  display: inline-flex;
+  border: 1px solid var(--edge-strong);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.moveButton {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+}
+
+.moveButton + .moveButton {
+  border-left: 1px solid var(--edge-strong);
+}
+
+.moveButton:hover:not(:disabled) {
+  background: var(--sunken);
+}
+
+.moveButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.moveButton:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-primary) 42%, transparent);
+  outline-offset: 1px;
+}
+
+/* --- lessons ------------------------------------------------------------- */
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--edge);
+}
+
+.lessonList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lessonRow {
+  border-bottom: 1px solid var(--edge);
+}
+
+.lessonRow:last-child {
+  border-bottom: 0;
+}
+
+.lessonHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+}
+
+.disclosure {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.1rem 0;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.disclosure:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-primary) 42%, transparent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.caret {
+  font-size: var(--text-2xs);
+  color: var(--muted);
+  transition: transform 140ms ease;
+}
+
+.caretOpen {
+  transform: rotate(90deg);
+}
+
+.ordinal {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--sunken);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.ordinalDone {
+  background: color-mix(in srgb, var(--positive) 16%, var(--n-canvas));
+  color: var(--positive);
+}
+
+.lessonLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.lessonLabel b {
+  font-weight: 600;
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+
+.lessonLabel small {
+  font-size: var(--text-2xs);
+  color: var(--muted);
+}
+
+.lessonBody {
+  padding: 0 1rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* --- blocks -------------------------------------------------------------- */
+
+.blockList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.blockCard {
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  background: var(--raised);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.blockHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.blockPreview {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.blockPreviewMuted {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/*
+  The learner-facing body of a block, sitting in the same flex row the old
+  one-line preview did. Typography and colour come from the block renderer in
+  components/ui/rich-text — this only claims the row's free space, and must
+  not set white-space, or rendered markdown would inherit it.
+*/
+.blockBody {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--edge-strong);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: var(--text-2xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pillWarning {
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.pillPositive {
+  border-color: color-mix(in srgb, var(--positive) 45%, transparent);
+  color: var(--positive);
+}
+
+/*
+ * The library grid sits outside .editorRoot, so it cannot borrow the editor's
+ * local tokens. This pill resolves the same warning colour from the brand
+ * properties directly.
+ */
+.cardPill {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: var(--text-2xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: 1px solid color-mix(in srgb, #9a6f18 45%, transparent);
+  background: color-mix(in srgb, #c8912c 16%, var(--n-canvas));
+  color: color-mix(in srgb, #9a6f18 78%, var(--n-ink));
+}
+
+/* --- publishing ---------------------------------------------------------- */
+
+/*
+ * Everything a learner can see is decided here, so this block is loud on
+ * purpose: it states the exact count of hidden items before it is pressed.
+ */
+.publish {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+  border-radius: 12px;
+  padding: 0.85rem 0.9rem;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* Jumps to the publish block from the top of a long outline. */
+.pendingLink {
+  font-size: var(--text-xs);
+  color: var(--warning);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  border-radius: 6px;
+}
+
+.pendingLink:focus-visible {
+  outline: 2px solid var(--warning);
+  outline-offset: 2px;
+}
+
+/* --- forms --------------------------------------------------------------- */
+
+.inlineForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: var(--n-canvas);
+}
+
+.formRow {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.grow {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  background: var(--danger-soft);
+  border-radius: 999px;
+  padding: 0.2rem 0.35rem 0.2rem 0.7rem;
+}
+
+.confirmText {
+  font-size: var(--text-xs);
+  color: var(--danger);
+}
+
+/* --- revisions and uploads ----------------------------------------------- */
+
+.recordList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recordRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+}
+
+.recordText {
+  flex: 1 1 14rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.recordText b {
+  font-size: var(--text-md);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.recordText small {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.recordCurrent {
+  border-color: color-mix(in srgb, var(--brand-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--brand-primary) 7%, var(--n-canvas));
+}
+
+.scroller {
+  max-height: 22rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    transition: none;
+  }
+}

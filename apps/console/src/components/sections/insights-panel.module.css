@@ -1,0 +1,531 @@
+/*
+  Insights panel layout.
+
+  Layout only: every colour comes from the global neutral tokens or the
+  `--brand-*` properties the shell publishes. The shared UI primitives own all
+  of the data rendering (tiles, bars, charts, empty states), so nothing here
+  restyles a primitive's internals.
+*/
+
+.panel {
+  display: grid;
+  gap: var(--space-7);
+}
+
+/* ---------------------------------------------------------------- toolbar */
+
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.toolbarText {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.rangeField {
+  min-width: 190px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.rangeLine {
+  margin: 0;
+  color: var(--ui-ink-soft);
+  font-size: var(--text-md);
+}
+
+.status {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--text-sm);
+}
+
+/* --------------------------------------------------------------- sections */
+
+.section {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-lg);
+  background: var(--ui-surface);
+}
+
+/* The headline surface: question distribution reads first. It earns emphasis
+   from size and elevation, not from a brand-tinted border. */
+.sectionHeadline {
+  padding: clamp(var(--space-5), 2.4vw, var(--space-7));
+  border-color: var(--ui-line-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.sectionHeading {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--n-ink);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+
+.sectionTitleLarge {
+  font-size: var(--text-2xl);
+}
+
+.sectionLede {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--ui-ink-soft);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+.badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ------------------------------------------------------------------ parts */
+
+.tiles {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.charts {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.stackTight {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* -------------------------------------------------------------- drilldown */
+
+.drill {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--ui-line);
+  border-left: 3px solid var(--brand-primary);
+  border-radius: var(--radius-md);
+  background: var(--ui-surface-sunken);
+}
+
+.drillNested {
+  border-left-color: var(--brand-accent);
+}
+
+.drillHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.drillTitle {
+  margin: 0;
+  color: var(--n-ink);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+}
+
+.drillEyebrow {
+  margin: 0 0 var(--space-1);
+  color: var(--ui-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fact {
+  display: grid;
+  gap: 2px;
+}
+
+.factLabel {
+  color: var(--ui-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.factValue {
+  color: var(--n-ink);
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+}
+
+/* ------------------------------------------- labelled questions and signals */
+
+.questionList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.questionItem {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-md);
+  background: var(--ui-surface-sunken);
+}
+
+.questionText {
+  margin: 0;
+  color: var(--n-ink);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tag {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ui-ink-soft);
+  font-size: var(--text-xs);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* Semantic, never brand: an ungrounded answer must not read as "on brand". */
+.tagUngrounded {
+  border-color: color-mix(in srgb, var(--ui-critical) 30%, var(--ui-line));
+  background: var(--ui-notice-soft);
+  color: var(--ui-ink);
+}
+
+.tagGrounded {
+  border-color: color-mix(in srgb, var(--ui-positive) 40%, var(--ui-line));
+  background: var(--ui-positive-soft);
+  color: var(--ui-positive);
+}
+
+.signalList {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.signalItem {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--ui-line);
+  border-left: 3px solid var(--ui-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--ui-surface-sunken);
+}
+
+.signalCritical {
+  border-left-color: var(--ui-critical);
+}
+
+.signalElevated {
+  border-left-color: color-mix(
+    in srgb,
+    var(--ui-critical) 55%,
+    var(--ui-line-strong)
+  );
+}
+
+.signalWatch {
+  border-left-color: var(--ui-line-strong);
+}
+
+.signalReviewed {
+  opacity: 0.72;
+}
+
+.signalHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.signalHeadline {
+  margin: 0;
+  color: var(--n-ink);
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+  line-height: var(--leading-tight);
+}
+
+.signalDetail {
+  margin: 0;
+  color: var(--ui-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.signalActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.evidenceRefs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ui-muted);
+  font-size: var(--text-xs);
+}
+
+.evidenceRef {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--ui-surface-sunken);
+  font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+  word-break: break-all;
+}
+
+/* ------------------------------------------------------- honesty notices */
+
+.note {
+  margin: 0;
+  color: var(--ui-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.truncation {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--ui-notice-soft);
+  color: var(--ui-ink);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.limitations {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0 0 0 var(--space-4);
+  color: var(--ui-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.unattributed {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px dashed var(--ui-line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ui-ink-soft);
+  font-size: var(--text-sm);
+}
+
+.unattributed strong {
+  color: var(--n-ink);
+  font-weight: var(--weight-strong);
+}
+
+/* ------------------------------------------------------------- definitions */
+
+.definitions {
+  padding: var(--space-4);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-lg);
+  background: var(--ui-surface-sunken);
+}
+
+.definitions > summary {
+  color: var(--n-ink);
+  cursor: pointer;
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+}
+
+.definitions > summary:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.definitionList {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 0;
+}
+
+.definitionList dt {
+  color: var(--n-ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.definitionList dd {
+  margin: var(--space-1) 0 0;
+  color: var(--ui-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.boundary {
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--ui-surface-sunken);
+  color: var(--ui-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.boundary strong {
+  color: var(--n-ink);
+}
+
+@media (max-width: 640px) {
+  .toolbar {
+    align-items: stretch;
+  }
+
+  .toolbarActions {
+    justify-content: space-between;
+  }
+}
+
+/*
+ * Surface dimension.
+ *
+ * The coverage note states, in the operator's own reading order, why a widget
+ * figure is missing or partial. It uses the neutral notice tone rather than an
+ * error tone, because "not recorded yet" is a fact about the platform, not a
+ * fault. No brand colour appears here.
+ */
+.surfaceNote {
+  margin: 0;
+  padding: var(--space-3);
+  border-left: 2px solid var(--ui-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--ui-surface-sunken);
+  color: var(--ui-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.deflectionList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deflectionItem {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-md);
+  background: var(--ui-surface-sunken);
+}
+
+.deflectionTitle {
+  margin: 0;
+  color: var(--n-ink);
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+}
+
+/* A host URL is data, not prose: it must wrap anywhere and never widen the
+   panel past its container. */
+.deflectionPath {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ui-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}

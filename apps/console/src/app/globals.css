@@ -1999,3 +1999,230 @@ body {
     transition: none;
   }
 }
+
+/* ==========================================================================
+   Design tokens
+   --------------------------------------------------------------------------
+   The single source of truth for spacing, radius, type, elevation and motion
+   across the authenticated app shell.
+
+   Brand colour is deliberately NOT defined here. `--brand-primary`,
+   `--brand-accent`, `--brand-surface`, `--brand-text` and `--brand-on-primary`
+   are emitted once, at runtime, by the app-shell root from the tenant's
+   AgentConfig. Nothing else may hardcode a brand colour. The fallbacks below
+   only exist so isolated surfaces do not render an invalid value before the
+   shell mounts.
+
+   ---------------------------------------------------------------------------
+   THE BRAND RULE — read this before adding any colour anywhere in the app.
+
+   The product is a NEUTRAL product with a brand accent. It is not a themed
+   template. Concretely:
+
+   ALLOWED to use --brand-primary / --brand-accent:
+     - primary (filled) buttons and their hover/active states
+     - the active navigation item
+     - focus rings
+     - the assistant avatar, brand mark and logo lockup
+     - links, and small status/step accents (dots, progress fills, meters)
+
+   FORBIDDEN — these come from the neutral ramp below, always:
+     - page backgrounds and canvas
+     - card / panel / sheet / input surfaces
+     - body text, headings, labels
+     - borders, hairlines, dividers
+     - muted and secondary text
+
+   `--brand-surface` and `--brand-text` are TENANT-SUPPLIED NEUTRALS and are
+   therefore never used for chrome. Deriving greys from them is what made the
+   whole console read as one client's green. They survive only so the learner
+   scope (see `[data-surface="learner"]` in shell.module.css) can tint a
+   handful of learner-facing planes.
+   ========================================================================== */
+
+:root {
+  /* ====================================================== neutral foundation
+     A FIXED ramp. It does not vary by tenant — that is the whole point.
+
+     Derivation: the public landing page (`.lbLanding`, above) is the design
+     reference. Its three anchors are --lb-ink #14211c, --lb-muted #5e6b65 and
+     --lb-line #dde6e1 over a #fbfdfc/#f7faf8/#fff ground. Each anchor was kept
+     at its landing lightness and hue (~157deg) but had its chroma cut by
+     roughly two thirds, which lands it below the perceptual threshold for a
+     colour cast. The result reads as grey next to anything saturated, while
+     still sitting in the same family as the landing page, so the signed-out
+     and signed-in halves feel like one product.
+
+     Steps are named by lightness, 0 = white, 900 = ink. */
+  --n-0: #ffffff;
+  --n-25: #fbfcfc;
+  --n-50: #f7f8f8;
+  --n-100: #f1f3f2;
+  --n-150: #e9ecea;
+  --n-200: #e2e5e4;
+  --n-300: #d3d7d5;
+  --n-400: #a8afac;
+  --n-500: #7c8481;
+  --n-600: #5f6764;
+  --n-700: #454c49;
+  --n-800: #2c3230;
+  --n-900: #181d1b;
+
+  /* ------------------------------------------------------------- neutrals
+     Semantic aliases onto the ramp. Everything structural in the app reads
+     from these, never from --brand-*.
+
+     Contrast on --ui-surface (#fff) / --ui-canvas (#f7f8f8):
+       ink      17.1:1 / 16.0:1
+       ink-soft  8.8:1 /  8.3:1
+       muted     5.8:1 /  5.5:1
+       faint     4.9:1 /  4.6:1
+     All clear WCAG 2.2 AA for body and small text on both planes. Because the
+     ramp is fixed, these hold for every tenant regardless of the colours they
+     pick — which is the second reason chrome is not derived from brand. */
+  --ui-ink: var(--n-900);
+  --ui-ink-soft: var(--n-700);
+  --ui-muted: var(--n-600);
+  --ui-faint: #6b726f;
+  --ui-line: var(--n-200);
+  --ui-line-strong: var(--n-300);
+  --ui-canvas: var(--n-50);
+  --ui-surface: var(--n-0);
+  --ui-surface-sunken: var(--n-100);
+  --ui-overlay: rgb(24 29 27 / 34%);
+
+  /*
+    Neutral mix sources. Stylesheets that need a partial neutral — a hairline
+    at 9%, a wash at 5%, meta text at 64% — mix these two, NOT --brand-text and
+    --brand-surface. Same percentages as before, fixed neutral source.
+  */
+  --n-ink: var(--n-900);
+  --n-canvas: var(--n-50);
+
+  /* Tint every shadow shares, so elevation reads as one light source. */
+  --shadow-tint: 24 29 27;
+
+  /* Status — deliberately off-brand. These carry meaning, so they must never
+     be mistaken for the tenant's colour. Positive is a brighter, cleaner green
+     than a typical deep brand green for exactly that reason. */
+  --ui-positive: #1d7c37;
+  --ui-positive-soft: #e8f4ea;
+  --ui-critical: #a3352c;
+  --ui-critical-soft: #fbebe9;
+  --ui-notice-soft: #f6f0e0;
+
+  /* --------------------------------------------------------- spacing (4px)
+     Steps 1-6 are component-internal. 7-12 are layout rhythm: the gap
+     between things should be visibly larger than the padding inside them. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 56px;
+  --space-10: 72px;
+  --space-11: 96px;
+  --space-12: 128px;
+
+  /* Fluid rhythm. Whitespace is the primary separator in this system. */
+  --gap-inline: var(--space-3);
+  --gap-block: clamp(var(--space-5), 2.4vw, var(--space-7));
+  --gap-section: clamp(var(--space-8), 5vw, var(--space-10));
+  --gap-chapter: clamp(var(--space-10), 7vw, var(--space-12));
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-2xl: 28px;
+  --radius-pill: 999px;
+
+  /* ------------------------------------------------------------------ type
+     A modular scale, not a pile of one-off sizes. Body copy starts at
+     --text-md (15px); nothing in the product should read below --text-2xs,
+     and --text-2xs is reserved for uppercase eyebrows where the tracking
+     carries the legibility. The display steps are fluid and tightly
+     tracked — one of them, once per view. */
+  --font-ui:
+    -apple-system, blinkmacsystemfont, "SF Pro Text", inter, "Segoe UI",
+    sans-serif;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 21px;
+  --text-2xl: clamp(24px, 2.2vw, 28px);
+  --text-3xl: clamp(28px, 2.8vw, 34px);
+
+  /*
+    The workspace display step is deliberately smaller than the marketing
+    hero on the public landing page: same confidence and tracking, but it has
+    to sit above real content rather than fill a viewport. Around two lines at
+    the shell's max width is the target.
+  */
+  --text-display: clamp(32px, 3.6vw, 46px);
+
+  --weight-regular: 400;
+  --weight-medium: 520;
+  --weight-strong: 600;
+  --weight-heavy: 680;
+
+  /* Tracking tightens as type grows — the display steps must never sit at 0. */
+  --tracking-display: -0.045em;
+  --tracking-tight: -0.03em;
+  --tracking-snug: -0.015em;
+  --tracking-wide: 0.1em;
+
+  --leading-display: 1.05;
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.72;
+
+  /* -------------------------------------------------------------- elevation
+     Layered and low-contrast: a wide soft pool plus a tight contact shadow.
+     Never a single heavy drop shadow. */
+  --shadow-sm: 0 1px 2px rgb(var(--shadow-tint) / 5%);
+  --shadow-md:
+    0 2px 6px rgb(var(--shadow-tint) / 4%),
+    0 12px 30px rgb(var(--shadow-tint) / 7%);
+  --shadow-lg:
+    0 4px 14px rgb(var(--shadow-tint) / 5%),
+    0 28px 70px rgb(var(--shadow-tint) / 10%);
+
+  /* Motion — 160ms default, 220ms for sheets (08-UI-DESIGN-SYSTEM). */
+  --motion-fast: 160ms;
+  --motion-sheet: 220ms;
+  --motion-medium: var(--motion-sheet);
+  --motion-ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Layout */
+  --shell-header-height: 72px;
+  --shell-max-width: 1120px;
+  --focus-ring: 0 0 0 2px var(--ui-surface), 0 0 0 4px var(--brand-primary);
+
+  /* ---------------------------------------------------------------- brand
+     Fallbacks only — the shell root overrides these from the tenant's
+     AgentConfig. They are deliberately NEUTRAL graphite, not a sample brand:
+     an unconfigured tenant should look like an unbranded product, not like
+     somebody else's. Accent-only surfaces (buttons, active nav, focus rings)
+     degrade to a calm dark grey, which is correct. */
+  --brand-primary: var(--n-800);
+  --brand-accent: var(--n-600);
+  --brand-surface: var(--n-50);
+  --brand-text: var(--n-900);
+  --brand-on-primary: #ffffff;
+  --brand-on-accent: #ffffff;
+}
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  border-radius: var(--radius-sm);
+  box-shadow: var(--focus-ring);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}

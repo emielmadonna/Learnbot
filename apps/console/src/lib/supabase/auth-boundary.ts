@@ -60,6 +60,53 @@ export class AuthenticationBoundaryError extends Error {
   }
 }
 
+export type AuthBoundaryFailure = {
+  status: number;
+  code: string;
+};
+
+/**
+ * Honest HTTP classification for an `AuthenticationBoundaryError`.
+ *
+ * This class is raised for two very different situations and they must not be
+ * reported the same way. A genuine sign-in problem is the caller's to fix and
+ * is a 401. Everything else in this class — a supporting RPC that errored, a
+ * capability whose migration is not applied, a managed account that still
+ * holds a temporary password — is not an authentication failure, and reporting
+ * it as one sends an operator to the sign-in page for a fault they cannot
+ * resolve there.
+ */
+const authBoundaryFailures = new Map<string, AuthBoundaryFailure>([
+  // Genuinely unauthenticated.
+  ["auth.authentication_required", { status: 401, code: "authentication_required" }],
+  ["auth.claims_refresh_failed", { status: 401, code: "authentication_required" }],
+  ["auth.claims_refresh_incomplete", { status: 401, code: "authentication_required" }],
+  // Authenticated, but this request is refused.
+  ["auth.invalid_origin", { status: 403, code: "invalid_origin" }],
+  ["auth.password_change_required", { status: 403, code: "password_change_required" }],
+  ["auth.membership_not_active", { status: 403, code: "membership_not_active" }],
+  // A dependency could not be reached. Never a client error.
+  ["auth.access_state_failed", { status: 503, code: "request_failed" }],
+  ["auth.context_lookup_failed", { status: 503, code: "request_failed" }],
+  ["auth.membership_lookup_failed", { status: 503, code: "request_failed" }],
+  ["learning.workspace_failed", { status: 503, code: "request_failed" }],
+  ["learning.uploads_failed", { status: 503, code: "request_failed" }],
+  ["platform.authorization_failed", { status: 503, code: "request_failed" }],
+  ["analytics.request_failed", { status: 503, code: "request_failed" }],
+  ["agent.configuration_failed", { status: 503, code: "request_failed" }],
+]);
+
+export function classifyAuthBoundaryError(
+  error: AuthenticationBoundaryError,
+): AuthBoundaryFailure {
+  return (
+    authBoundaryFailures.get(error.code) ?? {
+      status: 503,
+      code: "request_failed",
+    }
+  );
+}
+
 function firstRow<T>(value: T[] | T | null): T | null {
   if (Array.isArray(value)) {
     return value[0] ?? null;

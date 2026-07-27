@@ -1,163 +1,202 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  FakeRealtimeVoiceAdapter,
-  FakeRealtimeVoiceTransport,
-  MemoryVoiceCostSink,
-  MemoryVoiceUsageSink,
-  RealtimeVoiceOrchestrator,
-  type RealtimeVoiceSession,
-  type TextConversationHandoff,
-} from "@course-ai/realtime-voice";
-import type { AuthorizedTenantContext } from "@course-ai/application-services";
+  estimateUnitCostMicro,
+  recordProviderCost,
+  reservationMessage,
+  reserveProviderCall,
+  type ProviderCapability,
+} from "./cost-metering";
+import { consumeVoiceQuota, type VoiceQuotaKind } from "../app/api/learning/voice/rate-limit";
 
-import { getDevelopmentRuntime } from "./dev-runtime";
-import {
-  voiceSessionScopeMatches,
-  type DevelopmentVoiceSessionOwner,
-} from "./voice-session-scope";
+/**
+ * Voice runtime: the tenant's configured voice, a durable quota, and metering.
+ *
+ * Two defects lived here.
+ *
+ *   * **The configured voice was ignored.** `tenant_branding.agent_voice` has
+ *     been editable and displayed since migration 20260725120000 and was read
+ *     by nothing; all three voice routes hardcoded `"marin"`. A white-label
+ *     client chose a voice and heard a different one.
+ *
+ *   * **The rate limit was a process-local `Map`.** On a serverless platform
+ *     that map is empty on every cold start and shared by nobody, so the limit
+ *     bounded nothing. The authoritative quota is now a SQL reservation reading
+ *     durable counters; the in-process map is retained only as a same-instance
+ *     burst guard and as the fallback when the durable check cannot run.
+ */
 
-type DevelopmentVoiceSession = {
-  session: RealtimeVoiceSession;
-  createdAt: string;
-  owner: DevelopmentVoiceSessionOwner;
+export const DEFAULT_VOICE = "marin";
+
+/**
+ * Voices the provider accepts. A tenant may store any slug that satisfies the
+ * branding CHECK constraint, so an unrecognised value falls back rather than
+ * failing the turn with a provider 400 the learner cannot act on.
+ */
+export const SUPPORTED_VOICES = [
+  "alloy",
+  "ash",
+  "ballad",
+  "cedar",
+  "coral",
+  "echo",
+  "fable",
+  "marin",
+  "nova",
+  "onyx",
+  "sage",
+  "shimmer",
+  "verse",
+] as const;
+
+export type VoiceResolution = {
+  readonly voice: string;
+  readonly source: "tenant" | "default" | "unsupported";
 };
 
-const voiceGlobal = globalThis as typeof globalThis & {
-  __learningBotDevelopmentVoiceSessions?: Map<string, DevelopmentVoiceSession>;
-};
-
-function sessions() {
-  voiceGlobal.__learningBotDevelopmentVoiceSessions ??= new Map();
-  return voiceGlobal.__learningBotDevelopmentVoiceSessions;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-export async function startDevelopmentVoiceSession(
-  authorized: AuthorizedTenantContext,
-) {
-  const now = Date.now();
-  const actorId = authorized.actor.id;
-  if (!actorId) {
+/**
+ * Reads the tenant's published voice. Any failure — an unapplied migration, an
+ * unpublished branding row, an unknown slug — falls back to the default voice,
+ * because losing voice entirely is worse than using the default one.
+ */
+export async function resolveTenantVoice(
+  supabase: SupabaseClient,
+): Promise<VoiceResolution> {
+  try {
+    const { data, error } = await supabase.rpc("tenant_get_voice_profile");
+    if (error || !isRecord(data) || data.ok !== true) {
+      return { voice: DEFAULT_VOICE, source: "default" };
+    }
+    const configured =
+      typeof data.voice === "string" ? data.voice.trim().toLowerCase() : "";
+    if (!configured) return { voice: DEFAULT_VOICE, source: "default" };
+    if (!(SUPPORTED_VOICES as readonly string[]).includes(configured)) {
+      console.warn(
+        "voice.configured_voice_unsupported",
+        JSON.stringify({ voice: configured.slice(0, 40) }),
+      );
+      return { voice: DEFAULT_VOICE, source: "unsupported" };
+    }
+    return { voice: configured, source: "tenant" };
+  } catch {
+    return { voice: DEFAULT_VOICE, source: "default" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Durable quota
+// ---------------------------------------------------------------------------
+
+const VOICE_CAPABILITIES: Record<VoiceQuotaKind, ProviderCapability> = {
+  transcribe: "voice.transcribe",
+  speak: "voice.speak",
+  realtime: "voice.realtime",
+};
+
+export type VoiceQuotaDecision = {
+  readonly allowed: boolean;
+  readonly code: string;
+  readonly message: string;
+  readonly retryAfterSeconds: number;
+  /** `durable-tenant` when SQL decided; `process-instance` when it could not. */
+  readonly scope: string;
+};
+
+/**
+ * Authoritative voice quota. The SQL reservation decides; the process-local map
+ * is consulted first purely to shed an obvious same-instance burst without a
+ * round trip, and is the only remaining limit if the reservation is unavailable.
+ */
+export async function enforceVoiceQuota(
+  supabase: SupabaseClient,
+  input: {
+    readonly kind: VoiceQuotaKind;
+    readonly tenantId: string;
+    readonly principalId: string;
+  },
+): Promise<VoiceQuotaDecision> {
+  const subjectKey = `${input.tenantId}:${input.principalId}`;
+  const local = consumeVoiceQuota(input.kind, subjectKey);
+  if (!local.allowed) {
     return {
-      ok: false as const,
-      code: "VOICE_SESSION_SCOPE_INVALID",
-      message: "The voice session could not be scoped.",
+      allowed: false,
+      code: "voice_rate_limited",
+      message: reservationMessage("subject_rate_limited"),
+      retryAfterSeconds: local.retryAfterSeconds,
+      scope: local.scope,
     };
   }
-  const conversation = await getDevelopmentRuntime().services.createConversation(
-    authorized,
-    {
-      idempotencyKey: "student-demo-conversation",
-      studentId: actorId,
-      identityTier: "verified",
-      activeModality: "text",
-      pageContext: {
-        url: "/courses/momentum-method/modules/build-your-rhythm/lessons/minimum-day",
-        courseId: "course_momentum",
-        course: "Momentum Method",
-        moduleId: "module_rhythm",
-        module: "Build Your Rhythm",
-        lessonId: "lesson_minimum_day",
-        lesson: "Minimum Day",
-      },
-    },
-  );
-  const sessionId = `voice_${crypto.randomUUID()}`;
-  const providerSessionId = `browser_${crypto.randomUUID()}`;
-  const transport = new FakeRealtimeVoiceTransport(providerSessionId);
-  const adapter = new FakeRealtimeVoiceAdapter({
-    id: "browser-speech-bridge-v1",
-    provider: "browser-web-speech",
-    nowMs: now,
-    openSteps: [{ type: "success", transport }],
+
+  const decision = await reserveProviderCall(supabase, {
+    capability: VOICE_CAPABILITIES[input.kind],
+    subjectKey,
   });
-  const orchestrator = new RealtimeVoiceOrchestrator({
-    adapter,
-    usageSink: new MemoryVoiceUsageSink(),
-    costSink: new MemoryVoiceCostSink(),
-  });
-  const outcome = await orchestrator.start({
-    context: {
-      requestId: authorized.requestId,
-      traceId: authorized.traceId,
-      tenantId: authorized.tenantId,
-      actorId,
-      conversationId: conversation.id,
-      sessionId,
-      fundingSource: authorized.fundingSource,
-      deadlineMs: now + 10 * 60_000,
-      idempotencyKey: sessionId,
-    },
-    options: {
-      voiceId: "harbor",
-      language: "en-US",
-      mode: "tap_to_start",
-      enableBargeIn: true,
-      inputMediaType: "audio/browser-speech",
-      outputMediaType: "audio/browser-speech",
-      reconnect: {
-        maxAttempts: 2,
-        initialBackoffMs: 150,
-        maxBackoffMs: 1_000,
-      },
-    },
-  });
-  if (!outcome.ok) {
-    return outcome;
+  if (decision.allowed) {
+    return {
+      allowed: true,
+      code: decision.code,
+      message: "",
+      retryAfterSeconds: 0,
+      scope: decision.degraded ? local.scope : decision.scope,
+    };
   }
-  await getDevelopmentRuntime().services.setConversationModality(
-    authorized,
-    conversation.id,
-    "voice",
-    `${sessionId}:voice-modality`,
-  );
-  sessions().set(sessionId, {
-    session: outcome.session,
-    createdAt: new Date(now).toISOString(),
-    owner: {
-      tenantId: authorized.tenantId,
-      actorId,
-    },
-  });
   return {
-    ok: true as const,
-    sessionId,
-    conversationId: conversation.id,
-    descriptor: outcome.session.clientDescriptor,
-    transportMode: "browser-speech-bridge" as const,
+    allowed: false,
+    code:
+      decision.code === "daily_budget_exceeded" ||
+      decision.code === "monthly_budget_exceeded"
+        ? "voice_budget_exceeded"
+        : "voice_rate_limited",
+    message: reservationMessage(decision.code),
+    retryAfterSeconds: decision.retryAfterSeconds,
+    scope: decision.scope,
   };
 }
 
-export async function handoffDevelopmentVoiceSession(
-  authorized: AuthorizedTenantContext,
-  sessionId: string,
-  reason: TextConversationHandoff["reason"],
+// ---------------------------------------------------------------------------
+// Metering
+// ---------------------------------------------------------------------------
+
+/**
+ * Records what one voice interaction cost. Best effort by contract: the learner
+ * already has their transcript or audio, and a ledger fault must not take it
+ * away.
+ */
+export async function meterVoiceUsage(
+  supabase: SupabaseClient,
+  input: {
+    readonly kind: VoiceQuotaKind;
+    readonly model: string;
+    /** Seconds of audio, characters of speech, or 1 realtime session. */
+    readonly quantity: number;
+    readonly fallbackUnit: string;
+    readonly traceId: string;
+    readonly idempotencyKey: string;
+    readonly conversationId?: string | null;
+  },
 ) {
-  const record = sessions().get(sessionId);
-  const actorId = authorized.actor.id;
-  if (
-    !record ||
-    !actorId ||
-    !voiceSessionScopeMatches(record.owner, {
-      tenantId: authorized.tenantId,
-      actorId,
-    })
-  ) {
-    return {
-      ok: false as const,
-      code: "VOICE_SESSION_NOT_FOUND",
-      message: "The voice session is unavailable or already closed.",
-    };
-  }
-  const handoff = await record.session.handoffToText(reason);
-  await getDevelopmentRuntime().services.setConversationModality(
-    authorized,
-    record.session.context.conversationId,
-    "text",
-    `${sessionId}:text-handoff`,
+  const { costMicro, unit } = estimateUnitCostMicro(
+    input.model,
+    input.quantity,
+    input.fallbackUnit,
   );
-  sessions().delete(sessionId);
-  return { ok: true as const, handoff };
+  await recordProviderCost(supabase, {
+    capability: VOICE_CAPABILITIES[input.kind],
+    providerKey: "openai:voice",
+    modelKey: input.model,
+    quantity: input.quantity,
+    unit,
+    costMicro,
+    traceId: input.traceId,
+    idempotencyKey: input.idempotencyKey,
+    conversationId: input.conversationId ?? null,
+    metadata: { kind: input.kind },
+  });
 }
 
-export function getDevelopmentVoiceSessionCount() {
-  return sessions().size;
+export function voiceTraceId(kind: VoiceQuotaKind) {
+  return `voice-${kind}:${crypto.randomUUID()}`;
 }

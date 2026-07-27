@@ -1,0 +1,160 @@
+/*
+  Buttons read as calm, precise objects: one weight step above body copy,
+  tight tracking, a single hairline, and no gradient or heavy shadow.
+  Targets clear the 24px minimum and carry a 44px touch affordance via the
+  invisible expander on the small size.
+*/
+
+.button {
+  position: relative;
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-snug);
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
+
+.button:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.sm {
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-xs);
+}
+
+/* Touch affordance without changing the visual box. */
+.sm::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  min-height: 44px;
+  height: 100%;
+  transform: translateY(-50%);
+  content: "";
+}
+
+.lg {
+  min-height: 48px;
+  padding: 0 var(--space-6);
+  font-size: var(--text-md);
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.primary {
+  border-color: var(--ui-primary);
+  background: var(--ui-primary);
+  color: var(--ui-on-primary);
+}
+
+.primary:hover:not(:disabled) {
+  border-color: var(--ui-primary-strong);
+  background: var(--ui-primary-strong);
+}
+
+.secondary {
+  border-color: var(--ui-line-strong);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ui-primary) 40%, var(--ui-line));
+  background: var(--ui-primary-soft);
+  color: var(--ui-primary);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--ui-muted);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--ui-sunken);
+  color: var(--ui-text);
+}
+
+.danger {
+  border-color: var(--ui-danger);
+  background: var(--ui-danger);
+  color: var(--ui-on-primary);
+}
+
+.danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ui-danger) 80%, var(--ui-text));
+  background: color-mix(in srgb, var(--ui-danger) 80%, var(--ui-text));
+}
+
+.icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+/*
+  A busy button is a state, not decoration. The spinner is the only
+  continuous motion in the primitive set and it exists to report work.
+*/
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid currentcolor;
+  border-radius: 50%;
+  border-right-color: transparent;
+  opacity: 0.7;
+  animation: buttonSpin 700ms linear infinite;
+}
+
+@keyframes buttonSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+
+  /* Still perceptible as "working", without a spinning object. */
+  .spinner {
+    animation: buttonPulse 1.6s ease-in-out infinite;
+    border-right-color: currentcolor;
+  }
+}
+
+@keyframes buttonPulse {
+  50% {
+    opacity: 0.25;
+  }
+}

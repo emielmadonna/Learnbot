@@ -9,6 +9,58 @@ this file
 This ledger prevents a deterministic fake, package test, or local development
 screen from being mistaken for live-host or production evidence.
 
+## Correction — 2026-07-26
+
+**This ledger's own guard rail failed.** Grade C means "deterministic contract,
+unit, or fake-adapter evidence", and several rows below correctly carried that
+grade — but a grade-C row for a package that nothing imports is not evidence of a
+*product* capability at all, and the rows read as if it were. The 2026-07-26
+integration audit (`docs/INTEGRATION-AUDIT.md`) found ~23,000 lines across eleven
+packages reaching production through zero import edges.
+
+The following packages were **deleted** on 2026-07-26. Every row below that cites
+them is retained as a historical record of what was tested, and is **void as a
+statement about the product**:
+
+`application-services`, `course-authoring`, `intelligence-core`,
+`learning-pipeline`, `mcp-server`, `onboarding-core`, `postgres-adapters`,
+`privacy-lifecycle`, `realtime-voice`.
+
+Each had already been re-implemented in plpgsql, and the SQL version is the one
+running. Specifically void:
+
+- **SEC-08 (privacy).** There is no privacy or GDPR code path — no route, no
+  table, no job. The `/dev/privacy` surface cited in those rows was deleted.
+  See `docs/PRIVACY-DATA-LIFECYCLE-SPEC.md`.
+- **MCP-02, MCP-03, MCP-06, MCP-07, MCP-08.** There is no MCP server. It was
+  never deployed — no Dockerfile, no deploy config, no CI step — and 27 of its 36
+  tools called the `/api/dev/*` routes deleted in the same session.
+- **INT-01 – INT-03, OPP-01 – OPP-03 (package rows).** The durable
+  implementations are `20260725121000_learning_analytics.sql` and
+  `20260726091000_question_intelligence.sql`, which have FK integrity, severity
+  ranking and server-side re-detection the package lacked. The `/dev/intelligence`
+  surface those rows cite was deleted.
+- **Durable execution, Durable identity, Durable uploads (adapter rows).** The
+  `postgres-adapters` rows describe code that required an injected
+  `PostgresExecutor` **that nothing in the repository ever constructed**. Those
+  adapters never executed against this application. The migrations they refer to
+  (0007, 0008, 0009, 0026) are real and remain.
+- **Identity verification.** `packages/identity-access` survives, but only
+  `src/oidc.ts`. It is a JWT verifier that nothing imports — not this
+  application's authentication, which is Supabase Auth. SAML and SCIM never
+  existed and their stubs were deleted.
+
+Also void repo-wide: every reference below to a `/dev/**` route, to
+`pnpm --filter @course-ai/console smoke:intelligence`, `smoke:privacy`,
+`smoke:widget`, or to `verify:dev` covering an MCP tool surface. Those routes and
+scripts do not exist. Migration and table counts stated in prose below are stale;
+run `pnpm supabase:verify` instead.
+
+Uploads still terminate in quarantine. Authored course content, however, *is* now
+projected into `learning_documents`/`learning_chunks` at publish time
+(`20260726095000_authored_content_retrieval.sql`) — the gap the audit identified
+as the product's blocker.
+
 ## Evidence grades
 
 | Grade | Meaning |

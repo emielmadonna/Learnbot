@@ -1,0 +1,104 @@
+/*
+  A switch row is a line of reading, not a form control with a label bolted on.
+  The copy carries normal body sizing; the switch is the only object.
+*/
+
+.toggle {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: var(--space-3) 0;
+}
+
+.bordered {
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.label {
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-snug);
+}
+
+.hiddenLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.description {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--ui-faint);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.switch {
+  position: relative;
+  width: 46px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--ui-sunken);
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease);
+}
+
+.switch::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ui-surface);
+  box-shadow:
+    0 1px 1px color-mix(in srgb, var(--ui-text) 8%, transparent),
+    0 2px 6px color-mix(in srgb, var(--ui-text) 20%, transparent);
+  transition: transform var(--motion-fast) var(--motion-ease);
+  content: "";
+}
+
+.switch[aria-checked="true"] {
+  border-color: var(--ui-primary);
+  background: var(--ui-primary);
+}
+
+.switch[aria-checked="true"]::after {
+  transform: translateX(18px);
+}
+
+.switch:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .switch::after {
+    transition: none;
+  }
+}

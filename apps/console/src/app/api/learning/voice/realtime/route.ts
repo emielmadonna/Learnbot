@@ -5,7 +5,12 @@ import {
   getCurrentTenantContext,
 } from "../../../../../lib/supabase/auth-boundary";
 import { authenticatedLearningClient } from "../../../../../lib/supabase/learning-route";
-import { consumeVoiceQuota } from "../rate-limit";
+import {
+  enforceVoiceQuota,
+  meterVoiceUsage,
+  resolveTenantVoice,
+  voiceTraceId,
+} from "../../../../../lib/voice-runtime";
 
 const REALTIME_URL = "https://api.openai.com/v1/realtime/calls";
 const REALTIME_MODEL = "gpt-realtime-2.1";
@@ -36,7 +41,11 @@ async function realtimeContext(request: Request, mutation: boolean) {
   ) {
     return null;
   }
-  return context;
+  return {
+    supabase,
+    tenantId: context.tenantId,
+    principalId: context.principalId,
+  };
 }
 
 function providerCredential() {
@@ -61,6 +70,9 @@ export async function GET(request: Request) {
         "Continuous voice is not configured.",
       );
     }
+    // The readiness read reports the voice the learner will actually hear, so a
+    // misconfigured tenant voice is visible before a session is opened.
+    const voiceProfile = await resolveTenantVoice(context.supabase);
     return NextResponse.json(
       {
         ok: true,
@@ -69,6 +81,8 @@ export async function GET(request: Request) {
         model: REALTIME_MODEL,
         rawAudioStored: false,
         turnDetection: "semantic_vad",
+        voice: voiceProfile.voice,
+        voiceSource: voiceProfile.source,
       },
       {
         headers: {
@@ -122,22 +136,23 @@ export async function POST(request: Request) {
         "A bounded WebRTC session description is required.",
       );
     }
-    const quota = consumeVoiceQuota(
-      "realtime",
-      `${context.tenantId}:${context.principalId}`,
-    );
+    // Durable, cross-instance quota. The previous per-process map reset on
+    // every serverless cold start, so it bounded nothing in production.
+    const quota = await enforceVoiceQuota(context.supabase, {
+      kind: "realtime",
+      tenantId: context.tenantId,
+      principalId: context.principalId,
+    });
     if (!quota.allowed) {
-      return jsonError(
-        "voice_rate_limited",
-        429,
-        "Too many continuous voice sessions. Wait briefly and try again.",
-      );
+      return jsonError(quota.code, 429, quota.message);
     }
     const sdp = await request.text();
     if (!sdp.startsWith("v=0") || new TextEncoder().encode(sdp).byteLength > MAX_SDP_BYTES) {
       return jsonError("invalid_sdp", 400, "The WebRTC offer was invalid.");
     }
 
+    // The tenant's configured voice, not a hardcoded one.
+    const voiceProfile = await resolveTenantVoice(context.supabase);
     const session = {
       type: "realtime",
       model: REALTIME_MODEL,
@@ -157,7 +172,7 @@ export async function POST(request: Request) {
             interrupt_response: true,
           },
         },
-        output: { voice: "marin" },
+        output: { voice: voiceProfile.voice },
       },
     };
     const form = new FormData();
@@ -183,6 +198,17 @@ export async function POST(request: Request) {
         "Continuous voice could not connect. Push-to-talk remains available.",
       );
     }
+    // A realtime session is metered once, at connection, as an estimate: the
+    // browser holds the socket, so the server never observes its true length.
+    await meterVoiceUsage(context.supabase, {
+      kind: "realtime",
+      model: REALTIME_MODEL,
+      quantity: 1,
+      fallbackUnit: "realtime_sessions",
+      traceId: voiceTraceId("realtime"),
+      idempotencyKey: `voice-realtime:${crypto.randomUUID()}`,
+    });
+
     return new NextResponse(answerSdp, {
       status: 200,
       headers: {
@@ -190,6 +216,8 @@ export async function POST(request: Request) {
         "Content-Type": "application/sdp",
         "X-AI-Generated-Voice": "true",
         "X-Voice-Transport": "webrtc",
+        "X-Voice-Name": voiceProfile.voice,
+        "X-Voice-Profile": voiceProfile.source,
         "X-Voice-RateLimit-Scope": quota.scope,
       },
     });

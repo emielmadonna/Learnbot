@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
-import { PreviewNavigator } from "./preview-navigator";
 
 export const metadata: Metadata = {
   title: {
@@ -17,7 +16,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         {children}
-        <PreviewNavigator />
       </body>
     </html>
   );

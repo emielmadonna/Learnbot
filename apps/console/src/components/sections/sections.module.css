@@ -1,0 +1,628 @@
+/*
+  Shared section vocabulary.
+
+  One set of primitives (heads, cards, metrics, forms, states) replaces the
+  per-page CSS modules the product used to carry. Colour comes only from
+  neutral design tokens and the `--brand-*` properties published by the shell.
+*/
+
+/*
+  Panel rhythm, not page rhythm. `--gap-section` governs the top-level page
+  canvas, where sections are whole ideas; inside a sheet the blocks belong to
+  one idea, so they sit a step closer together.
+*/
+.stack {
+  display: grid;
+  gap: var(--gap-block);
+}
+
+.stackTight {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* --------------------------------------------------------------- headings */
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.eyebrow {
+  margin: 0 0 var(--space-2);
+  color: var(--ui-faint);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  color: var(--n-ink);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--ui-ink-soft);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-snug);
+}
+
+.lede {
+  max-width: 66ch;
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
+}
+
+.meta {
+  color: var(--ui-muted);
+  font-size: var(--text-sm);
+}
+
+/* ------------------------------------------------------------------- hero */
+
+/*
+  Same treatment as the home canvas: the headline block is not a card. Space
+  and type weight separate it from what follows, and the progress figure
+  beside it is the only object.
+*/
+.hero {
+  display: grid;
+  gap: clamp(var(--space-6), 4vw, var(--space-9));
+  align-items: end;
+  grid-template-columns: minmax(0, 1.7fr) minmax(240px, 0.8fr);
+}
+
+.heroCopy h1 {
+  max-width: 20ch;
+  margin: var(--space-3) 0 var(--space-4);
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-display);
+  text-wrap: balance;
+}
+
+.greeting {
+  margin: 0;
+  color: var(--brand-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.heroProgress {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-lg);
+  background: var(--ui-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.heroProgress strong {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-display);
+}
+
+/* ---------------------------------------------------------------- actions */
+
+.primaryButton,
+.secondaryButton {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-5);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-snug);
+  line-height: 1;
+  text-decoration: none;
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease);
+}
+
+.primaryButton {
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+}
+
+.primaryButton:hover {
+  background: color-mix(in srgb, var(--brand-primary) 88%, black);
+}
+
+.secondaryButton {
+  border-color: var(--ui-line-strong);
+  background: var(--ui-surface);
+  color: var(--brand-primary);
+}
+
+.secondaryButton:hover {
+  border-color: var(--brand-primary);
+}
+
+.primaryButton[disabled],
+.secondaryButton[disabled] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.textAction {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--brand-primary);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  text-decoration: none;
+}
+
+.textAction:hover {
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------------ cards */
+
+.cardGrid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.card {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-lg);
+  background: var(--ui-surface);
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.cardButton {
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease);
+}
+
+.cardButton:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 30%, var(--ui-line));
+  box-shadow: var(--shadow-md);
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--leading-snug);
+}
+
+.cardCopy {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.badge {
+  flex: 0 0 auto;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--ui-surface-sunken);
+  color: var(--ui-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.badgeBrand {
+  background: color-mix(in srgb, var(--brand-primary) 12%, transparent);
+  color: var(--brand-primary);
+}
+
+/* --------------------------------------------------------------- progress */
+
+.progressTrack {
+  overflow: hidden;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--n-ink) 9%, transparent);
+}
+
+.progressTrack > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand-primary);
+  transition: width var(--motion-medium) var(--motion-ease);
+}
+
+/* ---------------------------------------------------------------- metrics */
+
+.metricGrid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+/* The figure is the point; the label and note step well down from it. */
+.metric {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-lg);
+  background: var(--ui-surface);
+}
+
+.metric > span {
+  color: var(--ui-faint);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.metric > strong {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-display);
+}
+
+.metric > small {
+  color: var(--ui-muted);
+  font-size: var(--text-xs);
+}
+
+/* ----------------------------------------------------------------- lesson */
+
+.moduleGroup {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.moduleTitle {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.lesson {
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-md);
+  background: var(--ui-surface);
+}
+
+.lesson > summary {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  cursor: pointer;
+  list-style: none;
+}
+
+.lesson > summary::-webkit-details-marker {
+  display: none;
+}
+
+.completion {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ui-surface-sunken);
+  color: var(--ui-ink-soft);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-heavy);
+  place-items: center;
+}
+
+.completion[data-complete="true"] {
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+}
+
+.lessonLabel {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: var(--space-1);
+}
+
+.lessonLabel b {
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+}
+
+.lessonLabel small {
+  color: var(--ui-muted);
+  font-size: var(--text-xs);
+}
+
+.lessonBody {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-top: 1px solid var(--ui-line);
+}
+
+.lessonBody p {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
+}
+
+.lessonActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* ------------------------------------------------------------------ forms */
+
+.form {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-6);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-lg);
+  background: var(--ui-surface);
+}
+
+.formGrid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.field > span {
+  color: var(--ui-ink-soft);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-3);
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+  font-family: inherit;
+  font-size: var(--text-md);
+}
+
+.field textarea {
+  min-height: 112px;
+  line-height: var(--leading-normal);
+  resize: vertical;
+}
+
+.formFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* ----------------------------------------------------------------- states */
+
+.notice,
+.alert {
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-normal);
+}
+
+.notice {
+  background: var(--ui-positive-soft);
+  color: var(--ui-positive);
+}
+
+.alert {
+  background: var(--ui-critical-soft);
+  color: var(--ui-critical);
+}
+
+.empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+  padding: var(--space-9) var(--space-7);
+  border: 1px dashed var(--ui-line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--ui-surface);
+}
+
+.boundary {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-lg);
+  background: var(--ui-surface-sunken);
+  color: var(--ui-ink-soft);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.boundary strong {
+  color: var(--ui-ink);
+}
+
+.loading {
+  padding: var(--space-9) var(--space-6);
+  color: var(--ui-muted);
+  font-size: var(--text-sm);
+}
+
+/* ------------------------------------------------------------ agent panel */
+
+/*
+  The conversation client is hosted verbatim — it still owns its own markup and
+  conversation.module.css. These structural overrides only re-seat the surfaces
+  it positions against the viewport so they stay inside the panel dialog. No
+  class from that module is referenced or redefined.
+*/
+
+.agentFrame {
+  display: flex;
+  min-height: min(70vh, 680px);
+  flex-direction: column;
+  margin: calc(var(--space-6) * -1);
+}
+
+.agentFrame > div {
+  min-height: 0;
+  flex: 1;
+}
+
+/* The client root is `div[data-mode]`; keep it inside the dialog. */
+.agentFrame > div > div[data-mode] {
+  min-height: 0;
+}
+
+.agentFrame div[data-mode] {
+  min-height: 0 !important;
+}
+
+/* Its floating nav is viewport-fixed by default. */
+.agentFrame div[data-mode] > header {
+  position: sticky;
+  top: 0;
+  left: auto;
+  width: 100%;
+  transform: none;
+}
+
+/* Its ambient overlay is viewport-fixed by default. */
+.agentFrame div[data-mode] > div[aria-hidden="true"] {
+  position: absolute;
+}
+
+/* -------------------------------------------------------- assistant dock */
+
+.assistantDock {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--brand-primary) 6%, var(--ui-surface));
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+}
+
+.orb {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle at 30% 26%,
+      color-mix(in srgb, var(--brand-accent) 85%, white),
+      transparent 42%
+    ),
+    var(--brand-primary);
+  place-items: center;
+}
+
+.assistantDock > div {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+}
+
+.assistantDock b {
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+}
+
+.assistantDock small {
+  color: var(--ui-muted);
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 820px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .sectionHead {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

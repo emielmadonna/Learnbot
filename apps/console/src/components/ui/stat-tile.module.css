@@ -1,0 +1,129 @@
+/*
+  Evidence-forward, not dashboard-forward.
+
+  The tile is deliberately not a heavy card: a hairline, no shadow, and a
+  large honest figure carried by whitespace. The value is the only thing at
+  display scale — everything else steps down to support it.
+*/
+
+.badge {
+  display: inline-flex;
+  min-width: 60px;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--ui-sunken);
+  color: var(--ui-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.known {
+  background: var(--ui-positive-soft);
+  color: var(--ui-positive);
+}
+
+.partial {
+  background: var(--ui-warning-soft);
+  color: var(--ui-warning);
+}
+
+/*
+  Unknown and restricted stay visually distinct from a real reading. They are
+  honest states, not styling — never make them look like a value.
+*/
+.unknown,
+.restricted {
+  background: var(--ui-danger-soft);
+  color: var(--ui-danger);
+}
+
+.tile {
+  display: flex;
+  min-width: 0;
+  min-height: 200px;
+  flex-direction: column;
+  padding: var(--space-6);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.eyebrow {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ui-faint);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: var(--tracking-wide);
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.label {
+  margin: var(--space-7) 0 var(--space-2);
+  color: var(--ui-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+/*
+  A real reading and an absent one occupy the same line box, so a row of
+  tiles keeps its footer rules on one line whatever the data says. Precision
+  here is the difference between "considered" and "assembled".
+*/
+.value,
+.absent {
+  display: flex;
+  min-height: calc(var(--text-3xl) * var(--leading-display));
+  align-items: baseline;
+}
+
+.value {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-display);
+}
+
+.absent {
+  color: var(--ui-muted);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-snug);
+}
+
+.detail {
+  min-height: 34px;
+  margin: var(--space-3) 0 0;
+  color: var(--ui-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.foot {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: auto;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--ui-line);
+}
+
+.foot span,
+.foot time {
+  color: var(--ui-faint);
+  font-size: var(--text-xs);
+}

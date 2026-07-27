@@ -5,12 +5,12 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
-  type ReactNode,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { PlainText, RichText } from "../../../components/ui/rich-text";
 import { recordUsageEvent } from "../usage-signal";
 import styles from "./conversation.module.css";
 
@@ -64,11 +64,44 @@ type JsonRecord = Record<string, unknown>;
 type VoicePhase =
   | "idle"
   | "requesting"
+  | "reconnecting"
   | "recording"
   | "transcribing"
   | "thinking"
   | "speaking"
   | "error";
+
+/**
+ * Reconnect policy for the continuous-voice WebRTC transport.
+ *
+ * Ported from `packages/realtime-voice/src/orchestrator.ts` (`#performReconnect`)
+ * when that package was deleted on 2026-07-26. The package was never imported by
+ * anything, and this client — the only realtime voice transport that actually
+ * ships — had no reconnect at all: a `failed`/`disconnected` peer just tore the
+ * session down and told the learner to press the button again.
+ *
+ * The three rules kept from the orchestrator:
+ *   1. Exponential backoff `initialBackoffMs * 2^(attempt-1)`, clamped to
+ *      `maxBackoffMs`.
+ *   2. A bounded attempt count — reconnecting forever hides a real outage.
+ *   3. A wall-clock deadline checked *before* sleeping. If the remaining budget
+ *      is already smaller than the next delay, fail now rather than sleeping
+ *      past the deadline and reporting a timeout late.
+ *
+ * What is deliberately not ported: the orchestrator resumed a provider session
+ * from a checkpoint (`lastEventSequence`, `lastCompletedTurnId`). The OpenAI
+ * realtime SDP endpoint this client speaks to has no resume, so a reconnect is a
+ * fresh offer/answer. Conversation continuity is unaffected because every
+ * grounded turn is already persisted through `/api/learning/respond` before the
+ * audio is spoken.
+ */
+const REALTIME_RECONNECT_POLICY = {
+  maxAttempts: 4,
+  initialBackoffMs: 600,
+  maxBackoffMs: 8_000,
+  /** Total wall-clock budget for one disconnect episode. */
+  windowMs: 30_000,
+} as const;
 type VoiceReadiness = "unchecked" | "checking" | "ready" | "unavailable";
 type LearningIntent = "explain" | "practice" | "check";
 type RealtimeEvent = {
@@ -164,110 +197,39 @@ function textFromStructuredParts(
   return text.length ? text.join("\n\n") : null;
 }
 
-function isRichLine(line: string) {
-  return (
-    /^#{1,3}\s+/u.test(line) ||
-    /^[-*]\s+/u.test(line) ||
-    /^\d+\.\s+/u.test(line) ||
-    /^>\s?/u.test(line) ||
-    /^```/u.test(line)
-  );
+/**
+ * An id fragment safe to put in an `href`. Message ids come off the wire, so
+ * everything outside `[A-Za-z0-9_-]` is dropped and the result is always
+ * letter-initial — which is also what the rich-text link policy requires of a
+ * same-document fragment.
+ */
+function citationAnchorPrefix(messageId: string) {
+  return `src-${messageId.replace(/[^A-Za-z0-9_-]/gu, "")}-`;
 }
 
-function RichMessageBody({ content }: { content: string }) {
-  const lines = content.replace(/\r\n?/gu, "\n").split("\n");
-  const blocks: ReactNode[] = [];
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = lines[index] ?? "";
-    if (!line.trim()) {
-      index += 1;
-      continue;
-    }
-    if (/^```/u.test(line)) {
-      const language = line.replace(/^```/u, "").trim();
-      const code: string[] = [];
-      index += 1;
-      while (index < lines.length && !/^```/u.test(lines[index] ?? "")) {
-        code.push(lines[index] ?? "");
-        index += 1;
-      }
-      if (index < lines.length) index += 1;
-      blocks.push(
-        <pre key={`code-${index}`} data-language={language || undefined}>
-          <code>{code.join("\n")}</code>
-        </pre>,
-      );
-      continue;
-    }
-    const heading = line.match(/^(#{1,3})\s+(.+)$/u);
-    if (heading) {
-      blocks.push(<h3 key={`heading-${index}`}>{heading[2]}</h3>);
-      index += 1;
-      continue;
-    }
-    if (/^[-*]\s+/u.test(line)) {
-      const items: string[] = [];
-      while (
-        index < lines.length &&
-        /^[-*]\s+/u.test(lines[index] ?? "")
-      ) {
-        items.push((lines[index] ?? "").replace(/^[-*]\s+/u, ""));
-        index += 1;
-      }
-      blocks.push(
-        <ul key={`list-${index}`}>
-          {items.map((item, itemIndex) => (
-            <li key={`${itemIndex}-${item}`}>{item}</li>
-          ))}
-        </ul>,
-      );
-      continue;
-    }
-    if (/^\d+\.\s+/u.test(line)) {
-      const items: string[] = [];
-      while (
-        index < lines.length &&
-        /^\d+\.\s+/u.test(lines[index] ?? "")
-      ) {
-        items.push((lines[index] ?? "").replace(/^\d+\.\s+/u, ""));
-        index += 1;
-      }
-      blocks.push(
-        <ol key={`ordered-${index}`}>
-          {items.map((item, itemIndex) => (
-            <li key={`${itemIndex}-${item}`}>{item}</li>
-          ))}
-        </ol>,
-      );
-      continue;
-    }
-    if (/^>\s?/u.test(line)) {
-      const quote: string[] = [];
-      while (index < lines.length && /^>\s?/u.test(lines[index] ?? "")) {
-        quote.push((lines[index] ?? "").replace(/^>\s?/u, ""));
-        index += 1;
-      }
-      blocks.push(
-        <blockquote key={`quote-${index}`}>{quote.join(" ")}</blockquote>,
-      );
-      continue;
-    }
-    const paragraph: string[] = [line];
-    index += 1;
-    while (
-      index < lines.length &&
-      (lines[index] ?? "").trim() &&
-      !isRichLine(lines[index] ?? "")
-    ) {
-      paragraph.push(lines[index] ?? "");
-      index += 1;
-    }
-    blocks.push(<p key={`paragraph-${index}`}>{paragraph.join(" ")}</p>);
-  }
-
-  return <div className={styles.messageContent}>{blocks}</div>;
+/**
+ * Assistant answers are model output and are rendered through the shared
+ * rich-text renderer: markdown-ish prose becomes real paragraphs, headings,
+ * lists, quotes, code blocks, links and inline code, and `[n]` markers become
+ * citation references pointing at the source list below the answer.
+ *
+ * The renderer builds React elements from an allowlisted node tree — it never
+ * produces an HTML string and never uses `dangerouslySetInnerHTML` — so no
+ * markup a model emits can become live markup here.
+ *
+ * The API contract is untouched: this still reads the same `content` string the
+ * respond route already returns.
+ */
+function AssistantAnswer({ message }: { message: ConversationMessage }) {
+  return (
+    <RichText
+      citationCount={message.sources.length}
+      citationHrefPrefix={`#${citationAnchorPrefix(message.messageId)}`}
+      className={styles.messageContent}
+      emptyFallback={<p>{message.content}</p>}
+      markdown={message.content}
+    />
+  );
 }
 
 function normalizeSource(value: unknown, index: number): SourceEvidence | null {
@@ -508,6 +470,18 @@ export default function ConversationClient({
   const realtimeTurnPendingRef = useRef(false);
   const realtimeReconnectCountRef = useRef(0);
   const realtimeActiveRef = useRef(false);
+  /** Timer handle for a scheduled reconnect attempt. */
+  const realtimeReconnectTimerRef = useRef<number | null>(null);
+  /** Attempt number within the current disconnect episode (1-based). */
+  const realtimeReconnectAttemptRef = useRef(0);
+  /** Wall-clock end of the current disconnect episode's retry budget. */
+  const realtimeReconnectDeadlineRef = useRef<number | null>(null);
+  /**
+   * Bumped whenever the user (or unmount) closes the session. A reconnect
+   * attempt captured under an older generation aborts instead of resurrecting a
+   * session the user already stopped.
+   */
+  const realtimeGenerationRef = useRef(0);
 
   const selectedCourse = courses.find(
     (course) => course.courseId === selectedCourseId,
@@ -620,6 +594,8 @@ export default function ConversationClient({
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
       playbackRef.current?.pause();
       if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current);
+      realtimeGenerationRef.current += 1;
+      cancelRealtimeReconnect();
       closeRealtimeTransport();
     };
   }, []);
@@ -779,6 +755,15 @@ export default function ConversationClient({
     }
   }
 
+  function cancelRealtimeReconnect() {
+    if (realtimeReconnectTimerRef.current !== null) {
+      window.clearTimeout(realtimeReconnectTimerRef.current);
+      realtimeReconnectTimerRef.current = null;
+    }
+    realtimeReconnectAttemptRef.current = 0;
+    realtimeReconnectDeadlineRef.current = null;
+  }
+
   function closeRealtimeTransport() {
     if (realtimeAnimationRef.current !== null) {
       window.cancelAnimationFrame(realtimeAnimationRef.current);
@@ -916,13 +901,93 @@ export default function ConversationClient({
     }
   }
 
+  /**
+   * Schedule the next reconnect attempt, or give up honestly.
+   *
+   * Mirrors `#performReconnect` in the deleted `packages/realtime-voice`
+   * orchestrator: bounded attempts, exponential backoff clamped to a ceiling,
+   * and a deadline checked before sleeping so an exhausted budget reports
+   * immediately rather than after one more pointless wait.
+   */
+  function scheduleRealtimeReconnect(generation: number) {
+    if (generation !== realtimeGenerationRef.current) return;
+
+    const attempt = realtimeReconnectAttemptRef.current + 1;
+    if (attempt > REALTIME_RECONNECT_POLICY.maxAttempts) {
+      failRealtimeReconnect("Continuous voice could not be restored.");
+      return;
+    }
+
+    const delayMs = Math.min(
+      REALTIME_RECONNECT_POLICY.initialBackoffMs * 2 ** (attempt - 1),
+      REALTIME_RECONNECT_POLICY.maxBackoffMs,
+    );
+    const deadline =
+      realtimeReconnectDeadlineRef.current ??
+      Date.now() + REALTIME_RECONNECT_POLICY.windowMs;
+    realtimeReconnectDeadlineRef.current = deadline;
+
+    // Deadline is checked before the sleep, not after it.
+    if (deadline - Date.now() <= delayMs) {
+      failRealtimeReconnect("Continuous voice could not be restored in time.");
+      return;
+    }
+
+    realtimeReconnectAttemptRef.current = attempt;
+    realtimeReconnectCountRef.current += 1;
+    setVoicePhase("reconnecting");
+    setError(
+      `Continuous voice dropped. Reconnecting (attempt ${attempt} of ${REALTIME_RECONNECT_POLICY.maxAttempts})…`,
+    );
+    void recordUsageEvent("voice.reconnect_scheduled", {
+      attempt,
+      delayMs,
+      reconnectCount: realtimeReconnectCountRef.current,
+    });
+
+    realtimeReconnectTimerRef.current = window.setTimeout(() => {
+      realtimeReconnectTimerRef.current = null;
+      if (generation !== realtimeGenerationRef.current) return;
+      if (Date.now() >= deadline) {
+        failRealtimeReconnect("Continuous voice could not be restored in time.");
+        return;
+      }
+      void openRealtimeTransport(generation, attempt);
+    }, delayMs);
+  }
+
+  function failRealtimeReconnect(message: string) {
+    cancelRealtimeReconnect();
+    closeRealtimeTransport();
+    setVoicePhase("error");
+    setError(`${message} Reconnect or use push-to-talk.`);
+    void recordUsageEvent("voice.error", {
+      errorCode: "realtime_reconnect_exhausted",
+      reconnectCount: realtimeReconnectCountRef.current,
+    });
+  }
+
+  /** User-initiated start. Resets the reconnect budget. */
   async function startRealtimeSession() {
     if (realtimeActive || voicePhase === "requesting") return;
+    cancelRealtimeReconnect();
     closeRealtimeTransport();
     setError(null);
     setVoiceTranscript("");
     setVoiceAnswer("");
-    setVoicePhase("requesting");
+    realtimeReconnectCountRef.current = 0;
+    const generation = realtimeGenerationRef.current + 1;
+    realtimeGenerationRef.current = generation;
+    await openRealtimeTransport(generation, 0);
+  }
+
+  /**
+   * Open one WebRTC transport. `attempt` is 0 for a user-initiated start and
+   * 1-based for reconnect attempts, so telemetry can tell them apart.
+   */
+  async function openRealtimeTransport(generation: number, attempt: number) {
+    if (generation !== realtimeGenerationRef.current) return;
+    setVoicePhase(attempt === 0 ? "requesting" : "reconnecting");
     try {
       if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
         throw new Error(
@@ -962,30 +1027,36 @@ export default function ConversationClient({
         }
       });
       channel.addEventListener("open", () => {
+        if (generation !== realtimeGenerationRef.current) return;
         realtimeActiveRef.current = true;
         setRealtimeActive(true);
         setRealtimeMuted(false);
         setVoicePhase("idle");
-        void recordUsageEvent("voice.session_started", {
-          reconnectCount: realtimeReconnectCountRef.current,
-        });
+        // A successful open ends the disconnect episode: clear the budget so
+        // the next unrelated drop starts from attempt 1 again.
+        const resumedAfter = realtimeReconnectAttemptRef.current;
+        cancelRealtimeReconnect();
+        setError(null);
+        void recordUsageEvent(
+          resumedAfter > 0 ? "voice.reconnected" : "voice.session_started",
+          {
+            ...(resumedAfter > 0 ? { attempt: resumedAfter } : {}),
+            reconnectCount: realtimeReconnectCountRef.current,
+          },
+        );
       });
       peer.addEventListener("connectionstatechange", () => {
-        if (["failed", "disconnected"].includes(peer.connectionState)) {
-          const wasActive = realtimeActiveRef.current;
-          closeRealtimeTransport();
-          setVoicePhase("error");
-          setError(
-            "Continuous voice disconnected. Reconnect or use push-to-talk.",
-          );
-          if (wasActive) {
-            realtimeReconnectCountRef.current += 1;
-            void recordUsageEvent("voice.error", {
-              errorCode: "webrtc_disconnected",
-              reconnectCount: realtimeReconnectCountRef.current,
-            });
-          }
+        if (!["failed", "disconnected"].includes(peer.connectionState)) return;
+        if (generation !== realtimeGenerationRef.current) return;
+        const wasActive = realtimeActiveRef.current;
+        closeRealtimeTransport();
+        if (wasActive) {
+          void recordUsageEvent("voice.error", {
+            errorCode: "webrtc_disconnected",
+            reconnectCount: realtimeReconnectCountRef.current,
+          });
         }
+        scheduleRealtimeReconnect(generation);
       });
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
@@ -1009,7 +1080,19 @@ export default function ConversationClient({
       }
       await peer.setRemoteDescription({ type: "answer", sdp: answer });
     } catch (caught) {
+      if (generation !== realtimeGenerationRef.current) return;
       closeRealtimeTransport();
+      // The orchestrator's `retryable` split: a denied microphone or a changed
+      // session boundary will fail identically on every retry, so back off only
+      // from transport-shaped failures.
+      const permanent =
+        caught instanceof DOMException &&
+        (caught.name === "NotAllowedError" || caught.name === "AbortError");
+      if (!permanent && attempt > 0) {
+        scheduleRealtimeReconnect(generation);
+        return;
+      }
+      cancelRealtimeReconnect();
       setVoicePhase("error");
       setError(
         caught instanceof DOMException && caught.name === "NotAllowedError"
@@ -1023,6 +1106,10 @@ export default function ConversationClient({
 
   function stopRealtimeSession() {
     const wasActive = realtimeActiveRef.current;
+    // Invalidate any in-flight reconnect before tearing down, so a pending
+    // timer cannot resurrect a session the user just stopped.
+    realtimeGenerationRef.current += 1;
+    cancelRealtimeReconnect();
     closeRealtimeTransport();
     setVoicePhase("idle");
     if (wasActive) {
@@ -1507,6 +1594,12 @@ export default function ConversationClient({
           ? "Connecting a private WebRTC session with automatic turn detection. Raw audio is not stored by LearningBot."
           : "Your browser will ask for permission. Raw audio is sent for transcription and is not stored by LearningBot.",
     },
+    reconnecting: {
+      eyebrow: "RECONNECTING",
+      heading: "The voice connection dropped.",
+      description:
+        "Reopening the session with a short backoff. Nothing was lost—every answer so far is saved in this conversation, and push-to-talk stays available.",
+    },
     recording: {
       eyebrow: "LISTENING",
       heading: "I’m listening.",
@@ -1571,9 +1664,11 @@ export default function ConversationClient({
         ? "Interrupt and record a new voice turn"
         : voicePhase === "requesting"
           ? "Opening microphone"
-          : voicePhase === "transcribing" || voicePhase === "thinking"
-            ? "Voice turn is processing"
-            : "Start voice turn";
+          : voicePhase === "reconnecting"
+            ? "Reconnecting continuous voice"
+            : voicePhase === "transcribing" || voicePhase === "thinking"
+              ? "Voice turn is processing"
+              : "Start voice turn";
   const voiceContextLocked =
     sending ||
     (mode === "voice" &&
@@ -1583,9 +1678,14 @@ export default function ConversationClient({
     sending ||
     (mode === "voice" &&
       (realtimeActive ||
-        ["requesting", "recording", "transcribing", "thinking", "speaking"].includes(
-          voicePhase,
-        )));
+        [
+          "requesting",
+          "reconnecting",
+          "recording",
+          "transcribing",
+          "thinking",
+          "speaking",
+        ].includes(voicePhase)));
   const voiceActionLabel = realtimeAvailable
     ? !realtimeActive
       ? "Start"
@@ -1839,7 +1939,16 @@ export default function ConversationClient({
                       <span className={styles.messageOrb} aria-hidden="true" />
                     ) : null}
                     <div>
-                      <RichMessageBody content={message.content} />
+                      {message.role === "assistant" ? (
+                        <AssistantAnswer message={message} />
+                      ) : (
+                        // A learner's own words are never re-interpreted as
+                        // formatting: they are printed exactly as typed.
+                        <PlainText
+                          className={styles.messageContent}
+                          value={message.content}
+                        />
+                      )}
                       {message.richParts.length ? (
                         <div className={styles.richParts}>
                           {message.richParts.map((part) =>
@@ -1874,15 +1983,30 @@ export default function ConversationClient({
                         </div>
                       ) : null}
                       {message.sources.length ? (
-                        <details className={styles.sources}>
+                        <details className={styles.sources} open>
                           <summary>
                             {message.sources.length} learning{" "}
                             {message.sources.length === 1 ? "source" : "sources"}
                           </summary>
                           <div>
-                            {message.sources.map((source) => (
-                              <article key={source.sourceId}>
-                                <b>{source.title}</b>
+                            {message.sources.map((source, sourceIndex) => (
+                              /**
+                               * Numbered so a `[2]` in the answer above has
+                               * somewhere to point, and given an id so the
+                               * citation reference actually jumps here.
+                               */
+                              <article
+                                id={`${citationAnchorPrefix(
+                                  message.messageId,
+                                )}${sourceIndex + 1}`}
+                                key={source.sourceId}
+                              >
+                                <b>
+                                  <span aria-hidden="true">
+                                    {sourceIndex + 1}.{" "}
+                                  </span>
+                                  {source.title}
+                                </b>
                                 {source.courseTitle || source.lessonTitle ? (
                                   <small>
                                     {[source.courseTitle, source.lessonTitle]

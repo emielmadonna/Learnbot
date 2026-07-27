@@ -1,0 +1,646 @@
+/*
+  App shell — persistent header, canvas and panel layer.
+
+  ===========================================================================
+  WHERE BRAND COLOUR IS ALLOWED — the rule, stated once.
+
+  This app is NEUTRAL with a brand accent. It used to derive every neutral in
+  the product from the tenant's --brand-text and --brand-surface, which painted
+  every surface, hairline and muted label in one client's colour and made the
+  whole console read as a themed admin template. That derivation is gone: the
+  neutral ramp lives in globals.css :root, it is fixed, and it is identical for
+  every tenant.
+
+  --brand-primary / --brand-accent may colour ONLY:
+    - primary (filled) buttons
+    - the active navigation item
+    - focus rings
+    - the assistant avatar, brand mark and logo lockup
+    - links and small status accents (dots, meters, progress fills)
+
+  They may NEVER colour page backgrounds, card/panel surfaces, body text,
+  borders or muted labels. Those are --ui-* neutrals, always.
+
+  ---------------------------------------------------------------------------
+  ADMIN vs LEARNER — scoped by plane, so there are no scattered exceptions.
+
+  Brand presence is decided by which plane a thing sits on, not by which page
+  it is on:
+
+    admin chrome   .header, .nav, .accountMenu, .panel* (the panel sheets ARE
+                   the admin tooling)                         -> pure neutral,
+                   brand only as the accent list above allows.
+
+    learner canvas .canvas and everything rendered into it (home, conversation,
+                   widget preview)                            -> may carry a
+                   brand wash on its ground, because that is the surface a
+                   learner experiences as the client's product.
+
+  `[data-surface]` on the shell root overrides the default per route:
+  data-surface="learner" promotes the whole shell to learner presence,
+  data-surface="admin" (the default when the attribute is absent) keeps it
+  neutral. The learner routes that own their own page shell — the conversation
+  surface and the embeddable widget — are branded in their own stylesheets and
+  are deliberately not governed from here.
+  ===========================================================================
+
+  Neutrals are NOT redefined in this file. They are inherited from :root so
+  that they cannot drift per tenant. Only the brand-wash strength is scoped.
+*/
+
+.shell {
+  /*
+    How much brand a plane may put into its own background. Zero on admin
+    chrome. The learner canvas raises it below. Nothing else may introduce a
+    brand background.
+  */
+  --ui-brand-wash: 0%;
+
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  background: var(--ui-canvas);
+  color: var(--ui-ink);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizelegibility;
+}
+
+/*
+  Learner scope. The one place the tenant's colour is allowed onto a ground,
+  and even here it is a whisper — enough to feel owned, never enough to tint
+  text or borders.
+*/
+.shell[data-surface="learner"] {
+  --ui-brand-wash: 5%;
+}
+
+/* Configuration-closed fallback: access stays closed, nothing is invented. */
+.closed {
+  display: grid;
+  min-height: 100vh;
+  padding: var(--space-6);
+  background: var(--ui-canvas);
+  color: var(--ui-ink);
+  font-family: var(--font-ui);
+  place-items: center;
+}
+
+.closed > section {
+  display: grid;
+  max-width: 46ch;
+  justify-items: center;
+  gap: var(--space-4);
+  padding: var(--space-9) var(--space-8);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-2xl);
+  background: var(--ui-surface);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+
+.closed h1 {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+
+.closed p {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+
+.skipLink {
+  position: absolute;
+  z-index: 60;
+  top: var(--space-2);
+  left: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+
+.skipLink:focus-visible {
+  transform: translateY(0);
+}
+
+.visuallyHidden {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ header */
+
+.header {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  display: flex;
+  min-height: var(--shell-header-height);
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-2) clamp(var(--space-5), 4vw, var(--space-9));
+  /* Admin chrome: neutral hairline over a frosted neutral ground. */
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-ink) 7%, transparent);
+  background: color-mix(in srgb, var(--ui-canvas) 78%, transparent);
+  backdrop-filter: blur(24px) saturate(160%);
+}
+
+.brand {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+  color: inherit;
+  text-decoration: none;
+}
+
+.brandMark {
+  display: grid;
+  overflow: hidden;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-md);
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+  font-size: var(--text-md);
+  font-weight: var(--weight-heavy);
+  place-items: center;
+}
+
+.brandMark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.brandText {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.brandText b {
+  overflow: hidden;
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-snug);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brandText small {
+  overflow: hidden;
+  color: var(--ui-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav {
+  display: flex;
+  overflow-x: auto;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 auto;
+  scrollbar-width: none;
+}
+
+.nav::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+  Nav reads as quiet text until it matters. The active item is marked by
+  weight and a filled pill, never by colour alone.
+*/
+.navItem {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  color: var(--ui-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-snug);
+  text-decoration: none;
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+  white-space: nowrap;
+}
+
+/* Hover is a neutral lift. Only the ACTIVE item earns the brand. */
+.navItem:hover {
+  background: var(--ui-surface-sunken);
+  color: var(--ui-ink);
+}
+
+.navItem[data-active] {
+  background: color-mix(in srgb, var(--brand-primary) 11%, transparent);
+  color: var(--brand-primary);
+  font-weight: var(--weight-strong);
+}
+
+.headerActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.voiceAction {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  /* Neutral hairline; the accent lives in the label and the live dot. */
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--ui-surface) 70%, transparent);
+  color: var(--brand-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-snug);
+  text-decoration: none;
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease);
+}
+
+.voiceAction:hover {
+  border-color: var(--ui-line-strong);
+  background: var(--ui-surface-sunken);
+}
+
+.liveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-accent) 22%, transparent);
+}
+
+.account {
+  position: relative;
+}
+
+.avatar {
+  display: grid;
+  overflow: hidden;
+  width: 36px;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 16%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-primary) 9%, var(--ui-surface));
+  color: var(--brand-primary);
+  cursor: pointer;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: 0.02em;
+  place-items: center;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.avatar:hover {
+  background: color-mix(in srgb, var(--brand-primary) 16%, var(--ui-surface));
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.accountMenu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + var(--space-3));
+  right: 0;
+  display: grid;
+  width: 264px;
+  padding: var(--space-2);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-lg);
+  background: var(--ui-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.accountIdentity {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--ui-line);
+  margin-bottom: var(--space-2);
+}
+
+.accountIdentity strong {
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-snug);
+}
+
+.accountIdentity small {
+  overflow: hidden;
+  color: var(--ui-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+}
+
+.roleBadge {
+  justify-self: start;
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-pill);
+  margin-top: var(--space-2);
+  background: color-mix(in srgb, var(--brand-primary) 10%, transparent);
+  color: var(--brand-primary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-heavy);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.accountItem {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ui-ink);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  text-decoration: none;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.accountItem:hover {
+  background: var(--ui-surface-sunken);
+}
+
+/* ------------------------------------------------------------------ canvas */
+
+/*
+  Generous, asymmetric page rhythm: a long run-in above the fold so the first
+  headline has room to land, and a deep tail so the last section never
+  collides with the viewport edge.
+
+  This is the learner plane, so it is the one ground allowed a brand wash. It
+  is a single soft bloom off the top-right corner at --ui-brand-wash strength,
+  fading out well before it reaches any text. On admin chrome the wash resolves
+  to 0% and the gradient collapses to nothing.
+*/
+.canvas {
+  --ui-brand-wash: 4%;
+
+  width: min(var(--shell-max-width), 100%);
+  flex: 1;
+  padding: var(--gap-section) clamp(var(--space-5), 4vw, var(--space-9))
+    var(--gap-chapter);
+  margin: 0 auto;
+  background: radial-gradient(
+    circle at 88% -8%,
+    color-mix(in srgb, var(--brand-primary) var(--ui-brand-wash), transparent) 0,
+    transparent 34rem
+  );
+}
+
+.canvas:focus {
+  outline: none;
+}
+
+/* ------------------------------------------------------------- panel layer */
+
+.panelLayer {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/*
+  A layer that is on its way out still covers the viewport for one animation.
+  It must not swallow the clicks meant for the page underneath it.
+*/
+.panelLayer:not([data-open]) {
+  pointer-events: none;
+}
+
+/*
+  Sheets, not modals. The scrim settles and the panel travels on the same
+  220ms curve the design system specifies for complex surfaces, so the two
+  read as one gesture rather than a window appearing.
+
+  Arrival is a keyframe animation and departure is a transition. That asymmetry
+  is deliberate: an animation plays when the element is inserted already open,
+  which is what a deep link, a refresh or a back step produces, so those arrive
+  with the same gesture as a click instead of needing a frame of client state
+  to flip first.
+*/
+.panelScrim {
+  position: absolute;
+  inset: 0;
+  background: var(--ui-overlay);
+  opacity: 0;
+  backdrop-filter: blur(2px);
+  transition: opacity var(--motion-sheet) var(--motion-ease);
+}
+
+.panelLayer[data-open] .panelScrim {
+  opacity: 1;
+  animation: scrimArrive var(--motion-sheet) var(--motion-ease);
+}
+
+@keyframes scrimArrive {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes panelArrive {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+.panel {
+  position: relative;
+  display: flex;
+  width: min(600px, 100%);
+  max-width: 100%;
+  flex-direction: column;
+  border-left: 1px solid var(--ui-line);
+  background: var(--ui-surface);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(100%);
+  transition: transform var(--motion-sheet) var(--motion-ease);
+}
+
+.panel[data-size="wide"] {
+  width: min(900px, 100%);
+}
+
+.panelLayer[data-open] .panel {
+  transform: translateX(0);
+  animation: panelArrive var(--motion-sheet) var(--motion-ease);
+}
+
+.panel:focus {
+  outline: none;
+}
+
+/*
+  The sheet header carries no fill of its own — it is the same plane as the
+  body, separated by space and a hairline that only appears once content
+  scrolls under it.
+*/
+.panelHeader {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-7) clamp(var(--space-5), 3vw, var(--space-8))
+    var(--space-5);
+  border-bottom: 1px solid var(--ui-line);
+  background: var(--ui-surface);
+}
+
+.panelTitle {
+  margin: 0;
+  color: var(--ui-ink);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+
+.panelSubtitle {
+  max-width: 56ch;
+  margin: var(--space-2) 0 0;
+  color: var(--ui-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.panelClose {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ui-muted);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  place-items: center;
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
+
+.panelClose:hover {
+  background: var(--ui-surface-sunken);
+  color: var(--ui-ink);
+}
+
+.panelBody {
+  overflow-y: auto;
+  flex: 1;
+  padding: var(--space-7) clamp(var(--space-5), 3vw, var(--space-8))
+    var(--space-10);
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 900px) {
+  .header {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .nav {
+    order: 3;
+    width: 100%;
+    margin: 0;
+    padding-bottom: var(--space-1);
+  }
+
+  .brandText small {
+    display: none;
+  }
+
+  .panel,
+  .panel[data-size="wide"] {
+    width: 100%;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .voiceAction {
+    display: none;
+  }
+}
+
+/*
+  Reduced motion removes the spatial travel but keeps the state change: the
+  sheet still arrives and the scrim still darkens, they simply do not move.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .panelScrim,
+  .navItem,
+  .skipLink,
+  .voiceAction,
+  .avatar,
+  .accountItem,
+  .panelClose {
+    transition-duration: 1ms;
+  }
+
+  .panel {
+    transform: none;
+    opacity: 0;
+  }
+
+  .panelLayer[data-open] .panel,
+  .panelLayer[data-open] .panelScrim {
+    animation: none;
+  }
+
+  .panelLayer[data-open] .panel {
+    opacity: 1;
+  }
+}

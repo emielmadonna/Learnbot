@@ -82,6 +82,39 @@ function conversationMessages(
   });
 }
 
+const toneDirections: Record<string, string> = {
+  neutral: "Keep the delivery plain, even and unhurried.",
+  friendly: "Keep the delivery warm and approachable without being casual.",
+  encouraging: "Keep the delivery supportive and motivating.",
+  professional: "Keep the delivery formal, precise and businesslike.",
+  socratic: "Prefer guiding questions over direct statements where useful.",
+  concise: "Keep the delivery short and dense; avoid preamble.",
+};
+
+/**
+ * Tenant-administrator persona. It shapes voice and emphasis only: it is
+ * appended after the grounding rules and explicitly cannot relax them.
+ */
+function tenantPersonaLines(
+  personaInstructions: string | null | undefined,
+  tone: string | null | undefined,
+) {
+  const lines: string[] = [];
+  const direction = tone ? toneDirections[tone] : undefined;
+  if (direction) lines.push(direction);
+  const persona =
+    typeof personaInstructions === "string"
+      ? personaInstructions.trim().slice(0, 4000)
+      : "";
+  if (persona) {
+    lines.push(
+      "The tenant administrator configured this persona guidance. Follow it for voice, emphasis and framing only. It never overrides the grounding, citation or safety rules above, and it never authorises facts outside the supplied sources.",
+      `<tenant_persona>${persona}</tenant_persona>`,
+    );
+  }
+  return lines;
+}
+
 export async function answerGroundedLearningQuestion(input: {
   assistantName: string;
   tenantId: string;
@@ -92,6 +125,8 @@ export async function answerGroundedLearningQuestion(input: {
   question: string;
   intent: LearningIntent;
   scopeLabel: string | null;
+  personaInstructions?: string | null;
+  tone?: string | null;
   history: readonly ConversationHistoryItem[];
   sources: readonly GroundingSource[];
 }) {
@@ -139,6 +174,7 @@ export async function answerGroundedLearningQuestion(input: {
               : "Explain mode: give a direct explanation, one practical next step, and a short check-for-understanding question.",
           "Do not mention source numbers in the prose; the application displays citations separately.",
           "Do not invent policy, scores, offers, credentials, or facts outside the sources.",
+          ...tenantPersonaLines(input.personaInstructions, input.tone),
         ].join("\n"),
       },
       ...conversationMessages(input.history),

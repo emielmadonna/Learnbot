@@ -7,13 +7,17 @@ import {
   authenticatedLearningClient,
   executeLearningRpc,
 } from "../../../../../lib/supabase/learning-route";
-import { consumeVoiceQuota } from "../rate-limit";
+import {
+  enforceVoiceQuota,
+  meterVoiceUsage,
+  resolveTenantVoice,
+  voiceTraceId,
+} from "../../../../../lib/voice-runtime";
 
 type JsonRecord = Record<string, unknown>;
 
 const OPENAI_SPEECH_URL = "https://api.openai.com/v1/audio/speech";
 const SPEECH_MODEL = "gpt-4o-mini-tts";
-const SPEECH_VOICE = "marin";
 const MAX_SPEECH_CHARACTERS = 4_096;
 const REQUEST_DEADLINE_MS = 45_000;
 
@@ -89,18 +93,21 @@ export async function POST(request: Request) {
         "Synthetic speech is not configured.",
       );
     }
-    const quota = consumeVoiceQuota(
-      "speak",
-      `${context.tenantId}:${context.principalId}`,
-    );
+    // Durable, cross-instance quota. The previous per-process map reset on
+    // every serverless cold start, so it bounded nothing in production.
+    const quota = await enforceVoiceQuota(supabase, {
+      kind: "speak",
+      tenantId: context.tenantId,
+      principalId: context.principalId,
+    });
     if (!quota.allowed) {
       return jsonError(
-        "voice_rate_limited",
+        quota.code,
         429,
-        "Too many spoken answers. Wait briefly before trying again.",
-        true,
+        quota.message,
+        quota.retryAfterSeconds > 0,
         {
-          "Retry-After": String(quota.retryAfterSeconds),
+          "Retry-After": String(Math.max(1, quota.retryAfterSeconds)),
           "X-Voice-RateLimit-Scope": quota.scope,
         },
       );
@@ -142,6 +149,9 @@ export async function POST(request: Request) {
       );
     }
 
+    // The tenant's configured voice, not a hardcoded one. An unset or
+    // unrecognised value falls back to the platform default.
+    const voiceProfile = await resolveTenantVoice(supabase);
     const providerResponse = await fetch(OPENAI_SPEECH_URL, {
       method: "POST",
       headers: {
@@ -150,7 +160,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model: SPEECH_MODEL,
-        voice: SPEECH_VOICE,
+        voice: voiceProfile.voice,
         input: answer,
         response_format: "mp3",
         instructions:
@@ -167,6 +177,18 @@ export async function POST(request: Request) {
       );
     }
 
+    // Speech is billed by input characters, which are known here. Metering is
+    // best effort and never throws: the audio is already on its way.
+    await meterVoiceUsage(supabase, {
+      kind: "speak",
+      model: SPEECH_MODEL,
+      quantity: answer.length,
+      fallbackUnit: "characters",
+      traceId: voiceTraceId("speak"),
+      idempotencyKey: `voice-speak:${conversationId}:${messageId}`,
+      conversationId,
+    });
+
     return new NextResponse(providerResponse.body, {
       status: 200,
       headers: {
@@ -175,6 +197,8 @@ export async function POST(request: Request) {
         "Content-Disposition": 'inline; filename="assistant-answer.mp3"',
         "X-AI-Generated-Voice": "true",
         "X-Content-Type-Options": "nosniff",
+        "X-Voice-Name": voiceProfile.voice,
+        "X-Voice-Profile": voiceProfile.source,
         "X-Voice-RateLimit-Scope": quota.scope,
       },
     });

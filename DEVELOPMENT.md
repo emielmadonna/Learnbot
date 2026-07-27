@@ -6,82 +6,98 @@ Only the root integrator starts or stops shared services.
 
 | Service | URL / port | Owner | Purpose |
 |---|---|---|---|
-| Console | `http://127.0.0.1:3100` | root integrator | Student, Creator, Admin, learning and MCP UI prototypes |
+| Console | `http://127.0.0.1:3100` | root integrator | the entire application |
 
-The current console process is recorded by PID at runtime; never hard-code a PID into source control. Agents use hot reload on the shared server and must not launch another copy.
+The current console process is recorded by PID at runtime; never hard-code a PID
+into source control. Agents use hot reload on the shared server and must not
+launch another copy.
 
-Planned additions are one local Edge API and one shared fake/provider/data process. They receive fixed documented ports only when implemented. Do not create one server per module.
+`apps/edge/` and `services/learning/` are README files, not processes. Do not
+create one server per module.
 
 ## Parallel ownership
 
 | Lane | Owns | Does not edit |
 |---|---|---|
-| Control plane | tenancy/auth/RLS, application-service boundary, providers, audit/cost, management MCP | feature UI route internals |
-| Learning pipeline | source intake, scanning, extraction, cleanup, structure, versions, diagrams, jobs | chat/runtime and tenant auth |
-| Product experience | unified chat, course workspace, Creator/Admin screens, interaction/accessibility | provider SDKs, database access |
+| Control plane | tenancy/auth/RLS, providers, audit/cost | feature UI route internals |
+| Learning pipeline | source intake, scanning, extraction, cleanup, structure, versions, jobs | chat/runtime and tenant auth |
+| Product experience | conversation, course workspace, creator/admin screens, interaction/accessibility | provider SDKs, database access |
 | Root integration | root config, shared dev server, shared navigation, dependency changes, integration tests, Git | agent-owned route internals while active |
 
-One file has one owner at a time. A lane requests shared-contract changes from the root integrator instead of editing across boundaries.
+One file has one owner at a time. A lane requests shared-contract changes from
+the root integrator instead of editing across boundaries.
 
-## Implemented vertical slice
+## What is implemented
 
-The repository now includes:
+**This section describes behaviour, not packages.** It previously listed the
+contents of a `packages/` directory in the present tense, which is how the
+repository came to claim a privacy lifecycle, a 28-tool MCP and durable
+PostgreSQL repositories that no code path ever executed. If you cannot name the
+route and the RPC, it does not go in this list.
 
-- tenant/request/provider/conversation/attachment/learning/MCP/event/cost contracts;
-- one Student conversation for streamed text, browser speech, files and verified
-  current-learning context;
-- a dedicated realtime voice canvas driven by live Web Audio energy and spectral
-  input, with tenant tinting, barge-in, cancellation-safe handoff and text
-  continuity;
-- Creator, Teacher, branding, learning-version and Platform Admin surfaces;
-- course authoring with sanitized rich blocks, optimistic versions, validation,
-  immutable revisions, publishing and rollback;
-- membership-derived development sessions, tenant-match guards and
-  actor-bound Student/voice ownership;
-- an OIDC/JWKS verifier with pinned issuer/audience/algorithm policy, remote-key
-  rotation, bounded claims and no trust in token role or tenant claims;
-- tenant-safe in-memory application services used by UI, APIs and MCP;
-- deterministic staged ingestion, selective reprocessing, atomic publish and
-  rollback;
-- an injected durable upload-intent boundary for tenant/actor-bound signed
-  quarantine transport, atomic scan callback replay, magic-byte/malware gates
-  and clean-only idempotent promotion;
-- provider-neutral routing with tenant policy, deadlines, compatible fallback,
-  circuit state and attempt/cost telemetry;
-- a server-side OpenAI Responses text adapter with injected credentials,
-  `store: false`, typed bounded SSE, deadline propagation and safe failures,
-  selected only through the provider-neutral route policy;
-- a framework-free Shadow-DOM Widget runtime with dynamic branding, honest
-  identity/context states, one multimodal thread, resumable layout and bounded
-  browser-safe distribution;
-- a closed intelligence event taxonomy, source-health states, deterministic
-  confusion/content-gap/stall/velocity metrics and human-reviewed Opportunity
-  lifecycle without autonomous outreach;
-- policy-driven, resumable privacy access/export/delete/retention workflows
-  with exact grants, legal holds, deletion tombstones, manifest integrity and
-  explicit partial/blocked states;
-- a 28-tool management MCP whose mutations deny by default and require exact
-  tenant/actor/grant/idempotency context plus expiry, budget and rate controls;
-- eight Supabase migrations with 36 schema tables, forced RLS, private storage
-  policies and executable SQL negative tests;
-- injected PostgreSQL primitives for transactional command replay, immutable
-  course revisions and a leased telemetry outbox, with no memory fallback;
-- an explicit two-value private-fixture-preview gate, a minimal `/api/health`
-  endpoint and a frozen-install CI validation workflow.
+The authoritative capability-by-capability breakdown, with the honest gaps, is
+in [README.md](README.md). In short, a signed-in user can:
+
+- sign in, be forced through a password change, and select among their tenant
+  memberships — with roles resolved from `public.identity_memberships`, never
+  from a token claim;
+- complete a durable onboarding workspace;
+- administer the platform: tenants, sections, suspension, enter/exit, client
+  provisioning and owner-claim minting;
+- provision and manage client user accounts through the `learning-admin-users`
+  edge function;
+- configure the agent's name, brand, persona, tone and scope, and upload brand
+  assets to private storage under RLS;
+- author courses, modules, lessons and content blocks with optimistic
+  concurrency, immutable revisions and rollback;
+- publish a course, which projects its published content blocks into
+  `knowledge_versions` / `learning_documents` / `learning_chunks` so the
+  assistant can retrieve them;
+- hold a grounded text conversation whose answers are refused rather than
+  invented when retrieval returns nothing, with every turn persisted;
+- hold a voice conversation, push-to-talk or continuous, where the spoken answer
+  is the same grounded, already-saved answer the text path produces;
+- see question intelligence and analytics carrying an explicit
+  known/partial/unknown envelope computed in SQL;
+- record lesson progress and usage events.
+
+Uploaded files stop in quarantine. There is no privacy or GDPR code path. See
+[README.md § Not yet built](README.md#not-yet-built) for the full list; do not
+restate capability claims here.
 
 ## Honest delivery boundary
 
-The current build is an evidence-backed development slice, not a production
-certification. PostgreSQL security tests require Docker or an approved Supabase
-development project. The durable primitives are not yet wired into every
-application service. Production realtime transport, IdP application wiring,
-SAML/service authentication, cross-repository identity units of work, worker
-execution, object storage, secret management,
-billing reconciliation,
-approved privacy policies and production retention/export/delete adapters,
-load/recovery evidence and deployment
-remediation remain explicit production milestones.
+The console is a thin, well-secured client over the Supabase schema. The gaps
+that matter are product gaps, not quality gaps:
+
+- **Uploads terminate in quarantine.** No scanner, no extractor, no promotion
+  RPC. Authored content is retrievable; uploaded files are not.
+- **Privacy and GDPR have no code path.** Not a partial one — none. See
+  [docs/PRIVACY-DATA-LIFECYCLE-SPEC.md](docs/PRIVACY-DATA-LIFECYCLE-SPEC.md).
+- **Nine migrations exist only in the live database.** Read
+  `infra/supabase/SCHEMA-DRIFT.md` before rebuilding. Re-running committed
+  migrations against the live project downgrades the function that creates
+  client users.
+- **Edge functions have no deploy configuration.** No CI step, no
+  `supabase functions deploy` in `hosted-release.mjs`. They were pushed by hand.
+- **`packages/identity-access` is a verifier, not authentication.** Nothing
+  imports it. The console authenticates through Supabase Auth.
+- **There is no management MCP.** The package was deleted on 2026-07-26; it was
+  never deployed and 27 of its 36 tools pointed at a removed API surface.
+- **PostgreSQL security tests require Docker or an approved Supabase development
+  project**, and have not executed on this machine.
+
+Production realtime transport, IdP wiring, object storage, secret management,
+billing reconciliation, approved retention policies and load/recovery evidence
+remain unstarted production milestones — not partially delivered ones.
 
 ## Agent completion contract
 
-Every task names its file allowlist, dependency assumptions, acceptance rows and non-goals. Handoff includes changed files, checks, screenshots/evidence when UI is involved, known limitations and any shared-contract request. Root independently reviews and runs shared checks before integration.
+Every task names its file allowlist, dependency assumptions, acceptance rows and
+non-goals. Handoff includes changed files, checks, screenshots/evidence when UI
+is involved, known limitations and any shared-contract request. Root
+independently reviews and runs shared checks before integration.
+
+A capability claim in a handoff, a README or a commit message must cite the
+route and the RPC that implement it. "The package supports X" is not a claim
+that the product does X.

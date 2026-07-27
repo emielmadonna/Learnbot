@@ -1,60 +1,118 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { CSSProperties } from "react";
+import AppShell from "../../components/app-shell/app-shell";
+import type {
+  AgentConfig,
+  PanelKey,
+  ShellPayload,
+  ShellRole,
+} from "../../components/app-shell/contract";
+import shellStyles from "../../components/app-shell/shell.module.css";
 import {
   getCurrentTenantContext,
   requireVerifiedUser,
 } from "../../lib/supabase/auth-boundary";
+import { getLearningWorkspace } from "../../lib/supabase/learning-rpc";
 import {
-  getLearningWorkspace,
-  type LearningBlock,
-} from "../../lib/supabase/learning-rpc";
+  isPlatformSectionKey,
+  parseTenantSections,
+} from "../../lib/supabase/platform-rpc";
 import { createServerSupabaseClient } from "../../lib/supabase/server";
-import styles from "./workspace.module.css";
-import UploadLearning from "./upload-learning";
-import { UsageSignal } from "./usage-signal";
 
-const statusMessages: Record<string, string> = {
-  course_created: "Draft created. Review it below, then publish when ready.",
-  course_published: "Course published. Learners can now open it.",
-  progress_saved: "Progress saved.",
-};
+const TENANT_ADMIN_ROLES = ["tenant_owner", "tenant_admin"];
 
-const errorMessages: Record<string, string> = {
-  request_failed: "That request could not be completed. Nothing was changed.",
-  access_denied: "Your current role cannot perform that action.",
-  invalid_request: "Check the values and try again.",
-};
+const BRAND_ASSET_TTL_SECONDS = 600;
 
-function blockText(block: LearningBlock) {
-  const text = block.content.text;
-  if (typeof text === "string") return text;
-  const markdown = block.content.markdown;
-  if (typeof markdown === "string") return markdown;
-  const html = block.content.html;
-  if (typeof html === "string") {
-    return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+/**
+ * Resolve a private branding asset to a short-lived signed URL.
+ *
+ * Brand images live in the tenant-private bucket, so they cannot be linked
+ * directly. A missing key is the normal case (most tenants never upload a
+ * logo), and a signing failure must not take the whole workspace down — either
+ * way the shell falls back to the tenant-derived initial.
+ */
+async function signedBrandAsset(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  storageKey: string | null | undefined,
+): Promise<string | null> {
+  if (!storageKey) return null;
+  try {
+    const signed = await supabase.storage
+      .from("tenant-private")
+      .createSignedUrl(storageKey, BRAND_ASSET_TTL_SECONDS);
+    return signed.error ? null : (signed.data?.signedUrl ?? null);
+  } catch {
+    return null;
   }
-  return "This content block is available but does not have a text preview.";
 }
 
-function percent(value: number) {
-  return Math.max(0, Math.min(100, Number(value) || 0));
+/**
+ * Read the tenant's durable section flags, falling back to role-derived
+ * defaults.
+ *
+ * The fallback is not a convenience: it is what keeps the workspace usable on a
+ * database where the section-control migration has not been applied. It is
+ * deliberately no more permissive than the durable record can be — a section
+ * the role could not reach is never enabled here.
+ */
+async function resolveSections(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  access: { canAdminister: boolean; canManagePlatform: boolean },
+): Promise<Record<PanelKey, boolean>> {
+  const permitted: Record<PanelKey, boolean> = {
+    agent: true,
+    course: true,
+    insights: access.canAdminister,
+    people: access.canAdminister,
+    platform: access.canManagePlatform,
+    // The widget is the tenant's own site-facing surface, so it sits behind
+    // the same administrative gate as People and Insights.
+    widget: access.canAdminister,
+    settings: true,
+  };
+
+  try {
+    const response = await supabase.rpc("tenant_get_sections");
+    if (response.error) return permitted;
+    const sections = parseTenantSections(
+      (response.data as { sections?: unknown } | null)?.sections,
+    );
+    if (sections.length === 0) return permitted;
+    for (const section of sections) {
+      if (!isPlatformSectionKey(section.sectionKey)) continue;
+      const key = section.sectionKey as PanelKey;
+      // A tenant may switch a section off, but never on past its role gate.
+      permitted[key] = permitted[key] && section.enabled;
+    }
+    return permitted;
+  } catch {
+    return permitted;
+  }
 }
 
-export default async function AuthenticatedAppPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+function toShellRole(identityRole: string, canManagePlatform: boolean): ShellRole {
+  switch (identityRole) {
+    case "tenant_owner":
+      return "tenant_owner";
+    case "tenant_admin":
+      return "tenant_admin";
+    case "teacher":
+      return "teacher";
+    case "creator":
+      return "creator";
+    default:
+      // A platform operator without a tenant-scoped role is a platform owner.
+      return canManagePlatform ? "platform_owner" : "learner";
+  }
+}
+
+export default async function AuthenticatedAppPage() {
   let supabase;
   try {
     supabase = await createServerSupabaseClient();
   } catch {
     return (
-      <main className={styles.closed}>
+      <main className={shellStyles.closed}>
         <section>
-          <span className={styles.logo}>E</span>
           <h1>Production access is not configured.</h1>
           <p>Supabase configuration is missing. Access remains closed.</p>
         </section>
@@ -78,28 +136,66 @@ export default async function AuthenticatedAppPage({
   } catch {
     redirect("/onboarding?error=selection_failed");
   }
+
   const platformAuthorization = await supabase.rpc(
     "platform_admin_is_authorized",
   );
   const canManagePlatform =
     !platformAuthorization.error && platformAuthorization.data === true;
 
-  const parameters = await searchParams;
-  const status =
-    typeof parameters.status === "string" ? parameters.status : "";
-  const error = typeof parameters.error === "string" ? parameters.error : "";
+  const identityRole = workspace.identity.role || context.identityRole || "";
+  const canAdminister = TENANT_ADMIN_ROLES.includes(identityRole);
   const brand = workspace.branding;
-  const assistantName = brand?.assistantName ?? "Estie";
-  const theme = {
-    "--brand-primary": brand?.primaryColor ?? "#234f40",
-    "--brand-accent": brand?.accentColor ?? "#d2a85f",
-    "--brand-surface": brand?.surfaceColor ?? "#f5f4ef",
-    "--brand-text": brand?.textColor ?? "#14231d",
-  } as CSSProperties;
-  const firstCourse = workspace.courses[0];
-  const firstLesson = firstCourse?.modules
-    .flatMap((module) => module.lessons)
-    .find((lesson) => lesson.progressState !== "completed");
+
+  // The workspace payload is the authoritative source for presentation: it is
+  // the only branding a learner is allowed to see, and it always resolves. The
+  // agent record below supplies the fields the workspace deliberately withholds
+  // from non-admins. Both paths degrade to workspace values, so the shell
+  // themes correctly whether or not the agent migration has been applied.
+  const agent: AgentConfig = {
+    assistantName: brand?.assistantName ?? "LearningBot",
+    logoUrl: await signedBrandAsset(supabase, brand?.logoStorageKey),
+    avatarUrl: await signedBrandAsset(supabase, brand?.avatarStorageKey),
+    iconGlyph: brand?.iconGlyph ?? "◎",
+    // Unbranded defaults are NEUTRAL graphite, drawn from the neutral ramp in
+    // globals.css (--n-800 / --n-600 / --n-50 / --n-900). A tenant that has not
+    // chosen colours should look like an unbranded product, not like somebody
+    // else's: these used to be one client's green and gold, which is how that
+    // palette ended up painting the whole console.
+    primaryColor: brand?.primaryColor ?? "#2c3230",
+    accentColor: brand?.accentColor ?? "#5f6764",
+    surfaceColor: brand?.surfaceColor ?? "#f7f8f8",
+    textColor: brand?.textColor ?? "#181d1b",
+    welcomeMessage:
+      brand?.welcomeMessage ??
+      "Ask a question about your learning and I’ll help you find the answer.",
+    // Behaviour directives are admin-only by design: `learning_get_workspace`
+    // omits them entirely for learners so the assistant's instructions cannot
+    // be read and worked around. Empty here simply means "not disclosed to this
+    // role", never "not configured".
+    personaInstructions: brand?.personaInstructions ?? "",
+    tone: brand?.tone ?? "",
+    voice: brand?.voice ?? "Default",
+    courseScope: brand?.courseScope ?? "all",
+  };
+
+  const sections = await resolveSections(supabase, {
+    canAdminister,
+    canManagePlatform,
+  });
+
+  const payload: ShellPayload = {
+    role: toShellRole(identityRole, canManagePlatform),
+    tenant: {
+      tenantId: workspace.tenant.tenantId,
+      slug: workspace.tenant.slug,
+      displayName: workspace.tenant.displayName,
+    },
+    agent,
+    sections,
+    workspace,
+  };
+
   const accountName =
     (typeof user.user_metadata?.full_name === "string"
       ? user.user_metadata.full_name.trim().split(/\s+/u)[0]
@@ -108,366 +204,10 @@ export default async function AuthenticatedAppPage({
     "there";
 
   return (
-    <main className={styles.shell} style={theme}>
-      <UsageSignal eventName="learning.workspace_opened" />
-      <header className={styles.topbar}>
-        <Link className={styles.brand} href="/app">
-          <span className={styles.logo}>E</span>
-          <span>
-            <b>{assistantName}</b>
-            <small>{workspace.tenant.displayName}</small>
-          </span>
-        </Link>
-        <nav className={styles.floatingNav} aria-label="Learning workspace">
-          <a className={styles.activeNav} href="#today">
-            Home
-          </a>
-          <a href="#courses">
-            Learning
-          </a>
-          {workspace.identity.canAuthor ? (
-            <a href="#create-course">
-              Create
-            </a>
-          ) : null}
-          {["tenant_owner", "tenant_admin"].includes(
-            workspace.identity.role,
-          ) ? (
-            <>
-              <Link href="/app/admin">Admin</Link>
-              <Link href="/app/admin/users">People</Link>
-            </>
-          ) : null}
-          {canManagePlatform ? (
-            <Link href="/app/platform">Platform</Link>
-          ) : null}
-          <Link href="/onboarding">
-            Settings
-          </Link>
-        </nav>
-        <div className={styles.accountActions}>
-          <Link
-            className={styles.voiceButton}
-            href="/app/conversation?mode=voice"
-          >
-            <span aria-hidden="true">●</span>
-            Voice
-          </Link>
-          <Link className={styles.avatar} href="/onboarding" aria-label="Account">
-            {workspace.identity.role.slice(0, 2).toUpperCase()}
-          </Link>
-          <form action="/auth/sign-out" method="post">
-            <button type="submit" aria-label="Sign out">
-              Sign out
-            </button>
-          </form>
-        </div>
-      </header>
-
-      <section className={styles.content}>
-        <div className={styles.body}>
-          {statusMessages[status] ? (
-            <p className={styles.success} role="status">
-              {statusMessages[status]}
-            </p>
-          ) : null}
-          {errorMessages[error] ? (
-            <p className={styles.error} role="alert">
-              {errorMessages[error]}
-            </p>
-          ) : null}
-
-          <section className={styles.hero} id="today">
-            <div>
-              <p className={styles.greeting}>Welcome back, {accountName}</p>
-              <p className={styles.eyebrow}>
-                {firstCourse?.title ?? "Your learning workspace"}
-              </p>
-              <h1>
-                {firstLesson
-                  ? firstLesson.title
-                  : firstCourse
-                    ? "You’re all caught up."
-                    : "Build the first learning journey."}
-              </h1>
-              <p>
-                {firstCourse?.description ??
-                  `${assistantName} is ready for real course material. Add the first lesson or import ${workspace.tenant.displayName}’s existing library.`}
-              </p>
-              <div className={styles.heroActions}>
-                {firstLesson ? (
-                  <a className={styles.primaryAction} href={`#${firstLesson.lessonId}`}>
-                    Continue lesson <span aria-hidden="true">→</span>
-                  </a>
-                ) : workspace.identity.canAuthor ? (
-                  <a className={styles.primaryAction} href="#create-course">
-                    Add learning <span aria-hidden="true">→</span>
-                  </a>
-                ) : (
-                  <Link className={styles.primaryAction} href="/app/conversation">
-                    Ask {assistantName} <span aria-hidden="true">→</span>
-                  </Link>
-                )}
-              </div>
-            </div>
-            <div className={styles.heroProgress}>
-              <div>
-                <span>
-                  {firstCourse ? `${Math.round(percent(firstCourse.progress.percentComplete))}%` : "—"}
-                </span>
-                <small>Course progress</small>
-              </div>
-              <div className={styles.progressTrack}>
-                <span
-                  style={{
-                    width: `${firstCourse ? percent(firstCourse.progress.percentComplete) : 0}%`,
-                  }}
-                />
-              </div>
-              <p>
-                {firstCourse
-                  ? `${firstCourse.progress.lessonsCompleted} of ${firstCourse.progress.lessonsTotal} lessons complete`
-                  : "No published lessons yet"}
-              </p>
-            </div>
-            <Link className={styles.assistantDock} href="/app/conversation">
-              <span className={styles.miniOrb} aria-hidden="true" />
-              <span>
-                <b>Ask {assistantName}</b>
-                <small>Grounded in your published learning</small>
-              </span>
-              <span className={styles.dockVoice} aria-hidden="true">
-                ●
-              </span>
-              <strong>Speak</strong>
-            </Link>
-          </section>
-
-          <section className={styles.courseSection} id="courses">
-            <div className={styles.sectionTitle}>
-              <div>
-                <p className={styles.eyebrow}>My learning</p>
-                <h2>Courses</h2>
-              </div>
-              <span>{workspace.courses.length} available</span>
-            </div>
-
-            {workspace.courses.length === 0 ? (
-              <div className={styles.empty}>
-                <span className={styles.emptyMark}>◎</span>
-                <h3>No course has been added yet.</h3>
-                <p>
-                  Your workspace is ready. Add the first lesson to begin a
-                  learning journey.
-                </p>
-                {workspace.identity.canAuthor ? (
-                  <a href="#create-course">Create the first course</a>
-                ) : null}
-              </div>
-            ) : (
-              <div className={styles.courseList}>
-                {workspace.courses.map((course) => (
-                  <article className={styles.courseCard} key={course.courseId}>
-                    <header>
-                      <div>
-                        <span className={styles.courseStatus}>{course.status}</span>
-                        <h3>{course.title}</h3>
-                        <p>{course.description}</p>
-                      </div>
-                      <strong>{Math.round(percent(course.progress.percentComplete))}%</strong>
-                    </header>
-                    <div className={styles.progressTrack}>
-                      <span
-                        style={{
-                          width: `${percent(course.progress.percentComplete)}%`,
-                        }}
-                      />
-                    </div>
-                    <div className={styles.moduleList}>
-                      {course.modules.map((module) => (
-                        <section key={module.moduleId}>
-                          <h4>{module.title}</h4>
-                          {module.lessons.map((lesson) => (
-                            <details
-                              className={styles.lesson}
-                              id={lesson.lessonId}
-                              key={lesson.lessonId}
-                            >
-                              <summary>
-                                <span
-                                  className={styles.completion}
-                                  data-complete={lesson.progressState === "completed"}
-                                >
-                                  {lesson.progressState === "completed" ? "✓" : lesson.position + 1}
-                                </span>
-                                <span>
-                                  <b>{lesson.title}</b>
-                                  <small>
-                                    {lesson.blocks.length} learning{" "}
-                                    {lesson.blocks.length === 1 ? "block" : "blocks"}
-                                  </small>
-                                </span>
-                                <span aria-hidden="true">⌄</span>
-                              </summary>
-                              <div className={styles.lessonBody}>
-                                {lesson.blocks.map((block) => (
-                                  <div key={block.contentBlockId}>
-                                    <p>{blockText(block)}</p>
-                                  </div>
-                                ))}
-                                <div className={styles.lessonActions}>
-                                  <form action="/app/progress" method="post">
-                                    <input
-                                      name="lessonId"
-                                      type="hidden"
-                                      value={lesson.lessonId}
-                                    />
-                                    <input
-                                      name="state"
-                                      type="hidden"
-                                      value={
-                                        lesson.progressState === "completed"
-                                          ? "in_progress"
-                                          : "completed"
-                                      }
-                                    />
-                                    <button type="submit">
-                                      {lesson.progressState === "completed"
-                                        ? "Mark in progress"
-                                        : "Mark complete"}
-                                    </button>
-                                  </form>
-                                  <Link
-                                    href={`/app/conversation?courseId=${course.courseId}&lessonId=${lesson.lessonId}`}
-                                  >
-                                    Ask {assistantName} about this
-                                  </Link>
-                                </div>
-                              </div>
-                            </details>
-                          ))}
-                        </section>
-                      ))}
-                    </div>
-                    {workspace.identity.canAuthor && course.status !== "published" ? (
-                      <form
-                        className={styles.publish}
-                        action="/app/course/publish"
-                        method="post"
-                      >
-                        <input name="courseId" type="hidden" value={course.courseId} />
-                        <button type="submit">Publish course</button>
-                        <span>Publishes every current module and lesson.</span>
-                      </form>
-                    ) : null}
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {workspace.identity.canAuthor ? (
-            <section className={styles.createSection} id="create-course">
-              <div className={styles.sectionTitle}>
-                <div>
-                  <p className={styles.eyebrow}>Course creator</p>
-                  <h2>Add learning</h2>
-                </div>
-                <span>Private draft</span>
-              </div>
-              <form action="/app/course/create" method="post">
-                <label>
-                  <span>Course title</span>
-                  <input
-                    name="title"
-                    minLength={3}
-                    maxLength={160}
-                    placeholder="Marketing Magic"
-                    required
-                  />
-                </label>
-                <label>
-                  <span>What learners will be able to do</span>
-                  <textarea
-                    name="description"
-                    minLength={3}
-                    maxLength={2000}
-                    placeholder="A concise outcome-focused description."
-                    required
-                  />
-                </label>
-                <div className={styles.formGrid}>
-                  <label>
-                    <span>First module</span>
-                    <input
-                      name="moduleTitle"
-                      minLength={3}
-                      maxLength={160}
-                      placeholder="Build your foundation"
-                      required
-                    />
-                  </label>
-                  <label>
-                    <span>First lesson</span>
-                    <input
-                      name="lessonTitle"
-                      minLength={3}
-                      maxLength={160}
-                      placeholder="Start with your vision"
-                      required
-                    />
-                  </label>
-                </div>
-                <label>
-                  <span>Lesson content</span>
-                  <textarea
-                    className={styles.editor}
-                    name="lessonContent"
-                    minLength={20}
-                    maxLength={50000}
-                    placeholder="Paste or write the first lesson. It stays a draft until you publish."
-                    required
-                  />
-                </label>
-                <footer>
-                  <p>
-                    Saved privately to this workspace. Publish when it is ready
-                    for learners.
-                  </p>
-                  <button type="submit">Create draft</button>
-                </footer>
-              </form>
-              <div className={styles.uploadSection}>
-                <div>
-                  <p className={styles.eyebrow}>Secure import</p>
-                  <h3>Upload an existing source</h3>
-                  <p>
-                    The file is signed directly into this tenant’s private
-                    quarantine. It cannot become learning until the security
-                    and extraction pipeline clears it.
-                  </p>
-                </div>
-                <UploadLearning
-                  courses={workspace.courses.map((course) => ({
-                    courseId: course.courseId,
-                    title: course.title,
-                  }))}
-                />
-              </div>
-            </section>
-          ) : null}
-        </div>
-      </section>
-
-      <Link
-        className={styles.mobileAssistant}
-        href="/app/conversation"
-        aria-label={`Ask ${assistantName} by text or voice`}
-      >
-        <span className={styles.orb} aria-hidden="true" />
-        <b>Ask {assistantName}</b>
-        <span aria-hidden="true">⌁</span>
-      </Link>
-    </main>
+    <AppShell
+      payload={payload}
+      accountName={accountName}
+      accountEmail={user.email ?? null}
+    />
   );
 }

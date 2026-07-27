@@ -1,156 +1,181 @@
-# Course AI Platform
+# LearningBot
 
-Enterprise multi-tenant learning assistants for course Creators and their Students.
+Multi-tenant learning assistants for course creators and their students.
 
-The product combines:
+**This file describes what a signed-in user can actually do.** Anything not yet
+built is in [Not yet built](#not-yet-built) and is named there plainly. If you
+change what ships, change both sections in the same commit — a README that
+describes packages instead of behaviour is how this repository previously
+convinced its own owner that eight unused packages were delivered features.
 
-- one Student conversation UI for text, voice, files, rich text and diagrams;
-- fast course ingestion, cleanup, editing and republishing;
-- Creator intelligence for questions, confusion, progress and opportunities;
-- Platform Owner operations for tenants, providers, costs, ingestion and audit;
-- provider-neutral capability routing;
-- an MCP-first control plane for trusted agents and integrations.
+## What works, end to end
 
-## Source of truth
+Each row below has a real UI → route → `SECURITY DEFINER` RPC → table path with
+no fixture in it.
 
-Read [the product documentation](docs/course-ai-platform/00-README.md) before implementation. Open decisions and blockers are tracked in [Risks and Decisions](docs/course-ai-platform/19-RISKS-AND-DECISIONS.md).
+| Capability | Path |
+|---|---|
+| Sign-in and session | `app/auth/sign-in` → `lib/supabase/auth-boundary.ts` → `auth_current_access_state` → `app_private.user_access_accounts` |
+| Forced password change | `app/auth/change-password` → `auth_complete_password_change` |
+| Tenant selection and RBAC | `auth-boundary.ts` → `auth_list_tenant_memberships` / `auth_current_tenant_context` / `auth_select_tenant` → `public.identity_memberships` |
+| Managed user accounts | `app/app/admin/users` → `api/admin/users` → edge fn `learning-admin-users` → `admin_provision_auth_user` |
+| Onboarding workspace and steps | `app/onboarding` → `onboarding_get_snapshot` / `onboarding_update_step` |
+| Platform administration | `components/sections/platform-panel.tsx` → `api/platform` → `platform_admin_*` → `app_private.platform_administrators`, `public.tenant_sections` |
+| Client provisioning and owner claim | `platform_mint_owner_claim` → `auth_claim_preprovisioned_tenant_owner` |
+| Agent configuration (name, brand, persona, tone, scope) | `agent-panel.tsx` → `api/agent` → `tenant_update_agent_configuration` → `public.tenant_branding` |
+| Brand asset upload and signed read | `api/agent/asset` → signed URLs on the `tenant-private` bucket under storage RLS |
+| Course authoring (course/module/lesson/block CRUD, reorder) | `course-panel.tsx` → `api/authoring` → 11 RPCs in `20260725122000_course_editing.sql` |
+| Revisions and rollback | `learning_list_course_revisions`, `learning_rollback_course` → `public.course_revisions` |
+| Publishing | `api/learning/courses/[courseId]/publish` → `learning_publish_course` |
+| Authored content → retrievable knowledge | `learning_publish_course` projects published `content_blocks` into `knowledge_versions` / `learning_documents` / `learning_chunks` (`20260726095000_authored_content_retrieval.sql`) |
+| Grounded learner conversation (text) | `conversation-client.tsx` → `api/learning/respond` → `lib/learning-provider.ts` → `public.messages`. Answers are refused rather than invented when retrieval returns nothing |
+| Question intelligence | `api/learning/respond` → `lib/question-classification.ts` → `learning_record_question_label` → `public.question_labels`, `public.question_signals` |
+| Analytics and insights | `insights-panel.tsx` → `api/analytics` → `analytics_tenant_overview` and friends. Metrics carry an explicit known/partial/unknown envelope computed in SQL |
+| Lesson progress | `app/app/progress` → `learning_mark_lesson_progress` |
+| Usage events | `usage-signal.tsx` → `api/learning/events` → `learning_record_usage_event` |
 
-## Workspace boundaries
+The strongest part of the system is the authorization boundary. Roles are read
+from the database, never from a JWT: `learningbot_custom_access_token_hook`
+deliberately strips top-level `tenant_id` and `app_role` from access tokens
+(`0011:917-921`), and every mutation goes through a `SECURITY DEFINER` RPC over
+forced RLS.
+
+### Partially working
+
+- **Voice.** Push-to-talk and a continuous WebRTC session exist
+  (`api/learning/voice/{realtime,transcribe,speak}`). Every voice turn is routed
+  back through `/api/learning/respond` so the realtime model reads a grounded,
+  already-persisted answer rather than inventing one. All three routes return
+  503 without `OPENAI_API_KEY`. Rate limiting is an in-process `Map`
+  (`voice/rate-limit.ts`), which is close to useless on serverless.
+- **File upload.** A signed PUT lands the file in
+  `tenant-private/{tenant}/quarantine/…` and records `learning_sources` and an
+  `ingestion_jobs` row. **That is the end of the road** — see below.
+- **Invitations.** `onboarding_create_invitation` works and writes
+  `public.identity_invitations`. Nothing emails the code; a human copies it out
+  of the UI.
+- **Widget delivery.** `20260726093000_widget_delivery.sql` provides public
+  `widget_bootstrap` / `widget_ask` with origin allowlisting, and
+  `packages/widget-runtime` is being wired to it now. The currently shipped
+  artifact, `apps/console/public/integrations/circle-learningbot.js`, is 38
+  lines that append a link to `/app/conversation`.
+- **Audit.** `public.audit_ledger` is written by agent configuration, authoring,
+  tenant sections, signal review and widget paths. It is **not** written by
+  conversations, voice, uploads, onboarding, tenant status changes or account
+  provisioning, and there is no reader UI.
+
+## Not yet built
+
+Named plainly, because each of these has been claimed before and none of them
+ship.
+
+- **Privacy, GDPR, export, deletion, retention, legal hold.** There is **no code
+  path at all**. Zero API routes, zero tables, zero jobs. If a client asks to
+  export or delete their data today, an operator runs SQL by hand. The design
+  target and the manual procedure are in
+  [docs/PRIVACY-DATA-LIFECYCLE-SPEC.md](docs/PRIVACY-DATA-LIFECYCLE-SPEC.md).
+  The `packages/privacy-lifecycle` package that used to imply otherwise was
+  deleted on 2026-07-26; its "deletion" mutated a JavaScript `Map`.
+- **Upload processing.** Uploads **terminate in quarantine, permanently.** There
+  is no malware scanner, no text extractor, no promotion RPC.
+  `upload_intents.status` never leaves `'quarantined'` and
+  `upload_callback_receipts` has zero writers. The uploader UI says so verbatim;
+  do not demo it as "drag and drop your course". Authored content is retrievable;
+  uploaded files are not.
+- **Files and diagrams inside the student conversation.** The renderer handles an
+  `attachment` part and a `diagram` part, but there is no file input anywhere in
+  the conversation UI, `public.attachments` has zero writers, and nothing
+  produces a diagram.
+- **Management MCP.** `packages/mcp-server` was deleted on 2026-07-26. It
+  registered 36 tools, 27 of which called the `/api/dev/*` routes removed in the
+  same session; the remaining 8 were an HTTP proxy over console routes requiring
+  a hand-pasted user bearer token, and nothing used them. It had **no Dockerfile,
+  no deploy configuration and no CI step — it was never deployed anywhere**, and
+  its stdio transport is not hostable on Vercel.
+- **SSO, SAML, SCIM.** `packages/identity-access` is **a JWT verifier, not this
+  application's authentication.** Nothing in `apps/` imports it. `src/oidc.ts` is
+  real, `jose`-backed OIDC/JWKS verification, kept for the day an enterprise deal
+  requires SSO. There is no SAML implementation and no `/scim/v2/*` route; those
+  stubs were deleted on 2026-07-26 so nobody mistakes them for a feature. The
+  console authenticates through Supabase Auth.
+- **Ingestion operations console, playground, prompt studio, webhooks,
+  connectors, student memory, hot students.** None of these exist in any form,
+  despite appearing as required areas in the product documentation.
+- **Invitation delivery.** No SMTP, no mailer, no template.
+- **`telemetry_outbox` drain.** Every usage event writes a row; nothing reads
+  them. The table grows without bound.
+
+## Workspace
 
 ```text
 apps/
-  edge/          host-safe Edge API and streaming orchestration
-  console/       Creator and Platform Owner web application
+  console/       the web application — this is the product
+  edge/          a README, nothing more
 services/
-  learning/      ingestion, cleanup, indexing and intelligence workers
+  learning/      a README, nothing more
 packages/
-  contracts/     provider-neutral domain and integration contracts
-  application-services/
-                 tenant-authorized UI/API/MCP service boundary
-  identity-access/
-                 verified identity, tenant selection, RBAC and embed trust
-  course-authoring/
-                 rich learning blocks, revisions, publishing and rollback
-  learning-pipeline/
-                 deterministic intake, versioning and rollback
+  contracts/     provider-neutral domain types, platform role vocabulary
   provider-router/
-                 provider-neutral routing, fallback and telemetry
-  realtime-voice/
-                 provider-neutral sessions, events, barge-in and handoff
+                 provider-neutral routing with an OpenAI Responses adapter
   widget-runtime/
-                 framework-free Shadow-DOM companion and host adapters
-  intelligence-core/
-                 event quality, metrics and human-reviewed opportunities
-  privacy-lifecycle/
-                 access, export, deletion and policy-driven retention jobs
-  postgres-adapters/
-                 transactional receipts, revisions and telemetry outbox
-  mcp-server/    deny-by-default management MCP over shared APIs
+                 framework-free Shadow-DOM companion, being wired now
+  identity-access/
+                 an OIDC/JWKS verifier on ice. Not wired. See its README
 infra/
-  supabase/      ordered schema, forced RLS, storage and security tests
+  supabase/      ordered schema, forced RLS, storage policies, SQL security tests
+docs/            product documentation and the integration audit
 ```
 
-## Working development surfaces
+`apps/console` imports exactly two workspace packages: `@course-ai/contracts`
+and `@course-ai/provider-router`. On 2026-07-26 eight further packages
+(~23,000 lines) were deleted because they had zero import edges into `apps/` or
+`services/` while `README.md` presented them as delivered capability. Every one
+of them had already been re-implemented in plpgsql, and the SQL version is the
+one that runs — with foreign-key integrity and audit trails the TypeScript
+lacked. Keeping both was not optionality; it was two competing definitions of
+the same invariant.
 
-With the shared server running, the current integrated development slice is at:
+## Configuration
 
-- Student chat, realtime voice and files: `http://127.0.0.1:3100/dev/chat`
-- Learning ingestion and knowledge versions: `http://127.0.0.1:3100/dev/learning`
-- Creator workspace: `http://127.0.0.1:3100/dev/creator`
-- Creator intelligence: `http://127.0.0.1:3100/dev/intelligence`
-- Teacher workspace: `http://127.0.0.1:3100/dev/teacher`
-- Tenant branding: `http://127.0.0.1:3100/dev/branding`
-- Platform administration: `http://127.0.0.1:3100/dev/admin`
-- Privacy operations: `http://127.0.0.1:3100/dev/privacy`
-- Embeddable Widget host simulator: `http://127.0.0.1:3100/dev/widget`
-- Embedded course experience: `http://127.0.0.1:3100/dev/widget/host`
+Every variable the console reads is documented in `.env.example`, and every
+variable documented there has a named reader. `OPENAI_API_KEY` and
+`LEARNINGBOT_CONVERSATION_OPERATION_TOKEN` are both required for chat to work at
+all; the operation token must additionally hash-match a currently valid row in
+`app_private.learning_operation_secrets`, and that row expires. The provisioning
+and rotation procedure is in `.env.example` next to the variable.
 
-The UI, development APIs and management MCP share the same tenant-aware
-application services. The chat API also runs through the provider router, so
-development exercises tenant policy, funding source, deadline, adapter
-telemetry and cost ledger paths rather than bypassing them.
+## Database
+
+`infra/supabase/migrations` holds the ordered schema. Verify its structure with
+`pnpm supabase:verify` rather than trusting a count written in prose.
+
+**Read `infra/supabase/SCHEMA-DRIFT.md` before rebuilding anything.** Several
+functions and tables — including the provider-credential vault — exist only in
+the live database and were applied by hand. Re-running the committed migrations
+against the live project *downgrades* `admin_provision_auth_user`, the function
+that creates client users. This is the one item in the repository that can
+destroy a live tenant.
 
 ## Commands
 
 ```bash
 pnpm install
 pnpm --filter @course-ai/console dev --port 3100
-pnpm smoke:dev
-pnpm --filter @course-ai/console smoke:authoring
-pnpm verify:dev
+pnpm --filter @course-ai/console typecheck
+pnpm --filter @course-ai/console test
 pnpm supabase:verify
-pnpm typecheck
-pnpm test
-pnpm build
+pnpm docs:check
+pnpm check          # everything above, plus package builds
 ```
 
-The active development-server and parallel ownership rules are in
-[DEVELOPMENT.md](DEVELOPMENT.md).
-
-## Current delivery boundary
-
-The local vertical slice is integrated and testable. The management MCP exposes
-28 shared-service tools, including course creation, authoring, validation,
-diagram approval, reprocessing, publishing, intelligence review, privacy
-operations and rollback guarded by exact tenant/actor grants, expiry, budget,
-rate and idempotency controls. The
-framework-free Widget is isolated in Shadow DOM and ships below 12KB gzipped;
-the intelligence core validates versioned events and produces evidence-backed,
-explicitly known/partial/unknown advisory metrics. The privacy lifecycle adds
-tenant-safe, resumable access/export/delete/retention contracts with live
-legal-hold suppression, deletion tombstones and export integrity without
-inventing unresolved retention periods. Supabase has nine ordered migrations,
-38 schema tables, forced RLS/storage policies and SQL security acceptance
-tests. The PostgreSQL adapter package now provides transactional fingerprinted
-command receipts, immutable course revisions with compare-and-swap heads, and a
-leased telemetry outbox without a memory fallback. This machine does not have a
-running Docker daemon, so the structural verifier and deterministic adapter
-tests pass but the PostgreSQL policy tests have not yet executed locally. The
-identity package provides the application boundary and a production-oriented
-OIDC/JWKS verifier with exact issuer, audience, algorithm, lifetime and key
-rotation controls. It deliberately ignores authorization claims from tokens.
-Console session wiring, an approved IdP registration, SAML/client-credential
-verification and KMS-backed signing still require production integration.
-Postgres repositories now cover exact verified-principal registration,
-membership resolution, tenant context, service principals, invitations and
-SCIM replay without a memory fallback. Application wiring and an outer
-unit-of-work for workflow-level invitation/SCIM atomicity remain explicit
-follow-up work. The learning pipeline exposes an injected durable-repository
-boundary for short-lived signed quarantine uploads, atomic scan callback
-receipts, magic-byte and malware results, and clean-only idempotent promotion.
-The Postgres adapter now persists upload intents and immutable callback receipts
-with tenant/actor row locking and terminal-state protection; its SQL policy
-suite is authored but still needs an approved live database. No production
-object storage or scanner is claimed. Named production provider credentials, durable multi-replica
-outboxes/idempotency stores, production object storage, deployment secrets and
-live Widget/Circle installation evidence, approved retention/region policies,
-privacy lifecycle production adapters and UI, and load/recovery evidence remain
-environment work—not claims made by the development UI.
-
-The provider router now includes a server-side OpenAI Responses text adapter
-behind the shared `LLMProvider` contract. It resolves credentials through an
-injected secret capability, forces `store: false`, streams typed SSE events,
-propagates the shared deadline, bounds provider data and fails closed on
-malformed, refused or truncated output. It is contract-tested without a live
-credential; tenant route policy still selects the model and adapter.
-
-## Private fixture preview
-
-The optimized console can be hosted as an explicitly non-production, privately
-access-controlled preview. Production mode denies all fixture APIs by default.
-Enabling the preview requires both exact variables documented in
-`.env.example`, and the hosting project must protect the whole deployment with
-platform-level access control. `/api/health` is the unauthenticated liveness
-endpoint; it exposes no tenant or dependency details. This preview is not a
-substitute for production identity, durable application wiring or executed RLS
-evidence.
-
-The current protected preview is:
-[learningbot-estie-preview](https://learningbot-estie-preview-git-co-984d79-emiel-madonnas-projects.vercel.app).
-Vercel Authentication is required; access is limited to authorized Vercel
-project users. The branch-scoped fixture variables apply only to
-`codex/platform-foundations` preview deployments.
+Development-server and parallel-ownership rules are in
+[DEVELOPMENT.md](DEVELOPMENT.md). Read
+[the product documentation](docs/course-ai-platform/00-README.md) before
+implementing, and [the integration audit](docs/INTEGRATION-AUDIT.md) before
+believing any claim about what is wired.
 
 ## Legacy input
 
-`/Users/emielmadonna/Estie Starr` is read-only legacy input until an explicit migration plan is approved. Never commit its `.env`, recordings, provider credentials, private course media or generated vector artifacts.
+`/Users/emielmadonna/Estie Starr` is read-only legacy input until an explicit
+migration plan is approved. Never commit its `.env`, recordings, provider
+credentials, private course media or generated vector artifacts.

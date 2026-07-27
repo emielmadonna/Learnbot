@@ -11,6 +11,7 @@ import {
   consumeVoiceQuota,
   resetVoiceQuotaForTests,
 } from "../src/app/api/learning/voice/rate-limit";
+import { DEFAULT_VOICE, SUPPORTED_VOICES } from "../src/lib/voice-runtime";
 
 const client = readFileSync(
   new URL(
@@ -29,6 +30,13 @@ const transcriptionRoute = readFileSync(
 const speechRoute = readFileSync(
   new URL(
     "../src/app/api/learning/voice/speak/route.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const realtimeRoute = readFileSync(
+  new URL(
+    "../src/app/api/learning/voice/realtime/route.ts",
     import.meta.url,
   ),
   "utf8",
@@ -57,7 +65,7 @@ test("speech reads a tenant-authorized saved answer with disclosed synthetic voi
   assert.match(speechRoute, /"learning_get_conversations"/);
   assert.match(speechRoute, /candidate\.actorType === "assistant"/);
   assert.match(speechRoute, /"gpt-4o-mini-tts"/);
-  assert.match(speechRoute, /SPEECH_VOICE = "marin"/);
+  assert.match(speechRoute, /voice: voiceProfile\.voice/);
   assert.match(speechRoute, /"X-AI-Generated-Voice": "true"/);
   assert.match(
     client,
@@ -147,4 +155,30 @@ test("process voice quota is bounded per tenant principal and resets", () => {
     true,
   );
   resetVoiceQuotaForTests();
+});
+
+test("voice speaks the tenant's configured voice, never a hardcoded one", () => {
+  // `tenant_branding.agent_voice` was editable, displayed, and read by nothing:
+  // a white-label client chose a voice and heard "marin".
+  for (const route of [speechRoute, realtimeRoute]) {
+    assert.match(route, /resolveTenantVoice\(/);
+    assert.doesNotMatch(route, /"marin"/);
+  }
+  assert.equal(DEFAULT_VOICE, "marin");
+  assert.ok((SUPPORTED_VOICES as readonly string[]).includes("cedar"));
+});
+
+test("voice quota is decided durably, not by a per-process map", () => {
+  // The process map reset on every serverless cold start, so it bounded
+  // nothing. SQL is now authoritative for all three voice routes.
+  for (const route of [transcriptionRoute, speechRoute, realtimeRoute]) {
+    assert.match(route, /await enforceVoiceQuota\(/);
+    assert.doesNotMatch(route, /consumeVoiceQuota\(/);
+  }
+});
+
+test("every voice provider call is metered", () => {
+  assert.match(transcriptionRoute, /meterVoiceUsage\([\s\S]*"audio_seconds"/);
+  assert.match(speechRoute, /meterVoiceUsage\([\s\S]*"characters"/);
+  assert.match(realtimeRoute, /meterVoiceUsage\([\s\S]*"realtime_sessions"/);
 });

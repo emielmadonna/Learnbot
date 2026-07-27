@@ -1,53 +1,53 @@
-# Identity access boundary
+# OIDC assertion verifier
 
-Provider-neutral identity and tenant authorization for LearningBot. This package
-accepts verified OIDC/SAML assertions, verified signed host contexts, or
-registered service principals. Its OIDC boundary verifies raw compact JWTs
-before producing an assertion, and it never treats a request-body tenant ID as
-authorization.
+**This package is a JWT verifier. It is not the application's authentication.**
 
-## Boundary guarantees
+Nothing in `apps/` imports it. The console authenticates through Supabase Auth
+(`lib/supabase/auth-boundary.ts` → `auth_current_access_state`), and roles come
+from `public.identity_memberships` via `SECURITY DEFINER` RPCs. This package is
+kept on ice for the day an enterprise buyer requires OIDC SSO, because
+`src/oidc.ts` is 376 lines of real, `jose`-backed verification that would be
+tedious and risky to rewrite under deal pressure.
 
-- Normalizes OIDC, SAML, host-signed embed, and service-principal identities.
-- Resolves tenant scope from active repository membership. A client-provided
-  tenant is only a selector among memberships already granted to the principal.
-- Verifies compact signed host contexts through pluggable key and signature
-  abstractions, including `kid` rotation, issuer, audience, algorithm, nonce,
-  issued-at, maximum lifetime, expiry, and single-use replay checks.
-- Verifies OIDC JWTs with `jose`, an explicit issuer/audience/algorithm policy,
-  bounded clock skew and token age, and local or HTTPS remote JWKS resolution.
-  Remote resolution supports an injected fetch implementation and `kid`
-  refresh for key rotation.
-- Maps only subject and optional email/name/session claims from OIDC. Tenant,
-  role, permission, and scope claims are never promoted to authorization.
-- Maps active memberships to the exact `PlatformRole` and
-  `PlatformPermission` contracts in `@course-ai/application-services`.
-- Intersects service-role permissions with registered API/MCP scopes.
-- Supports idempotent invitation acceptance and SCIM-style provision /
-  deprovision commands.
-- Emits redacted audit events and converts unexpected failures to stable,
-  non-enumerating errors.
+## What is here
 
-## Integration contract
+`OidcAssertionVerifier` verifies a raw compact JWT and produces a
+`VerifiedAuthenticationAssertion`:
 
-At an HTTP, realtime, or MCP boundary:
+- exact issuer and audience pinning, explicit algorithm allowlist;
+- bounded clock skew and maximum token age;
+- local (pinned JWK) or HTTPS remote JWKS resolution, with an injected `fetch`
+  and `kid`-triggered refresh for key rotation;
+- only `sub` plus optional email / name / session claims are mapped. Tenant,
+  role, permission and scope claims are **never** promoted to authorization —
+  the same rule `learningbot_custom_access_token_hook` (`0011:917-921`) enforces
+  by stripping `tenant_id`/`app_role` from Supabase access tokens.
 
-1. For a compact OIDC JWT, configure `OidcAssertionVerifier` with the exact
-   issuer, audience, algorithm allowlist, token-age policy, and pinned or remote
-   JWKS source, then call `verify`. OIDC discovery and credential exchange
-   remain outside this package. A SAML adapter must still verify its assertion
-   and certificate policy before constructing a
-   `VerifiedAuthenticationAssertion`.
-2. For host embeds, call `HostContextVerifier.verify`.
-3. Pass the resulting `VerifiedAuthenticationAssertion` to
-   `IdentityAccessService.resolveSession`.
-4. Pass only the returned `request` / tenant / role / permissions downstream.
-   Do not copy tenant or role fields from a request body.
+## What was deleted on 2026-07-26, and why
 
-Production implementations must supply durable repositories, a distributed
-atomic replay store, an approved crypto verifier/HSM or KMS integration,
-transactional invitation/SCIM writes, and a durable audit sink. The deterministic
-fakes are test-only and are intentionally not cryptographic.
+`fakes.ts`, `service.ts`, `repositories.ts`, `permissions.ts`, `host-context.ts`
+and `errors.ts` were removed. They described SAML, SCIM provisioning, invitation
+acceptance, host-signed embed trust and a tenant-authorization service. None of
+it was implemented:
+
+- **SAML** existed only as a string in a union. There was never a SAML file.
+- **SCIM** had no `/scim/v2/*` route, no schema parser, no filter parser, no
+  PATCH parser. `identity_scim_bindings` and `identity_scim_receipts`
+  (`0008:150,167`) are referenced by zero SQL functions and zero app code.
+- The service layer required injected repositories whose only implementations
+  were the in-memory fakes.
+
+An enterprise buyer asking for "Okta SSO" or "SCIM deprovisioning" gets neither
+today. Keeping the stubs made that harder to see, not easier.
+
+## Wiring it, if that day comes
+
+1. Configure `OidcAssertionVerifier` with the exact issuer, audience, algorithm
+   allowlist, token-age policy and JWKS source, then call `verify`. OIDC
+   discovery and the credential exchange itself are outside this package.
+2. Exchange the resulting assertion for a Supabase session, then let the
+   existing `auth-boundary.ts` → RPC path resolve tenant and role as it already
+   does. Do not build a second authorization model in TypeScript.
 
 ## Commands
 

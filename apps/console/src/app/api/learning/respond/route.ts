@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import {
   answerGroundedLearningQuestion,
   LearningProviderError,
@@ -6,6 +6,8 @@ import {
   type GroundingSource,
   type LearningIntent,
 } from "../../../../lib/learning-provider";
+import { classifyLearnerQuestion } from "../../../../lib/question-classification";
+import { recordQuestionLabel } from "../../../../lib/supabase/question-intelligence-rpc";
 import {
   AuthenticationBoundaryError,
   getCurrentTenantContext,
@@ -243,16 +245,21 @@ export async function POST(request: Request) {
       );
     }
 
-    await executeLearningRpc(supabase, "learning_record_user_message", {
-      target_conversation_id: conversationId,
-      message_body: message,
-      message_modality:
-        input.modality === "voice" ? "voice_transcript" : "text",
-      trace_id: traceId,
-      idempotency_key: `user:${baseKey}`,
-    });
+    const recordedQuestion = await executeLearningRpc(
+      supabase,
+      "learning_record_user_message",
+      {
+        target_conversation_id: conversationId,
+        message_body: message,
+        message_modality:
+          input.modality === "voice" ? "voice_transcript" : "text",
+        trace_id: traceId,
+        idempotency_key: `user:${baseKey}`,
+      },
+    );
+    const questionMessageId = stringValue(recordedQuestion.messageId);
 
-    const [searchResult, transcript, workspace] = await Promise.all([
+    const [searchResult, transcript, workspace, directive] = await Promise.all([
       searchPublishedLearning({
         request,
         supabase,
@@ -264,6 +271,12 @@ export async function POST(request: Request) {
         target_conversation_id: conversationId,
       }),
       executeLearningRpc(supabase, "learning_get_workspace"),
+      // The tenant persona never reaches the browser: it is readable only with
+      // the server-held conversation operation token, so it shapes the answer
+      // without being disclosed to the learner.
+      executeLearningRpc(supabase, "learning_get_agent_directive", {
+        operation_token: operationToken,
+      }),
     ]);
     const retrievedSources = normalizeSources(searchResult);
     const sources = lessonId
@@ -294,6 +307,8 @@ export async function POST(request: Request) {
       question: message,
       intent,
       scopeLabel: selectedLessonLabel(workspace, lessonId),
+      personaInstructions: stringValue(directive.personaInstructions),
+      tone: stringValue(directive.tone),
       history,
       sources,
     });
@@ -312,6 +327,42 @@ export async function POST(request: Request) {
         operation_token: operationToken,
       },
     );
+
+    // Classification runs after the answer is durably recorded and after this
+    // response is sent, so it can never delay or fail the learner's turn. A
+    // classifier that is unavailable, slow or off-schema simply produces no
+    // label, and the question is then reported as unclassified.
+    if (questionMessageId !== null) {
+      after(async () => {
+        try {
+          const classification = await classifyLearnerQuestion({
+            tenantId: stringValue(tenant?.tenantId) ?? "",
+            actorId: user.id,
+            requestId,
+            traceId,
+            idempotencyKey: baseKey,
+            question: message,
+            answer: answer.answer,
+            scopeLabel: selectedLessonLabel(workspace, lessonId),
+          });
+          if (classification === null) return;
+          await recordQuestionLabel(supabase, {
+            messageId: questionMessageId,
+            topicKey: classification.topicKey,
+            topicLabel: classification.topicLabel,
+            intent: classification.intent,
+            importance: classification.importance,
+            classifierKey: classification.classifierKey,
+            classifierVersion: classification.classifierVersion,
+            traceId,
+            idempotencyKey: `label:${baseKey}`,
+            operationToken,
+          });
+        } catch {
+          // A label is optional; the recorded turn is not. Never surface this.
+        }
+      });
+    }
 
     return NextResponse.json(
       {

@@ -21,7 +21,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@course-ai/application-services": "workspace:*",
     "@course-ai/contracts": "workspace:*",
     "jose": "6.2.4"
   }

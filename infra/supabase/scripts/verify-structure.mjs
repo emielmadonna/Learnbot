@@ -81,6 +81,50 @@ const durableLearningConversationTests = await readFile(
   ),
   "utf8",
 );
+const agentConfigurationTests = await readFile(
+  resolve(root, "tests", "agent_configuration_verification.sql"),
+  "utf8",
+);
+const learningAnalyticsTests = await readFile(
+  resolve(root, "tests", "learning_analytics_verification.sql"),
+  "utf8",
+);
+const courseEditingTests = await readFile(
+  resolve(root, "tests", "course_editing_verification.sql"),
+  "utf8",
+);
+const tenantSectionControlTests = await readFile(
+  resolve(root, "tests", "tenant_section_control_verification.sql"),
+  "utf8",
+);
+const platformClientProvisioningTests = await readFile(
+  resolve(root, "tests", "platform_client_provisioning_verification.sql"),
+  "utf8",
+);
+const questionIntelligenceTests = await readFile(
+  resolve(root, "tests", "question_intelligence_verification.sql"),
+  "utf8",
+);
+const authoringPublishVisibilityTests = await readFile(
+  resolve(root, "tests", "authoring_publish_visibility_verification.sql"),
+  "utf8",
+);
+const widgetDeliveryTests = await readFile(
+  resolve(root, "tests", "widget_delivery_verification.sql"),
+  "utf8",
+);
+const widgetAnalyticsTests = await readFile(
+  resolve(root, "tests", "widget_analytics_verification.sql"),
+  "utf8",
+);
+const authoredContentRetrievalTests = await readFile(
+  resolve(root, "tests", "authored_content_retrieval_verification.sql"),
+  "utf8",
+);
+const operationalSafetyTests = await readFile(
+  resolve(root, "tests", "operational_safety_verification.sql"),
+  "utf8",
+);
 
 if (
   !sql.includes(
@@ -173,6 +217,9 @@ const onboardingTables = [
 ];
 const durableLearningTables = ["lesson_progress"];
 const usageTables = ["learning_usage_events"];
+const tenantControlTables = ["tenant_sections"];
+const questionIntelligenceTables = ["question_labels", "question_signals"];
+const widgetTables = ["tenant_widget_keys", "conversation_surfaces"];
 const expectedTables = [
   ...manifestTables,
   ...durableExecutionTables,
@@ -182,6 +229,9 @@ const expectedTables = [
   ...onboardingTables,
   ...durableLearningTables,
   ...usageTables,
+  ...tenantControlTables,
+  ...questionIntelligenceTables,
+  ...widgetTables,
 ];
 
 function fail(message) {
@@ -344,6 +394,246 @@ for (const acceptanceId of ["GSR-01", "GSR-02", "GSR-03", "GSR-04"]) {
 }
 
 for (const acceptanceId of [
+  "AGENT-01",
+  "AGENT-02",
+  "AGENT-03",
+  "AGENT-04",
+  "AGENT-05",
+  "AGENT-06",
+  "AGENT-07",
+  "AGENT-08",
+]) {
+  if (!agentConfigurationTests.includes(acceptanceId)) {
+    fail(`missing agent configuration verification marker ${acceptanceId}`);
+  }
+}
+
+for (const acceptanceId of [
+  "ANA-01",
+  "ANA-02",
+  "ANA-03",
+  "ANA-04",
+  "ANA-05",
+  "ANA-06",
+  "ANA-07",
+]) {
+  if (!learningAnalyticsTests.includes(acceptanceId)) {
+    fail(`missing learning analytics verification marker ${acceptanceId}`);
+  }
+}
+
+for (const acceptanceId of [
+  "CED-01",
+  "CED-02",
+  "CED-03",
+  "CED-04",
+  "CED-05",
+  "CED-06",
+  "CED-07",
+  "CED-08",
+]) {
+  if (!courseEditingTests.includes(acceptanceId)) {
+    fail(`missing course editing verification marker ${acceptanceId}`);
+  }
+}
+
+for (const acceptanceId of [
+  "TSC-01",
+  "TSC-02",
+  "TSC-03",
+  "TSC-04",
+  "TSC-05",
+  "TSC-06",
+]) {
+  if (!tenantSectionControlTests.includes(acceptanceId)) {
+    fail(`missing tenant section control verification marker ${acceptanceId}`);
+  }
+}
+
+for (const acceptanceId of [
+  "PCP-01",
+  "PCP-02",
+  "PCP-03",
+  "PCP-04",
+  "PCP-05",
+  "PCP-06",
+]) {
+  if (!platformClientProvisioningTests.includes(acceptanceId)) {
+    fail(
+      `missing platform client provisioning verification marker ${acceptanceId}`,
+    );
+  }
+}
+
+// The owner claim a platform admin mints must stay unreachable from the browser:
+// only its digest is stored, and the provisioning table denies all direct access.
+for (const required of [
+  "app_private.platform_client_provisionings",
+  "app_private.platform_mint_owner_claim",
+  "platform_client_provisionings_no_direct_access",
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing client provisioning control: ${required}`);
+  }
+}
+
+for (const acceptanceId of [
+  "QIN-01",
+  "QIN-02",
+  "QIN-03",
+  "QIN-04",
+  "QIN-05",
+  "QIN-06",
+]) {
+  if (!questionIntelligenceTests.includes(acceptanceId)) {
+    fail(`missing question intelligence verification marker ${acceptanceId}`);
+  }
+}
+
+// Labels are written only through the operation-token path, never by a browser
+// session, and are readable only by tenant administrators.
+for (const required of [
+  "app_private.question_signal_detections",
+  "app_private.question_signal_fingerprint",
+  "app_private.question_intelligence_audit",
+  "app_private.question_intent_taxonomy",
+  "question_labels_admin_read",
+  "question_signals_admin_read",
+  "question_labels_deny_anon",
+  "question_signals_deny_anon",
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing question intelligence control: ${required}`);
+  }
+}
+
+for (const acceptanceId of ["APV-01", "APV-02", "APV-03", "APV-04"]) {
+  if (!authoringPublishVisibilityTests.includes(acceptanceId)) {
+    fail(`missing authoring publish visibility marker ${acceptanceId}`);
+  }
+}
+
+for (const [label, suite, markers] of [
+  ["widget delivery", widgetDeliveryTests, ["WID-01", "WID-02", "WID-03", "WID-04", "WID-05", "WID-06"]],
+  ["widget analytics", widgetAnalyticsTests, ["WAN-01", "WAN-02", "WAN-03", "WAN-04", "WAN-05"]],
+  ["authored content retrieval", authoredContentRetrievalTests, ["ACR-01", "ACR-02", "ACR-03", "ACR-04", "ACR-05"]],
+  ["operational safety", operationalSafetyTests, ["OPS-01", "OPS-02", "OPS-03", "OPS-04", "OPS-05"]],
+]) {
+  for (const acceptanceId of markers) {
+    if (!suite.includes(acceptanceId)) {
+      fail(`missing ${label} verification marker ${acceptanceId}`);
+    }
+  }
+}
+
+// The widget is the only surface reachable without a Supabase session. These
+// controls are what keep a leaked widget key from becoming a tenant oracle.
+for (const required of [
+  "app_private.widget_resolve",
+  "app_private.widget_origin_allowed",
+  "app_private.widget_rate_limit",
+  "app_private.widget_append_message",
+  "tenant_widget_keys_deny_anon",
+  "app_private.conversation_surface_view",
+  "app_private.surface_visitor_key",
+  "conversation_surfaces_deny_anon",
+  // Authored content must reach retrieval, and imported knowledge must not be
+  // silently replaced by a thinner authored projection.
+  "app_private.knowledge_project_course",
+  "app_private.knowledge_projection_hash",
+  '"kind": "authored_content_blocks"',
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing widget/knowledge control: ${required}`);
+  }
+}
+
+for (const table of widgetTables) {
+  if (
+    !sql.includes(`alter table public.${table} enable row level security`) ||
+    !sql.includes(`alter table public.${table} force row level security`)
+  ) {
+    fail(`${table} is missing forced row level security`);
+  }
+}
+
+// canAuthor must be read from the authoring gate itself, never restated as a
+// role list, so the editor cannot be shown to a role the RPCs will refuse.
+// Matched on collapsed whitespace so reformatting the SQL cannot break this.
+const collapsedSql = sql.replace(/\s+/gu, " ");
+if (
+  !collapsedSql.includes(
+    "'canAuthor', exists ( select 1 from app_private.authoring_rpc_context() )",
+  ) &&
+  !collapsedSql.includes(
+    "'canAuthor', exists (select 1 from app_private.authoring_rpc_context())",
+  )
+) {
+  fail(
+    "learning_get_workspace must derive canAuthor from app_private.authoring_rpc_context()",
+  );
+}
+
+for (const table of questionIntelligenceTables) {
+  if (
+    !sql.includes(`alter table public.${table} enable row level security`) ||
+    !sql.includes(`alter table public.${table} force row level security`)
+  ) {
+    fail(`${table} is missing forced row level security`);
+  }
+}
+
+// The agent columns arrive by ALTER, so tableBody() cannot see them.
+for (const column of [
+  "icon_glyph",
+  "persona_instructions",
+  "agent_tone",
+  "agent_voice",
+  "agent_course_scope",
+]) {
+  if (!sql.includes(`add column if not exists ${column}`)) {
+    fail(`tenant_branding is missing agent column ${column}`);
+  }
+}
+
+for (const required of [
+  // Agent configuration: persona must never reach a learner payload.
+  "app_private.agent_directive_for_tenant",
+  "public.learning_get_agent_directive",
+  "when caller.identity_role in ('tenant_owner', 'tenant_admin')",
+  "tenant_private_branding_read",
+  "tenant_private_branding_write_guard",
+  "tenant_private_branding_delete_guard",
+  // Analytics helpers and their supporting indexes.
+  "app_private.analytics_context",
+  "app_private.analytics_window",
+  "app_private.analytics_metric",
+  "messages_analytics_actor_time_idx",
+  "conversations_analytics_context_idx",
+  // Course editing revision and audit machinery.
+  "app_private.authoring_commit_revision",
+  "app_private.authoring_lock_course",
+  "app_private.authoring_append_audit",
+  // Platform tenant control.
+  "app_private.platform_admin_tenant_sessions",
+  "app_private.platform_admin_write_audit",
+  "tenant_sections_deny_anon",
+]) {
+  if (!sql.includes(required)) {
+    fail(`missing 2026-07-25 platform control: ${required}`);
+  }
+}
+
+for (const table of tenantControlTables) {
+  if (
+    !sql.includes(`alter table public.${table} enable row level security`) ||
+    !sql.includes(`alter table public.${table} force row level security`)
+  ) {
+    fail(`${table} is missing forced row level security`);
+  }
+}
+
+for (const acceptanceId of [
   "DLC-01",
   "DLC-02",
   "DLC-03",
@@ -476,6 +766,60 @@ const learningRpcFunctions = [
   "learning_create_course_draft",
   "learning_publish_course",
   "learning_search_chunks",
+  // Agent configuration (20260725120000).
+  "tenant_get_agent_configuration",
+  "tenant_update_agent_configuration",
+  "learning_get_agent_directive",
+  // Learning analytics (20260725121000).
+  "analytics_tenant_overview",
+  "analytics_question_distribution",
+  "analytics_answer_quality",
+  "analytics_learner_progress",
+  // Course editing (20260725122000).
+  "learning_update_course",
+  "learning_create_module",
+  "learning_update_module",
+  "learning_delete_module",
+  "learning_create_lesson",
+  "learning_update_lesson",
+  "learning_delete_lesson",
+  "learning_create_content_block",
+  "learning_update_content_block",
+  "learning_delete_content_block",
+  "learning_reorder",
+  "learning_list_course_revisions",
+  "learning_rollback_course",
+  // Tenant section control (20260725123000).
+  "tenant_get_sections",
+  "platform_admin_set_tenant_section",
+  "platform_admin_set_tenant_status",
+  "platform_admin_enter_tenant",
+  "platform_admin_exit_tenant",
+  "platform_admin_tenant_detail",
+  // Client provisioning (20260726090000).
+  "platform_admin_create_tenant",
+  "platform_admin_list_client_claims",
+  "platform_admin_revoke_client_claim",
+  // Question intelligence (20260726091000).
+  "learning_record_question_label",
+  "analytics_question_labels",
+  "analytics_signals",
+  "analytics_signal_review",
+  // Widget delivery admin side (20260726093000). The three anon-granted
+  // widget_* functions are deliberately excluded: this loop asserts an
+  // authenticated grant, which they must not have.
+  "tenant_get_widget_settings",
+  "tenant_update_widget_settings",
+  // Widget analytics (20260726094000).
+  "learning_record_conversation_surface",
+  "analytics_surface_breakdown",
+  "analytics_widget_engagement",
+  "analytics_widget_content_gaps",
+  // Authored content retrieval (20260726095000). The *_embedding_work
+  // functions are excluded for the same reason — they are worker-token gated,
+  // never granted to authenticated.
+  "learning_project_course_knowledge",
+  "learning_course_knowledge_state",
 ];
 for (const functionName of learningRpcFunctions) {
   const marker = `create or replace function public.${functionName}(`;

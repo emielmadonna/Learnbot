@@ -34,8 +34,14 @@ function prune(store: Map<string, QuotaEntry>, now: number) {
 }
 
 /**
- * This is a bounded process-instance safety net, not a durable distributed
- * quota. Multi-instance production still needs the platform's durable meter.
+ * Same-instance burst guard only.
+ *
+ * This used to be the whole voice rate limit, which on a serverless platform
+ * meant no rate limit at all: the map is empty on every cold start and shared
+ * by no two instances. The authoritative quota now lives in SQL --
+ * `public.learning_reserve_provider_call`, called through
+ * `lib/voice-runtime.ts` -- and this map only sheds an obvious repeat burst
+ * without a round trip, or stands in when the durable check is unreachable.
  */
 export function consumeVoiceQuota(
   kind: VoiceQuotaKind,

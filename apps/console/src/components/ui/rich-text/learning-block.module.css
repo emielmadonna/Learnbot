@@ -1,0 +1,134 @@
+/*
+  One authored block, as a learner sees it. Colours resolve from the brand
+  properties via tokens.module.css; the three callout tones are semantic hues,
+  not brand colours, exactly as the other primitives treat status.
+*/
+
+.block {
+  min-width: 0;
+  color: var(--ui-text);
+  font-size: var(--text-sm);
+  line-height: 1.62;
+  overflow-wrap: anywhere;
+}
+
+/* Plain-format text: authored line breaks survive without any parsing. */
+.plain {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.empty {
+  margin: 0;
+  color: var(--ui-faint);
+  font-style: italic;
+}
+
+.heading {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-snug);
+  line-height: 1.25;
+}
+
+.headingSmall {
+  font-size: var(--text-sm);
+  color: var(--ui-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.divider {
+  width: 100%;
+  height: 0;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--ui-line);
+}
+
+.callout {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--ui-line);
+  border-left-width: 3px;
+  border-radius: var(--ui-radius-sm);
+}
+
+.calloutTone {
+  color: var(--ui-faint);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.toneNote {
+  border-left-color: var(--ui-primary);
+  background: var(--ui-primary-soft);
+}
+
+.tonePositive {
+  border-left-color: var(--ui-positive);
+  background: var(--ui-positive-soft);
+}
+
+.toneWarning {
+  border-left-color: var(--ui-warning);
+  background: var(--ui-warning-soft);
+}
+
+.code {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-sunken);
+  /* Wide code scrolls inside this box, never the page. */
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.code[data-language]::before {
+  content: attr(data-language);
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--ui-faint);
+  font-size: 10px;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.quote {
+  margin: 0;
+  padding: var(--space-1) 0 var(--space-1) var(--space-4);
+  border-left: 2px solid var(--ui-line-strong);
+  color: var(--ui-muted);
+}
+
+.quote .plain {
+  font-style: italic;
+}
+
+.attribution {
+  margin-top: var(--space-1);
+  color: var(--ui-faint);
+  font-size: var(--text-xs);
+  font-style: normal;
+}
+
+.list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.list li::marker {
+  color: var(--ui-faint);
+}

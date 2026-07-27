@@ -1,0 +1,691 @@
+/*
+ * Platform panel — client account control.
+ *
+ * Local to this section. This is admin chrome, so its neutrals come from the
+ * fixed ramp in globals.css, never from the tenant's palette — see the brand
+ * rule at the top of app-shell/shell.module.css. Only --pp-primary/--pp-accent
+ * carry brand, and only on accent surfaces.
+ *
+ * The alert hues are fixed semantic colours: an "operating inside a client
+ * workspace" bar and a suspension control must never read as on-brand.
+ */
+
+.root {
+  --pp-primary: var(--brand-primary);
+  --pp-accent: var(--brand-accent);
+  --pp-surface: var(--n-canvas);
+  --pp-text: var(--n-ink);
+
+  --pp-muted: color-mix(in srgb, var(--pp-text) 70%, var(--pp-surface));
+  --pp-faint: color-mix(in srgb, var(--pp-text) 64%, var(--pp-surface));
+  --pp-line: color-mix(in srgb, var(--pp-text) 9%, var(--pp-surface));
+  --pp-raised: color-mix(in srgb, var(--pp-text) 4%, var(--pp-surface));
+  --pp-sunken: color-mix(in srgb, var(--pp-text) 7%, var(--pp-surface));
+
+  --pp-danger: color-mix(in srgb, #b23a22 78%, var(--pp-text));
+  --pp-danger-soft: color-mix(in srgb, #b23a22 11%, var(--pp-surface));
+  --pp-positive: color-mix(in srgb, #1f7a55 78%, var(--pp-text));
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-block);
+  color: var(--pp-text);
+}
+
+/* --- headings ---------------------------------------------------------- */
+
+.intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.introCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  max-width: 62ch;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  line-height: 1.2;
+  letter-spacing: var(--tracking-snug);
+}
+
+.lede {
+  margin: 0;
+  color: var(--pp-muted);
+  line-height: 1.55;
+}
+
+.introActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.meta {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--pp-faint);
+}
+
+/* --- messages ---------------------------------------------------------- */
+
+.notice,
+.failure {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--pp-line);
+  border-radius: 12px;
+  background: var(--pp-raised);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+.failure {
+  border-color: color-mix(in srgb, #b23a22 34%, var(--pp-surface));
+  background: var(--pp-danger-soft);
+  color: var(--pp-danger);
+}
+
+.loading {
+  margin: 0;
+  padding: 28px 0;
+  color: var(--pp-muted);
+}
+
+/* --- the entered-workspace bar (rendered into document.body) ----------- */
+
+.bar {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline: 0;
+  z-index: 2147483000;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 18px;
+  padding: 9px 16px;
+  border-block-end: 3px solid #f0c8b8;
+  background: repeating-linear-gradient(
+    135deg,
+    #8c2d18 0 22px,
+    #7d2714 22px 44px
+  );
+  color: #fff;
+  font-size: var(--text-md);
+  line-height: 1.35;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 28%);
+}
+
+.barCopy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  text-align: start;
+}
+
+.barDot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffd9cd;
+  box-shadow: 0 0 0 0 rgb(255 217 205 / 70%);
+  animation: pp-pulse 2s ease-out infinite;
+}
+
+.barLabel {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: var(--text-2xs);
+}
+
+.barName {
+  font-weight: 700;
+}
+
+.barActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.barButton {
+  appearance: none;
+  border: 1px solid #fff;
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: #fff;
+  color: #7d2714;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.barButton:hover:not([disabled]) {
+  background: #ffe9e2;
+}
+
+.barButton[disabled] {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.barButtonQuiet {
+  background: transparent;
+  color: #fff;
+}
+
+.barButtonQuiet:hover:not([disabled]) {
+  background: rgb(255 255 255 / 16%);
+}
+
+.barButton:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+.barForm {
+  margin: 0;
+}
+
+@keyframes pp-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(255 217 205 / 70%);
+  }
+  70% {
+    box-shadow: 0 0 0 9px rgb(255 217 205 / 0%);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(255 217 205 / 0%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barDot {
+    animation: none;
+  }
+}
+
+/* --- the in-panel counterpart of the bar ------------------------------- */
+
+.inside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 2px solid color-mix(in srgb, #b23a22 46%, var(--pp-surface));
+  border-radius: 16px;
+  background: var(--pp-danger-soft);
+}
+
+.insideCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.insideLabel {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--pp-danger);
+}
+
+.insideName {
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.insideMeta {
+  font-size: var(--text-sm);
+  color: var(--pp-muted);
+}
+
+/* --- totals ------------------------------------------------------------ */
+
+.tiles {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+/* --- client list ------------------------------------------------------- */
+
+.clients {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.client {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--pp-line);
+  border-radius: 16px;
+  background: var(--pp-surface);
+}
+
+.client[data-entered="true"] {
+  border-color: color-mix(in srgb, #b23a22 46%, var(--pp-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #b23a22 24%, var(--pp-surface));
+}
+
+.client[data-status="suspended"] {
+  background: var(--pp-sunken);
+}
+
+.clientHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.clientName {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: 1.3;
+}
+
+.clientStats {
+  display: grid;
+  gap: 8px 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.clientStats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.clientStats dt {
+  color: var(--pp-faint);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.clientStats dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.clientActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: auto;
+}
+
+.insideTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #b23a22 16%, var(--pp-surface));
+  color: var(--pp-danger);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* --- detail ------------------------------------------------------------ */
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.detailGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+.groupHint {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--pp-muted);
+  line-height: 1.5;
+}
+
+.readiness {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 0;
+}
+
+.readinessRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--pp-line);
+  border-radius: 10px;
+  background: var(--pp-raised);
+  font-size: var(--text-md);
+}
+
+.switches {
+  border: 1px solid var(--pp-line);
+  border-radius: 14px;
+  padding: 4px 14px;
+  background: var(--pp-surface);
+}
+
+.sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--pp-line);
+  border-radius: 10px;
+  background: var(--pp-raised);
+  font-size: var(--text-sm);
+}
+
+.session[data-caller="true"] {
+  border-color: color-mix(in srgb, #b23a22 40%, var(--pp-surface));
+  background: var(--pp-danger-soft);
+}
+
+.sessionId {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-sm);
+  color: var(--pp-muted);
+}
+
+.danger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, #b23a22 34%, var(--pp-surface));
+  border-radius: 16px;
+  background: var(--pp-danger-soft);
+}
+
+.dangerCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  max-width: 52ch;
+}
+
+.dangerCopy strong {
+  font-size: var(--text-md);
+}
+
+.dangerCopy span {
+  font-size: var(--text-sm);
+  color: var(--pp-muted);
+  line-height: 1.5;
+}
+
+/* --- confirmations ----------------------------------------------------- */
+
+.confirm {
+  border: 2px solid color-mix(in srgb, var(--pp-text) 22%, var(--pp-surface));
+}
+
+.confirmDanger {
+  border-color: color-mix(in srgb, #b23a22 52%, var(--pp-surface));
+}
+
+.confirmBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.confirmList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-inline-start: 20px;
+  font-size: var(--text-md);
+  color: var(--pp-muted);
+  line-height: 1.5;
+}
+
+.confirmName {
+  padding: 10px 12px;
+  border: 1px solid var(--pp-line);
+  border-radius: 10px;
+  background: var(--pp-sunken);
+  font-weight: 700;
+}
+
+/* --- add a client ------------------------------------------------------ */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.formRow {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+/*
+ * The one-time owner code. Deliberately the loudest thing on the page while it
+ * is on screen: it is readable exactly once, and a quiet card would invite
+ * somebody to scroll past the only disclosure they will ever get. The accent
+ * frame is brand-derived, because this is a normal (if consequential) product
+ * moment rather than a destructive one.
+ */
+
+.issued {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 2px solid color-mix(in srgb, var(--pp-accent) 62%, var(--pp-surface));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--pp-accent) 10%, var(--pp-surface));
+}
+
+.issuedHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.issuedLabel {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--pp-faint);
+}
+
+.issuedName {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.token {
+  display: block;
+  overflow-x: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--pp-line);
+  border-radius: 12px;
+  background: var(--pp-surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-md);
+  line-height: 1.5;
+  word-break: break-all;
+  user-select: all;
+}
+
+.issuedActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.issuedNote {
+  margin: 0;
+  max-width: 68ch;
+  font-size: var(--text-sm);
+  color: var(--pp-muted);
+  line-height: 1.55;
+}
+
+/* --- outstanding owner codes ------------------------------------------- */
+
+.claims {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.claim {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--pp-line);
+  border-radius: 12px;
+  background: var(--pp-raised);
+}
+
+.claim[data-status="revoked"],
+.claim[data-status="expired"] {
+  background: var(--pp-sunken);
+}
+
+.claimCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.claimName {
+  font-weight: 600;
+}
+
+.claimActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* --- boundary note ----------------------------------------------------- */
+
+.boundary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px dashed var(--pp-line);
+  border-radius: 14px;
+  background: var(--pp-raised);
+  font-size: var(--text-sm);
+  color: var(--pp-muted);
+  line-height: 1.55;
+}
+
+.boundary strong {
+  color: var(--pp-text);
+}
+
+@media (max-width: 640px) {
+  .clients {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bar {
+    justify-content: flex-start;
+  }
+
+  .formRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

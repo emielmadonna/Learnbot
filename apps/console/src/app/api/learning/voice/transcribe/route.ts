@@ -12,7 +12,11 @@ import {
   multipartHeaderError,
   validDeclaredDuration,
 } from "../policy";
-import { consumeVoiceQuota } from "../rate-limit";
+import {
+  enforceVoiceQuota,
+  meterVoiceUsage,
+  voiceTraceId,
+} from "../../../../../lib/voice-runtime";
 
 const OPENAI_TRANSCRIPTION_URL =
   "https://api.openai.com/v1/audio/transcriptions";
@@ -49,8 +53,10 @@ async function voiceTenantContext(request: Request, mutation: boolean) {
     return null;
   }
   return {
+    supabase,
     quotaSubject: `${context.tenantId}:${context.principalId}`,
     tenantId: context.tenantId,
+    principalId: context.principalId,
   };
 }
 
@@ -77,12 +83,12 @@ export async function GET(request: Request) {
         configured: true,
         maxDurationMs: MAX_VOICE_TURN_MS,
         acceptedAudioTypes: acceptedBrowserAudioTypes(),
-        rateLimitScope: "process-instance",
+        rateLimitScope: "durable-tenant",
       },
       {
         headers: {
           "Cache-Control": "private, no-store",
-          "X-Voice-RateLimit-Scope": "process-instance",
+          "X-Voice-RateLimit-Scope": "durable-tenant",
         },
       },
     );
@@ -144,15 +150,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const quota = consumeVoiceQuota("transcribe", context.quotaSubject);
+    // Durable, cross-instance quota. The previous per-process map reset on
+    // every serverless cold start, so it bounded nothing in production.
+    const quota = await enforceVoiceQuota(context.supabase, {
+      kind: "transcribe",
+      tenantId: context.tenantId,
+      principalId: context.principalId,
+    });
     if (!quota.allowed) {
       return jsonError(
-        "voice_rate_limited",
+        quota.code,
         429,
-        "Too many voice turns. Wait briefly before trying again.",
-        true,
+        quota.message,
+        quota.retryAfterSeconds > 0,
         {
-          "Retry-After": String(quota.retryAfterSeconds),
+          "Retry-After": String(Math.max(1, quota.retryAfterSeconds)),
           "X-Voice-RateLimit-Scope": quota.scope,
         },
       );
@@ -217,6 +229,17 @@ export async function POST(request: Request) {
         "I did not catch that. Please try the voice turn again.",
       );
     }
+
+    // Transcription is billed by audio duration, which the client declared and
+    // the policy bounded. Metering is best effort and never throws.
+    await meterVoiceUsage(context.supabase, {
+      kind: "transcribe",
+      model: TRANSCRIPTION_MODEL,
+      quantity: durationMs / 1_000,
+      fallbackUnit: "audio_seconds",
+      traceId: voiceTraceId("transcribe"),
+      idempotencyKey: `voice-transcribe:${crypto.randomUUID()}`,
+    });
 
     return NextResponse.json(
       {

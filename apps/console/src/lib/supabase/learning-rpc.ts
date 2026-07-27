@@ -61,6 +61,19 @@ export type LearningWorkspace = {
     surfaceColor: string;
     textColor: string;
     welcomeMessage: string;
+    // Added by the agent configuration migration. Optional because a database
+    // that has not applied it still returns the presentation fields above.
+    iconGlyph?: string;
+    logoStorageKey?: string | null;
+    avatarStorageKey?: string | null;
+    voice?: string;
+    courseScope?: "all" | string[];
+    // Behaviour directives. `learning_get_workspace` omits these entirely for
+    // learners, creators and teachers so the assistant's instructions cannot be
+    // read and worked around; only owners and admins receive them. Absent here
+    // means "withheld from this role", not "unset".
+    personaInstructions?: string;
+    tone?: string;
   } | null;
   courses: LearningCourse[];
 };
