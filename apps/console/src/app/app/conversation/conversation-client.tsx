@@ -10,6 +10,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { brandInitial, readableOn } from "../../../components/app-shell/brand";
+import type { AgentConfig } from "../../../components/app-shell/contract";
 import { PlainText, RichText } from "../../../components/ui/rich-text";
 import { recordUsageEvent } from "../usage-signal";
 import styles from "./conversation.module.css";
@@ -126,6 +128,20 @@ function isRecord(value: unknown): value is JsonRecord {
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : null;
+}
+
+/**
+ * Same hex shape `brand.ts` accepts. A malformed or absent brand colour must
+ * never reach a CSS custom property or `readableOn()` — it is simply treated
+ * as "no override", so the conversation subtree keeps the tokens.css default
+ * accent rather than breaking (PLAN.md §3.3).
+ */
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/iu;
+
+function hexColor(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return HEX_COLOR.test(trimmed) ? trimmed : null;
 }
 
 function normalizeRichParts(
@@ -443,6 +459,13 @@ export default function ConversationClient({
   const [realtimeActive, setRealtimeActive] = useState(false);
   const [realtimeMuted, setRealtimeMuted] = useState(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
+  // Per-tenant brand colour and icon glyph (PLAN.md §3.3). `assistantName`
+  // and `welcomeMessage` already arrive as props from the shell; these two do
+  // not, so this is the one place on the conversation surface that reads
+  // them. `null`/"" mean "not configured yet, or the fetch hasn't resolved" —
+  // both render exactly like an unbranded tenant.
+  const [brandAccent, setBrandAccent] = useState<string | null>(null);
+  const [brandGlyph, setBrandGlyph] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const feedEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -497,6 +520,47 @@ export default function ConversationClient({
     [selectedCourse],
   );
 
+  // The header mark: an uploaded logo is Section 7 (Phase 9), out of scope
+  // here, so this is always the initials fallback — `brandInitial()` is the
+  // same function `brand.ts` gives the settings preview, reused rather than
+  // reimplemented.
+  const mark = useMemo(() => {
+    const agentForMark: AgentConfig = {
+      assistantName,
+      iconGlyph: brandGlyph,
+      logoUrl: null,
+      avatarUrl: null,
+      primaryColor: "",
+      accentColor: "",
+      surfaceColor: "",
+      textColor: "",
+      welcomeMessage: "",
+      personaInstructions: "",
+      tone: "",
+      voice: "",
+      courseScope: "all",
+    };
+    return brandInitial(agentForMark, tenantName);
+  }, [assistantName, brandGlyph, tenantName]);
+
+  // The four values PLAN.md §3.3 allows on the conversation surface: --accent,
+  // --accent-wash (derived from --accent in conversation.module.css), the
+  // mark above, and the assistant's name (already the `assistantName` prop).
+  // Scoped to this subtree via inline style on the workspace root below —
+  // never written to `:root` — so an unconfigured tenant simply inherits the
+  // tokens.css default instead of getting an empty or broken override.
+  const brandVars = useMemo<CSSProperties>(() => {
+    if (brandAccent === null) return {};
+    return {
+      "--accent": brandAccent,
+      // readableOn() is the exact contrast math agent-panel.tsx's live
+      // preview already uses for `--brand-on-accent`. A brand colour that
+      // can't carry readable text is corrected here, never rejected and
+      // never surfaced to the creator as a hex-value error.
+      "--accent-ink": readableOn(brandAccent),
+    } as CSSProperties;
+  }, [brandAccent]);
+
   useEffect(() => {
     if (
       selectedLessonId &&
@@ -505,6 +569,35 @@ export default function ConversationClient({
       setSelectedLessonId("");
     }
   }, [lessons, selectedLessonId]);
+
+  // Loads the tenant's brand colour and icon glyph. This is the only branding
+  // fetch on the conversation surface — name and welcome message already
+  // arrive as props. A failed or missing fetch leaves `brandAccent` at its
+  // initial `null`, which `brandVars` above treats as "no override": the
+  // chat renders with the tokens.css default and nothing breaks.
+  useEffect(() => {
+    let active = true;
+    async function loadBrand() {
+      try {
+        const response = await fetch("/api/learning/workspace", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!response.ok) return;
+        const payload = await readJson(response);
+        if (!active || !isRecord(payload)) return;
+        const branding = isRecord(payload.branding) ? payload.branding : null;
+        setBrandAccent(hexColor(branding?.accentColor));
+        setBrandGlyph(stringValue(branding?.iconGlyph) ?? "");
+      } catch {
+        // Branding is cosmetic. A network failure must never block the chat.
+      }
+    }
+    void loadBrand();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -1699,7 +1792,7 @@ export default function ConversationClient({
         : "Speak";
 
   return (
-    <div className={styles.workspace} data-mode={mode}>
+    <div className={styles.workspace} data-mode={mode} style={brandVars}>
       <div
         className={`${styles.spectralEdge} ${
           intelligenceActive ? styles.spectralEdgeActive : ""
@@ -1709,7 +1802,7 @@ export default function ConversationClient({
       <header className={styles.floatingNav}>
         <Link className={styles.brand} href="/app" aria-label="Learning home">
           <span className={styles.brandMark} aria-hidden="true">
-            E
+            {mark}
           </span>
           <span className={styles.brandCopy}>
             <b>{assistantName}</b>

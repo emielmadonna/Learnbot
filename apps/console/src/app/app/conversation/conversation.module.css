@@ -47,8 +47,7 @@
   line-height: 1.6;
 }
 
-.closedMark,
-.brandMark {
+.closedMark {
   display: grid;
   width: 36px;
   height: 36px;
@@ -62,7 +61,37 @@
   letter-spacing: -0.02em;
 }
 
+/*
+  The one tenant-branded mark on this surface (PLAN.md §3.3). `--accent` and
+  `--accent-ink` come from tokens.css by default and are overridden per
+  tenant, scoped to `.workspace`, by the inline style conversation-client.tsx
+  sets from the durable brand colour — `--accent-ink` is always
+  `readableOn(--accent)`, so this never needs a hardcoded text colour.
+*/
+.brandMark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.brand:hover .brandMark,
+.brand:focus-visible .brandMark {
+  box-shadow: 0 0 0 6px var(--accent-wash);
+}
+
 .workspace {
+  /* Derived from whatever --accent is in scope (tenant override or the
+     tokens.css default) rather than duplicated, so it can never drift out
+     of sync with the colour it is a wash of. */
+  --accent-wash: color-mix(in srgb, var(--accent) 16%, transparent);
   position: relative;
   min-height: 100vh;
   min-height: 100dvh;
