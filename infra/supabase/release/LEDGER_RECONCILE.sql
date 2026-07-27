@@ -58,7 +58,11 @@
 -- it predated -- applied to the database that same day, never recorded.
 --
 -- Pass 2: re-run, inserting exactly those three and no-opping on the other 47.
--- Ledger 86 -> 89. All 59 repo migration versions are now present.
+-- Ledger 86 -> 89.
+--
+-- Pass 3: extended again with 20260727130000 and 20260727140000, the Phase 12
+-- observability migrations applied by hand the same day. Ledger 89 -> 91. All
+-- 61 repo migration versions are now present.
 --
 -- Nothing is left to do here. The file is retained as the record of how the
 -- ledger was reconciled, and remains safe to re-run (it is a no-op now).
@@ -116,18 +120,21 @@ select v, n from (values
   -- SCHEMA-DRIFT.md), never recorded in the ledger.
   ('20260727100000','retire_platform_admin_client_detail'),
   ('20260727110000','malware_scan_checkpoint'),
-  ('20260727120000','inert_source_scan_clearance')
+  ('20260727120000','inert_source_scan_clearance'),
+  -- Phase 12 observability, applied by hand the same day.
+  ('20260727130000','audit_coverage'),
+  ('20260727140000','error_events')
 ) as t(v, n)
 on conflict (version) do nothing;
 
--- Expected afterwards: 39 + 47 + 3 = 89 rows, and every one of the 59 repo
+-- Expected afterwards: 39 + 47 + 3 + 2 = 91 rows, and every one of the 61 repo
 -- migration versions present. Confirm with:
 --
 --   select count(*) as ledger_rows from supabase_migrations.schema_migrations;
---   -- expect 89 (86 if only the original 47 have been inserted)
+--   -- expect 91
 --
 --   select count(*) as still_missing
---   from (values ('0001'),('20260727120000')) as t(v)   -- widen to all 59 to be thorough
+--   from (values ('0001'),('20260727140000')) as t(v)   -- widen to all 61 to be thorough
 --   where not exists (
 --     select 1 from supabase_migrations.schema_migrations s where s.version = t.v
 --   );

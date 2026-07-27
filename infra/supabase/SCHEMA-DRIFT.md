@@ -367,34 +367,55 @@ no revision newer than the live database, so a push has nothing to do; and the
 hand-recorded rows. Verify against real objects before trusting any tooling that
 reads the ledger.
 
+## Phase 12 observability migrations — applied 2026-07-27
+
+Both applied by hand through the SQL editor, in version order, each
+hash-verified in the editor immediately before running.
+
+| Migration | SHA-256 of the applied text | Bytes |
+|---|---|---|
+| `20260727130000_audit_coverage` | `ce3b43b23a084f821aeb1adb32cc7fa1c662f72e3f008fbe67d469d5140cc60b` | 10,554 |
+| `20260727140000_error_events` | `f0a1457393ed366ca16e36794507619f3b02870546d29ffe34a06f8af5bf34fa` | 17,945 |
+
+`…130000` raised the destructive-operations dialog, as expected — it is the
+three `drop trigger if exists` statements, each re-created on the next line.
+
+### Verified after
+
+| | result |
+|---|---|
+| triggers `messages_append_audit`, `upload_intents_append_audit`, `user_access_accounts_append_audit` | **3 of 3 present** |
+| `public.error_events`, `public.error_groups` | both present |
+| operation capabilities | 6 → **7** (`observability.error_intake`) |
+| `admin_provision_auth_user` md5 | `d8160032e33feaaa61d1cccb29b05d5d` — unchanged |
+
+The audit migration's whole design premise is that it replaces no existing
+function. That was checked rather than assumed — all four RPCs it covers came
+out **byte-identical** to their pre-apply fingerprints:
+
+| Function | md5 before and after |
+|---|---|
+| `learning_record_user_message` | `926bb45a912c2f1862563ece16f891d2` |
+| `learning_record_assistant_message` | `ff7bd3d652ff334e870f6005378f4ba7` |
+| `learning_create_upload_intent` | `2695588eec02cca629ea837ccd04851c` |
+| `learning_confirm_quarantine_upload` | `99ef8cbe971219ce7e232ca1b86a48b5` |
+
+### Ledger kept in step, same session
+
+Unlike every previous hand-apply on this project, these two were recorded
+immediately. `LEDGER_RECONCILE.sql` was extended with both versions and re-run
+(pass 3, applied text SHA-256
+`17b7edc30f2e411f16bd24ff6ae0a12ecdf58aa490285eab0fcc9c59339a02ad`):
+
+| | before | after |
+|---|---|---|
+| rows in `supabase_migrations.schema_migrations` | 89 | **91** |
+| repo migration versions present | 59 of 59 | **61 of 61** |
+
+The repository and the ledger have not diverged. That is the whole point of this
+document, and it is the first time it has been true at the end of an apply.
+
 ## Outstanding
-
-- **Apply `20260727130000_audit_coverage.sql`.** Written 2026-07-27, not yet
-  applied. Adds `app_private.lifecycle_append_audit` and three AFTER triggers
-  covering `public.messages`, `public.upload_intents` and
-  `app_private.user_access_accounts`.
-
-  It deliberately does **not** `create or replace` any existing function, so the
-  four RPCs it covers must come out byte-identical. Fingerprint them before and
-  after and confirm all four are unchanged:
-
-  | Function | md5 of `pg_get_functiondef`, before |
-  |---|---|
-  | `learning_record_user_message` | `926bb45a912c2f1862563ece16f891d2` |
-  | `learning_record_assistant_message` | `ff7bd3d652ff334e870f6005378f4ba7` |
-  | `learning_create_upload_intent` | `2695588eec02cca629ea837ccd04851c` |
-  | `learning_confirm_quarantine_upload` | `99ef8cbe971219ce7e232ca1b86a48b5` |
-
-- **Apply `20260727140000_error_events.sql`.** Written 2026-07-27, not yet
-  applied. Adds `public.error_groups`, `public.error_events`, the
-  operation-secret intake, the platform-admin readout and the digest claim.
-  Extends the operation capability list from 6 to **7** (`observability.error_intake`),
-  by the same `drop constraint if exists` / re-add as `20260727110000` — expect
-  the destructive-operations dialog again.
-
-  Independent of `20260727130000`: that one adds triggers and touches no
-  capability. Apply in version order by convention, but neither depends on the
-  other.
 
 - Backups remain disabled (Free plan). The next hand-apply will again have no
   rollback.
