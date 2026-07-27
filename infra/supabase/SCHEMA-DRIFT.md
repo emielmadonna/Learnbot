@@ -116,14 +116,39 @@ against the hash of the file on disk. The six chunks concatenate back to
 
 **The repository migration ledger does not reflect these six.** Applying SQL
 through the dashboard editor does not insert into
-`supabase_migrations.schema_migrations`, so the live ledger's highest entry is
-still `20260724215138`. The live database is now ahead of the ledger by these
-six *and* by the fifteen migrations between `20260725120000` and
-`20260726096000`, which were evidently also hand-applied and equally unrecorded.
+`supabase_migrations.schema_migrations`.
 
-Consequence: **`supabase_migrations.schema_migrations` cannot be trusted as a
-record of what is applied to this project.** Verify against real objects
-(`to_regclass`, `pg_proc`) instead, as was done here.
+On closer inspection the problem is much larger than "these six are missing",
+and the first version of this entry understated it. Measured 2026-07-27:
+
+| | count |
+|---|---|
+| migration files in `infra/supabase/migrations/` | 47 |
+| rows in `supabase_migrations.schema_migrations` | 39 |
+| **versions present in both** | **0** |
+
+The two sets are **completely disjoint**. Every ledger row is a generated
+timestamp from 2026-07-24 (`20260724074635` … `20260724215138`); none of them is
+a repo filename version. Spot-checked directly: `0001`, `20260724182939` and
+`20260726097000` all return zero rows, and nothing dated 2026-07-25 or later
+exists in the ledger at all.
+
+Consequence, and it is the serious one:
+
+> **`supabase db push` would consider all 47 repo migrations unapplied and try to
+> run every one of them, `0001`–`0028` included.** That is precisely the
+> full-replay path this document was created to warn about. Do not run it against
+> this project until the ledger is reconciled.
+
+`supabase_migrations.schema_migrations` is therefore not a record of what is
+applied to this project and must not be read as one. Verify against real objects
+(`to_regclass`, `pg_proc`, `pg_constraint`) instead, as was done here.
+
+Reconciling it means deciding, per repo migration, whether it is genuinely
+applied and then inserting its version — 47 rows, against a live production
+ledger. That was deliberately **not** done as part of this change, because
+recording a migration as applied when it is not would hide a real gap. It needs
+its own verified pass.
 
 ## Drift safety, verified rather than assumed
 
@@ -177,11 +202,46 @@ existed, so nothing was half-applied) and that the content is additive DDL. It
 should not be treated as the normal standard — enabling backups before the next
 hand-apply is the obvious remedy.
 
+## The nine unrecorded bodies: recovered
+
+The outstanding item at the top of this document is now **done**. All nine
+2026-07-24 migration bodies were read out of
+`supabase_migrations.schema_migrations.statements` and written to
+`infra/supabase/migrations/` as `<version>_<name>.sql`. Each was verified against
+the database's own `md5()` and `length()` of the stored statement before writing:
+
+| Version | Name | Chars | md5 |
+|---|---|---|---|
+| 20260724212458 | `app_private_rls_hardening` | 1,042 | `c227b0b1c60e0b76b81aabbad9af4f92` |
+| 20260724212646 | `app_private_rls_hardening` | 401 | `a64c87f991977b558a2000ee…` |
+| 20260724212859 | `managed_account_provisioning_diagnostics` | 8,182 | `a8a300d531904fcf86eafe0b…` |
+| 20260724213033 | `managed_account_provisioning_fix` | 8,428 | `0101f2abbc543df813632de0d387eb42` |
+| 20260724213043 | `platform_admin_client_detail` | 10,928 | `98b8efb15f70c438a59ba8a6228bab49` |
+| 20260724213250 | `tenant_provider_vault_boundary` | 7,927 | `e7e673c5a4f277ceed8090a7c4168849` |
+| 20260724213536 | `managed_account_provisioning_final` | 10,261 | `71bb221425b1403940e737cd23450f0d` |
+| 20260724214825 | `platform_admin_provider_runtime_access` | 1,871 | `67b9cdb351b12c0a43687460e6a89681` |
+| 20260724215138 | `platform_admin_provider_runtime_access_guard` | 1,720 | `35b6421ff50afb7b821a1b6c0d639b93` |
+
+Each is a single SQL statement in the ledger; the files are that statement
+verbatim plus a trailing newline.
+
+They slot into the sequence between `20260724183637` and `20260725120000`, which
+is chronologically correct. Three of them
+(`…212859`, `…213033`, `…213536`) contain the successive revisions of
+`public.admin_provision_auth_user`, so **the repository now holds the current live
+definitions rather than an older one**. A rebuild from
+`infra/supabase/migrations/` no longer downgrades that function, and the
+provider-credential vault now has reviewable source.
+
+This removes the "repo is behind live" half of the drift. What remains is the
+ledger, which is a separate and worse problem — see above.
+
 ## Outstanding
 
-- The nine 2026-07-24 bodies are still not recovered into
-  `infra/supabase/migrations/` (see above); that work is unchanged by this entry.
-- These six *do* exist as committed files, so the repo can rebuild them — but
-  the ledger will not know they ran. Reconciling
-  `supabase_migrations.schema_migrations` with reality is now a prerequisite for
-  ever using `supabase db push` against this project.
+- **Reconcile `supabase_migrations.schema_migrations`** (47 rows to verify and
+  insert). Until then `supabase db push` is unsafe against this project.
+- Backups remain disabled (Free plan). The next hand-apply will again have no
+  rollback.
+- `platform_admin_client_detail` (recovered here) and
+  `platform_admin_tenant_detail` (`20260725123000`) still overlap in purpose and
+  should be reconciled rather than left to drift further apart.
