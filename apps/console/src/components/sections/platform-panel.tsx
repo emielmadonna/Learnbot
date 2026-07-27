@@ -31,6 +31,23 @@ import type {
   PlatformTenantSummary,
   TenantSection,
 } from "../../lib/supabase/platform-rpc";
+import {
+  billingPlans,
+  billingSubscriptionStatuses,
+  isBillingPlan,
+  isBillingSubscriptionStatus,
+  parseBillingOverview,
+  parseBillingTenantDetail,
+  parseMarginPolicyUpdate,
+  parseSectionOverrideClear,
+  parseSubscriptionUpdate,
+} from "../../lib/billing/billing-rpc";
+import type {
+  BillingOverview,
+  BillingPlan,
+  BillingSubscriptionStatus,
+  BillingTenantDetail,
+} from "../../lib/billing/billing-rpc";
 import type { PanelProps } from "../app-shell/contract";
 import { useDataVersion } from "../app-shell/shell-data";
 import { usePanelRouter } from "../app-shell/use-panel-router";
@@ -82,6 +99,13 @@ const codeMessages: Record<string, string> = {
   tenant_selection_required:
     "Select a workspace before running platform operations.",
   tenant_unavailable: "That client workspace is not available to enter.",
+  section_not_found: "That section does not exist on this workspace.",
+  stripe_not_configured:
+    "Stripe is not configured on this deployment. Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and STRIPE_METERED_PRICE_ID to enable checkout and the billing portal.",
+  plan_not_configured:
+    "This plan has no Stripe price configured. Set its STRIPE_PRICE_* environment variable first.",
+  stripe_customer_missing:
+    "This client has no Stripe customer on file yet — start a checkout before opening the billing portal.",
 };
 
 function describe(error: unknown): string {
@@ -111,6 +135,25 @@ async function platformRead(search: string): Promise<unknown> {
 
 async function platformWrite(input: Record<string, unknown>): Promise<unknown> {
   const response = await fetch("/api/platform", {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readBody(response);
+}
+
+async function billingRead(search: string): Promise<unknown> {
+  const response = await fetch(`/api/billing${search}`, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  return readBody(response);
+}
+
+async function billingWrite(input: Record<string, unknown>): Promise<unknown> {
+  const response = await fetch("/api/billing", {
     method: "POST",
     cache: "no-store",
     credentials: "same-origin",
@@ -214,6 +257,75 @@ const planCopy: Record<PlatformClientPlan, string> = {
   growth: "Growth",
   enterprise: "Enterprise",
 };
+
+/* --- billing, margin and Stripe entitlement --------------------------- *
+ *
+ * Every figure this section shows — true cost, margin, billed amount — is
+ * platform-admin-only in the database (PLAN.md S10.2). This panel is that
+ * boundary's one legitimate reader.
+ */
+
+const billingPlanCopy: Record<BillingPlan, string> = {
+  unconfirmed: "Unconfirmed",
+  starter: "Starter",
+  growth: "Growth",
+  enterprise: "Enterprise",
+};
+
+const subscriptionStatusCopy: Record<
+  BillingSubscriptionStatus,
+  { label: string; state: StatState }
+> = {
+  none: { label: "No subscription", state: "partial" },
+  trialing: { label: "Trialing", state: "known" },
+  active: { label: "Active", state: "known" },
+  past_due: { label: "Past due", state: "restricted" },
+  canceled: { label: "Canceled", state: "partial" },
+  incomplete: { label: "Incomplete", state: "partial" },
+  incomplete_expired: { label: "Incomplete (expired)", state: "restricted" },
+  unpaid: { label: "Unpaid", state: "restricted" },
+  paused: { label: "Paused", state: "partial" },
+};
+
+const dunningStageCopy: Record<
+  string,
+  { label: string; state: StatState; description: string }
+> = {
+  none: {
+    label: "Healthy",
+    state: "known",
+    description: "Billing is current. Nothing is degraded.",
+  },
+  grace: {
+    label: "Grace period",
+    state: "restricted",
+    description:
+      "A payment failed. Every section stays on until the grace window ends.",
+  },
+  dark: {
+    label: "Sections dark",
+    state: "restricted",
+    description:
+      "The grace window elapsed. Premium sections are suppressed until billing is resolved — the assistant and course sections are never touched by billing.",
+  },
+};
+
+function microToMajor(microUnits: number): number {
+  return microUnits / 1_000_000;
+}
+
+function formatMoney(microUnits: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency || "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(microToMajor(microUnits));
+  } catch {
+    return `$${microToMajor(microUnits).toFixed(2)}`;
+  }
+}
 
 const claimStatusCopy: Record<string, { state: StatState; text: string }> = {
   pending: { state: "known", text: "Outstanding" },
@@ -329,6 +441,33 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
   const [claimsVersion, setClaimsVersion] = useState(0);
   const [revoking, setRevoking] = useState<string | null>(null);
 
+  const [billingOverview, setBillingOverview] = useState<BillingOverview | null>(
+    null,
+  );
+  const [billingDetail, setBillingDetail] = useState<BillingTenantDetail | null>(
+    null,
+  );
+  const [billingDetailState, setBillingDetailState] = useState<
+    "idle" | "loading" | "ready" | "failed"
+  >("idle");
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingNotice, setBillingNotice] = useState<string | null>(null);
+  const [marginDraft, setMarginDraft] = useState<{
+    marginMultiplier: string;
+    fixedMarkupMicro: string;
+    floorMicro: string;
+  } | null>(null);
+  const [marginBusy, setMarginBusy] = useState(false);
+  const [subscriptionDraft, setSubscriptionDraft] = useState<{
+    plan: BillingPlan;
+    subscriptionStatus: BillingSubscriptionStatus;
+  } | null>(null);
+  const [subscriptionBusy, setSubscriptionBusy] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<BillingPlan>("starter");
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [clearingOverride, setClearingOverride] = useState<string | null>(null);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -377,6 +516,30 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
         setOverview(null);
         setOverviewError(describe(error));
         setOverviewState("failed");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [dataVersion]);
+
+  /* --- billing overview: true cost, margin and billed amount --------
+   *
+   * A separate, independent fetch from the platform overview above: it can
+   * fail (a missing tenant_subscriptions/tenant_margin_policies row on a
+   * freshly migrated database, for instance) without taking down the rest
+   * of the client-account surface, and the reverse.
+   */
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const parsed = parseBillingOverview(await billingRead(""));
+        if (!active) return;
+        setBillingOverview(parsed);
+      } catch {
+        if (active) setBillingOverview(null);
       }
     })();
     return () => {
@@ -468,6 +631,79 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
         setDetail(null);
         setDetailError(describe(error));
         setDetailState("failed");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [selectedTenantId, dataVersion]);
+
+  const loadBillingDetail = useCallback(async (tenantId: string) => {
+    setBillingDetailState("loading");
+    try {
+      const parsed = parseBillingTenantDetail(
+        await billingRead(`?tenantId=${encodeURIComponent(tenantId)}`),
+      );
+      setBillingDetail(parsed);
+      setBillingError(null);
+      setBillingDetailState("ready");
+      setMarginDraft({
+        marginMultiplier: String(parsed.margin.marginMultiplier),
+        fixedMarkupMicro: String(parsed.margin.fixedMarkupMicro),
+        floorMicro: String(parsed.margin.floorMicro),
+      });
+      setSubscriptionDraft({
+        plan: parsed.subscription.plan,
+        subscriptionStatus: parsed.subscription.subscriptionStatus,
+      });
+      return parsed;
+    } catch (error) {
+      setBillingDetail(null);
+      setBillingError(describe(error));
+      setBillingDetailState("failed");
+      setMarginDraft(null);
+      setSubscriptionDraft(null);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (selectedTenantId === null) {
+      setBillingDetail(null);
+      setBillingError(null);
+      setBillingDetailState("idle");
+      setMarginDraft(null);
+      setSubscriptionDraft(null);
+      return;
+    }
+    void (async () => {
+      const tenantId = selectedTenantId;
+      setBillingDetailState("loading");
+      try {
+        const parsed = parseBillingTenantDetail(
+          await billingRead(`?tenantId=${encodeURIComponent(tenantId)}`),
+        );
+        if (!active) return;
+        setBillingDetail(parsed);
+        setBillingError(null);
+        setBillingDetailState("ready");
+        setMarginDraft({
+          marginMultiplier: String(parsed.margin.marginMultiplier),
+          fixedMarkupMicro: String(parsed.margin.fixedMarkupMicro),
+          floorMicro: String(parsed.margin.floorMicro),
+        });
+        setSubscriptionDraft({
+          plan: parsed.subscription.plan,
+          subscriptionStatus: parsed.subscription.subscriptionStatus,
+        });
+      } catch (error) {
+        if (!active) return;
+        setBillingDetail(null);
+        setBillingError(describe(error));
+        setBillingDetailState("failed");
+        setMarginDraft(null);
+        setSubscriptionDraft(null);
       }
     })();
     return () => {
@@ -748,6 +984,138 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     }
   }
 
+  /* --- billing actions ------------------------------------------------ */
+
+  async function saveMarginPolicy(tenantId: string) {
+    if (marginDraft === null) return;
+    const marginMultiplier = Number(marginDraft.marginMultiplier);
+    const fixedMarkupMicro = Number(marginDraft.fixedMarkupMicro);
+    const floorMicro = Number(marginDraft.floorMicro);
+    if (
+      !Number.isFinite(marginMultiplier) ||
+      !Number.isFinite(fixedMarkupMicro) ||
+      !Number.isFinite(floorMicro)
+    ) {
+      setBillingError("Margin, markup and floor must all be numbers.");
+      return;
+    }
+    setMarginBusy(true);
+    setBillingError(null);
+    setBillingNotice(null);
+    try {
+      await billingWrite({
+        action: "margin.set",
+        tenantId,
+        marginMultiplier,
+        fixedMarkupMicro,
+        floorMicro,
+      }).then(parseMarginPolicyUpdate);
+      setBillingNotice("Margin policy updated. New usage bills at the new rate.");
+      await loadBillingDetail(tenantId);
+    } catch (error) {
+      setBillingError(describe(error));
+    } finally {
+      setMarginBusy(false);
+    }
+  }
+
+  async function saveSubscriptionOverride(tenantId: string) {
+    if (subscriptionDraft === null) return;
+    setSubscriptionBusy(true);
+    setBillingError(null);
+    setBillingNotice(null);
+    try {
+      await billingWrite({
+        action: "subscription.set",
+        tenantId,
+        plan: subscriptionDraft.plan,
+        subscriptionStatus: subscriptionDraft.subscriptionStatus,
+        note: "Set manually from the platform billing panel.",
+      }).then(parseSubscriptionUpdate);
+      setBillingNotice(
+        "Subscription state set manually. Sections were restored to full plan entitlement.",
+      );
+      await loadBillingDetail(tenantId);
+    } catch (error) {
+      setBillingError(describe(error));
+    } finally {
+      setSubscriptionBusy(false);
+    }
+  }
+
+  async function startCheckout(tenantId: string) {
+    setCheckoutBusy(true);
+    setBillingError(null);
+    setBillingNotice(null);
+    try {
+      const result = await billingWrite({
+        action: "checkout.create",
+        tenantId,
+        plan: checkoutPlan,
+      });
+      if (
+        result !== null &&
+        typeof result === "object" &&
+        "checkoutUrl" in result &&
+        typeof (result as { checkoutUrl: unknown }).checkoutUrl === "string"
+      ) {
+        window.open((result as { checkoutUrl: string }).checkoutUrl, "_blank", "noopener");
+        setBillingNotice(
+          "Hosted Stripe Checkout opened in a new tab. No card details ever pass through this console.",
+        );
+      } else {
+        throw new PlatformRpcError("invalid_response");
+      }
+    } catch (error) {
+      setBillingError(describe(error));
+    } finally {
+      setCheckoutBusy(false);
+    }
+  }
+
+  async function openPortal(tenantId: string) {
+    setPortalBusy(true);
+    setBillingError(null);
+    setBillingNotice(null);
+    try {
+      const result = await billingWrite({ action: "portal.create", tenantId });
+      if (
+        result !== null &&
+        typeof result === "object" &&
+        "portalUrl" in result &&
+        typeof (result as { portalUrl: unknown }).portalUrl === "string"
+      ) {
+        window.open((result as { portalUrl: string }).portalUrl, "_blank", "noopener");
+      } else {
+        throw new PlatformRpcError("invalid_response");
+      }
+    } catch (error) {
+      setBillingError(describe(error));
+    } finally {
+      setPortalBusy(false);
+    }
+  }
+
+  async function clearSectionOverride(tenantId: string, sectionKey: string) {
+    setClearingOverride(sectionKey);
+    setBillingError(null);
+    setBillingNotice(null);
+    try {
+      await billingWrite({
+        action: "section.override.clear",
+        tenantId,
+        sectionKey,
+      }).then(parseSectionOverrideClear);
+      setBillingNotice(`${sectionKey} was returned to plan control.`);
+      await loadBillingDetail(tenantId);
+      await loadDetail(tenantId);
+    } catch (error) {
+      setBillingError(describe(error));
+    } finally {
+      setClearingOverride(null);
+    }
+  }
+
   /* --- the entered-workspace bar ------------------------------------ *
    *
    * Rendered into document.body, above every other layer, so the fact that
@@ -933,6 +1301,325 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
           )}
         </div>
       </PanelFrame>
+    );
+  }
+
+  /* --- billing: true cost, margin, billed amount, plan, subscription -- *
+   *
+   * Every figure below is platform-admin-only at the SQL boundary
+   * (`platform_admin_tenant_billing_detail`) — a creator reaches only
+   * `tenant_get_billing_summary`, which this panel never calls. See PLAN.md
+   * S10.2 and S10.4.
+   */
+
+  function renderBillingSection(tenantId: string) {
+    if (billingDetailState === "loading" || billingDetailState === "idle") {
+      return (
+        <section className={styles.detailGroup}>
+          <h5 className={styles.groupTitle}>Billing</h5>
+          <p className={styles.loading} role="status">
+            Loading billing detail…
+          </p>
+        </section>
+      );
+    }
+
+    if (billingDetailState === "failed" || billingDetail === null) {
+      return (
+        <section className={styles.detailGroup}>
+          <h5 className={styles.groupTitle}>Billing</h5>
+          <p className={styles.failure} role="alert">
+            {billingError ?? "Billing detail could not be loaded."}
+          </p>
+        </section>
+      );
+    }
+
+    const b = billingDetail;
+    const statusCopy =
+      subscriptionStatusCopy[b.subscription.subscriptionStatus];
+    const dunningCopy = dunningStageCopy[b.subscription.dunningStage] ?? {
+      label: b.subscription.dunningStage,
+      state: "partial" as StatState,
+      description: "",
+    };
+    // "platform" is excluded: it is the platform-owner console section, never
+    // billing-governed, and `platform_admin_clear_tenant_section_override`
+    // refuses it outright — showing a "return to plan control" button that
+    // would only ever fail is worse than not showing it.
+    const overriddenSections = b.sections.filter(
+      (section) =>
+        section.source === "manual_override" && section.sectionKey !== "platform",
+    );
+
+    return (
+      <section className={styles.detailGroup}>
+        <div className={styles.sectionHead}>
+          <div>
+            <p className={styles.eyebrow}>Billing</p>
+            <h4 className={styles.subtitle}>Margin, plan and subscription</h4>
+          </div>
+          <span className={styles.meta}>
+            {b.windowDays}-day window · updated{" "}
+            {formatWhen(b.generatedAt) ?? "just now"}
+          </span>
+        </div>
+
+        <div className={styles.tiles}>
+          <StatTile
+            label="True provider cost"
+            sublabel={`Last ${b.windowDays} days · platform-admin only`}
+            value={formatMoney(b.usage.windowTrueCostMicro, b.margin.currency)}
+          />
+          <StatTile
+            label="Margin"
+            sublabel={`×${b.margin.marginMultiplier} + ${formatMoney(
+              b.margin.fixedMarkupMicro,
+              b.margin.currency,
+            )}, floor ${formatMoney(b.margin.floorMicro, b.margin.currency)}`}
+            value={`${b.margin.marginMultiplier}×`}
+          />
+          <StatTile
+            label="Model tier"
+            sublabel="Biggest lever on margin"
+            value={b.modelTier ?? "Platform default"}
+          />
+          <StatTile
+            label="Monthly budget headroom"
+            sublabel={
+              b.budget.monthlyBudgetMicro === null
+                ? "No budget policy set"
+                : `${formatMoney(b.budget.monthSpendMicro, b.margin.currency)} spent`
+            }
+            value={
+              b.budget.monthlyBudgetMicro === null
+                ? "—"
+                : formatMoney(
+                    Math.max(
+                      b.budget.monthlyBudgetMicro - b.budget.monthSpendMicro,
+                      0,
+                    ),
+                    b.margin.currency,
+                  )
+            }
+          />
+        </div>
+
+        <div className={styles.readiness}>
+          <div className={styles.readinessRow}>
+            <span>Plan</span>
+            <StateBadge state="known">
+              {billingPlanCopy[b.subscription.plan] +
+                (b.subscription.planSource === "manual" ? " · manual" : "")}
+            </StateBadge>
+          </div>
+          <div className={styles.readinessRow}>
+            <span>Subscription</span>
+            <StateBadge state={statusCopy.state}>{statusCopy.label}</StateBadge>
+          </div>
+          <div className={styles.readinessRow}>
+            <span>Dunning</span>
+            <StateBadge state={dunningCopy.state}>
+              {dunningCopy.label}
+            </StateBadge>
+          </div>
+        </div>
+        {b.subscription.dunningStage !== "none" ? (
+          <p className={styles.groupHint}>{dunningCopy.description}</p>
+        ) : null}
+        {b.subscription.dunningStage === "grace" &&
+        b.subscription.gracePeriodEndsAt !== null ? (
+          <p className={styles.groupHint}>
+            Grace window ends {formatWhen(b.subscription.gracePeriodEndsAt)}.
+          </p>
+        ) : null}
+
+        {overriddenSections.length > 0 ? (
+          <div className={styles.form}>
+            <p className={styles.groupHint}>
+              These sections were set by hand and no longer follow the plan
+              automatically:
+            </p>
+            {overriddenSections.map((section) => (
+              <div className={styles.readinessRow} key={section.sectionKey}>
+                <span>
+                  {sectionCopy[section.sectionKey as PlatformSectionKey]
+                    ?.label ?? section.sectionKey}{" "}
+                  — {section.enabled ? "on" : "off"}
+                </span>
+                <Button
+                  disabled={clearingOverride !== null}
+                  loading={clearingOverride === section.sectionKey}
+                  loadingLabel="Returning…"
+                  onClick={() =>
+                    void clearSectionOverride(tenantId, section.sectionKey)
+                  }
+                  size="sm"
+                >
+                  Return to plan control
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <div className={styles.formRow}>
+          <TextField
+            help="Multiplies true cost. 1.0 bills at cost; comping an account can go below 1.0."
+            label="Margin multiplier"
+            min="0"
+            onChange={(event) =>
+              setMarginDraft((current) =>
+                current === null
+                  ? current
+                  : { ...current, marginMultiplier: event.target.value },
+              )
+            }
+            step="0.01"
+            type="number"
+            value={marginDraft?.marginMultiplier ?? ""}
+          />
+          <TextField
+            help="Micro-units of currency added per reported usage row."
+            label="Fixed markup (micro)"
+            min="0"
+            onChange={(event) =>
+              setMarginDraft((current) =>
+                current === null
+                  ? current
+                  : { ...current, fixedMarkupMicro: event.target.value },
+              )
+            }
+            step="1"
+            type="number"
+            value={marginDraft?.fixedMarkupMicro ?? ""}
+          />
+          <TextField
+            help="Never bills a row below this, in micro-units."
+            label="Floor (micro)"
+            min="0"
+            onChange={(event) =>
+              setMarginDraft((current) =>
+                current === null
+                  ? current
+                  : { ...current, floorMicro: event.target.value },
+              )
+            }
+            step="1"
+            type="number"
+            value={marginDraft?.floorMicro ?? ""}
+          />
+        </div>
+        <div className={styles.clientActions}>
+          <Button
+            loading={marginBusy}
+            loadingLabel="Saving…"
+            onClick={() => void saveMarginPolicy(tenantId)}
+            size="sm"
+            variant="primary"
+          >
+            Save margin policy
+          </Button>
+        </div>
+
+        <div className={styles.formRow}>
+          <SelectField
+            help="Stripe drives this automatically once a subscription exists. Setting it here is a manual comp or debug override."
+            label="Plan (manual override)"
+            onChange={(event) =>
+              setSubscriptionDraft((current) =>
+                current === null || !isBillingPlan(event.target.value)
+                  ? current
+                  : { ...current, plan: event.target.value }
+              )
+            }
+            options={billingPlans.map((value) => ({
+              value,
+              label: billingPlanCopy[value],
+            }))}
+            value={subscriptionDraft?.plan ?? "unconfirmed"}
+          />
+          <SelectField
+            help="Also resets dunning and restores full plan entitlement."
+            label="Subscription status (manual override)"
+            onChange={(event) =>
+              setSubscriptionDraft((current) =>
+                current === null ||
+                !isBillingSubscriptionStatus(event.target.value)
+                  ? current
+                  : { ...current, subscriptionStatus: event.target.value }
+              )
+            }
+            options={billingSubscriptionStatuses.map((value) => ({
+              value,
+              label: subscriptionStatusCopy[value].label,
+            }))}
+            value={subscriptionDraft?.subscriptionStatus ?? "none"}
+          />
+        </div>
+        <div className={styles.clientActions}>
+          <Button
+            loading={subscriptionBusy}
+            loadingLabel="Saving…"
+            onClick={() => void saveSubscriptionOverride(tenantId)}
+            size="sm"
+          >
+            Set subscription manually
+          </Button>
+        </div>
+
+        <div className={styles.formRow}>
+          <SelectField
+            help="Opens hosted Stripe Checkout in a new tab. No card details ever reach this console."
+            label="Start checkout for"
+            onChange={(event) =>
+              isBillingPlan(event.target.value) &&
+              event.target.value !== "unconfirmed" &&
+              setCheckoutPlan(event.target.value)
+            }
+            options={billingPlans
+              .filter((value) => value !== "unconfirmed")
+              .map((value) => ({ value, label: billingPlanCopy[value] }))}
+            value={checkoutPlan}
+          />
+        </div>
+        <div className={styles.clientActions}>
+          <Button
+            loading={checkoutBusy}
+            loadingLabel="Opening…"
+            onClick={() => void startCheckout(tenantId)}
+            size="sm"
+            variant="primary"
+          >
+            Start Stripe Checkout
+          </Button>
+          <Button
+            disabled={b.subscription.stripeCustomerId === null}
+            loading={portalBusy}
+            loadingLabel="Opening…"
+            onClick={() => void openPortal(tenantId)}
+            size="sm"
+          >
+            Open billing portal
+          </Button>
+        </div>
+        <p className={styles.groupHint}>
+          Checkout and the billing portal need Stripe configured on this
+          deployment — if they are not, the button reports that clearly
+          instead of failing silently.
+        </p>
+
+        {billingNotice !== null ? (
+          <p className={styles.notice} role="status">
+            {billingNotice}
+          </p>
+        ) : null}
+        {billingError !== null ? (
+          <p className={styles.failure} role="alert">
+            {billingError}
+          </p>
+        ) : null}
+      </section>
     );
   }
 
@@ -1141,6 +1828,8 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
               })}
             </div>
           </section>
+
+          {renderBillingSection(client.tenant.tenantId)}
 
           <section className={styles.detailGroup}>
             <h5 className={styles.groupTitle}>Active platform sessions</h5>
@@ -1491,6 +2180,9 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
   const clientCard = (tenant: PlatformTenantSummary) => {
     const entered = session?.tenantId === tenant.tenantId;
     const updated = formatWhen(tenant.updatedAt);
+    const billing = billingOverview?.tenants.find(
+      (entry) => entry.tenantId === tenant.tenantId,
+    );
     return (
       <article
         className={styles.client}
@@ -1533,6 +2225,14 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
           <div>
             <dt>Sources</dt>
             <dd>{tenant.sources.toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt>Billed</dt>
+            <dd>
+              {billing === undefined
+                ? "—"
+                : formatMoney(billing.windowBilledMicro, billing.currency)}
+            </dd>
           </div>
         </dl>
 
