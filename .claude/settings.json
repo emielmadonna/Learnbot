@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__claude-in-chrome__javascript_tool",
+      "mcp__claude-in-chrome__computer"
+    ]
+  }
+}
