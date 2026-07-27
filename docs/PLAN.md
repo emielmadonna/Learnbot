@@ -76,15 +76,25 @@ switched off, and the platform admin still sees their data.
 limiting were listed here until 2026-07-27. All three have shipped and moved up to
 **Real**.)*
 
-### Built but not reachable
+### Built, reachable once the migrations are applied
 
 - **Upload processing and knowledge cleaning.** Section 4 shipped in Phase 10:
   `api/ingestion/extract`, `clean`, `review`, `publish`, plus `lib/ingestion/`, the
-  quarantine tables and `ingestion_cleaning_revisions`. **The gate is closed.** Files
-  still stop at `tenant-private/{tenant}/quarantine/` because nothing yet clears them for
-  processing — that clearance is Phase 17, the malware scan checkpoint, which is not
-  started. *Everything visual in chat remains downstream of this, so Phase 17 is the
-  keystone: one M phase standing in front of a finished XL one.*
+  quarantine tables and `ingestion_cleaning_revisions`. The gate that held it shut now
+  has a writer (Phase 17):
+
+  - `20260727110000` — the scanner-backed verdict path. A creator's session reads the
+    object; the server's `security.malware_scan` operation secret records the verdict
+    through a function `authenticated` cannot call. There is no pull worker because
+    there is no service-role key, and there must not be one.
+  - `20260727120000` — proportionate clearance. `text/plain` and `text/markdown` clear
+    themselves via `security_clear_inert_source`, recorded as `scanner: 'none'`,
+    `reason: 'inert_text'`. The media type is read from `upload_intents`, never from
+    the caller. When extraction learns PDF or DOCX, those types are absent from the
+    allowlist, so the gate closes again by itself and a real scanner becomes required.
+
+  **Neither migration is applied to the live database yet**, so uploads are still stuck
+  in production. Applying them is what makes Phase 10 run.
 
 ### Absent — no code path at all
 
@@ -577,9 +587,9 @@ Status is maintained here — update it in the same commit as the work.
 | 15 | Billing, margins, Stripe | L | **done** |
 | 9 | Character avatars | M | **done** |
 | 7 | The assistant / embeddable widget | XL | **done** |
-| 10 | Knowledge pipeline | XL | **built, gated closed** |
+| 10 | Knowledge pipeline | XL | **built; gate opens once 20260727110000 + 20260727120000 are applied** |
 | 12 | Operational debt | M | partial — rate limiting + outbox drain done; audit coverage and invitation email not |
-| 17 | Malware scan checkpoint | M | **not started — blocks Phase 10 end to end** |
+| 17 | Malware scan checkpoint | M | **done in code — migrations not yet applied to the live database** |
 | 11 | Figures in chat | M | not started |
 | 13 | Management MCP | M | not started |
 
