@@ -104,6 +104,20 @@ const ERROR_COPY: Readonly<Record<string, string>> = {
     "The editing service refused that request. Course editing may not be enabled on this database yet (its migration may still be unapplied). Nothing was changed.",
   request_failed:
     "That change could not be sent. Nothing was changed.",
+  access_denied:
+    "Your role cannot do that here. Nothing was changed.",
+  security_scan_pending:
+    "This file has not cleared malware scanning yet, so it cannot be extracted. It stays safely in quarantine.",
+  extraction_not_found:
+    "This upload has not been extracted yet. Extract it first, then clean it.",
+  revision_not_pending:
+    "That revision was already approved or replaced by a newer one. Reload to see its current state.",
+  unsupported_media_type:
+    "Only plain-text and markdown uploads go through this pipeline today.",
+  course_not_found:
+    "That course no longer exists in this workspace.",
+  object_not_found:
+    "The uploaded file could not be found in storage.",
 };
 
 /* ------------------------------------------------------------------------ */
@@ -709,6 +723,12 @@ function CourseLibrary({
               }))}
             />
             <UploadStateReportView />
+            <IngestionReviewView
+              courses={courses.map((course) => ({
+                courseId: course.courseId,
+                title: course.title,
+              }))}
+            />
           </div>
         </section>
       ) : null}
@@ -2562,6 +2582,480 @@ function UploadStateReportView() {
               })}
             </ul>
           )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------------ */
+/* Knowledge ingestion review (docs/PLAN.md Section 4, stages 4-5)          */
+/* ------------------------------------------------------------------------ */
+
+type QuarantineItem = {
+  readonly intentId: string;
+  readonly filename: string;
+  readonly mediaType: string;
+  readonly ingestionJobId: string | null;
+  readonly ingestionStatus: string | null;
+};
+
+type ReviewQueueItem = {
+  readonly jobId: string;
+  readonly courseId: string;
+  readonly filename: string | null;
+  readonly mediaType: string | null;
+  readonly revisionId: string;
+  readonly revisionNumber: number;
+  readonly status: string;
+  readonly stepCount: number;
+  readonly createdAt: string;
+};
+
+type DiffSegment = {
+  readonly op: "equal" | "delete" | "insert" | "replace";
+  readonly rawText: string;
+  readonly cleanedText: string;
+};
+
+type CleaningStepLog = {
+  readonly step: string;
+  readonly removals: readonly {
+    readonly originalText: string;
+    readonly replacementText: string;
+    readonly reason: string;
+  }[];
+};
+
+type RevisionDetail = {
+  readonly jobId: string;
+  readonly rawText: string;
+  readonly revision: {
+    readonly revisionId: string;
+    readonly cleanedText: string;
+    readonly steps: readonly CleaningStepLog[];
+    readonly diff: readonly DiffSegment[];
+    readonly status: string;
+  } | null;
+};
+
+const STEP_LABEL: Readonly<Record<string, string>> = {
+  disfluencies: "Disfluencies (um, uh, like, you know)",
+  false_starts: "False starts and stutters",
+  furniture: "Transcription furniture",
+  boilerplate: "Boilerplate (repeated across your uploads)",
+  sentence_repair: "Sentence repair",
+  structure_recovery: "Structure recovery",
+};
+
+async function postIngestion<T>(
+  path: string,
+  body: Record<string, unknown> = {},
+): Promise<{ ok: true; data: T } | { ok: false; code: string }> {
+  try {
+    const response = await fetch(path, {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const payload = (await response.json().catch(() => null)) as unknown;
+    if (!response.ok || !isRecord(payload) || payload.ok !== true) {
+      const code =
+        isRecord(payload) && typeof payload.code === "string"
+          ? payload.code
+          : "request_failed";
+      return { ok: false, code };
+    }
+    return { ok: true, data: payload as T };
+  } catch {
+    return { ok: false, code: "request_failed" };
+  }
+}
+
+async function getIngestion<T>(
+  path: string,
+): Promise<{ ok: true; data: T } | { ok: false; code: string }> {
+  try {
+    const response = await fetch(path, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    const payload = (await response.json().catch(() => null)) as unknown;
+    if (!response.ok || !isRecord(payload) || payload.ok !== true) {
+      const code =
+        isRecord(payload) && typeof payload.code === "string"
+          ? payload.code
+          : "request_failed";
+      return { ok: false, code };
+    }
+    return { ok: true, data: payload as T };
+  } catch {
+    return { ok: false, code: "request_failed" };
+  }
+}
+
+function DiffView({ diff }: { readonly diff: readonly DiffSegment[] }) {
+  return (
+    <div className={styles.diffBox}>
+      {diff.map((segment, index) => {
+        if (segment.op === "equal") {
+          return <span key={index}>{segment.cleanedText}</span>;
+        }
+        return (
+          <span key={index}>
+            {segment.rawText !== "" ? (
+              <span className={styles.diffDelete}>{segment.rawText}</span>
+            ) : null}
+            {segment.cleanedText !== "" ? (
+              <span className={styles.diffInsert}>{segment.cleanedText}</span>
+            ) : null}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Stages 4 (Review) and 5 (Publish) of the knowledge pipeline. A creator
+ * triggers extraction and cleaning for a quarantined text/markdown upload,
+ * sees the cleaned result beside the original with every removal
+ * highlighted, approves (or edits and approves), and publishes — the moment
+ * an upload actually becomes retrievable, which nothing in this console did
+ * before.
+ */
+function IngestionReviewView({
+  courses,
+}: {
+  readonly courses: readonly { courseId: string; title: string }[];
+}) {
+  const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
+  const [failure, setFailure] = useState<string | null>(null);
+  const [quarantineItems, setQuarantineItems] = useState<QuarantineItem[]>([]);
+  const [queueItems, setQueueItems] = useState<ReviewQueueItem[]>([]);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [busyJobId, setBusyJobId] = useState<string | null>(null);
+  const [openJobId, setOpenJobId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<RevisionDetail | null>(null);
+  const [detailState, setDetailState] = useState<"loading" | "ready" | "failed">("ready");
+  const [editedText, setEditedText] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // learning_ingestion_review_queue only ever returns *pending* revisions,
+  // so a course drops out of it the instant its last revision is approved —
+  // exactly the moment publishing becomes relevant. This tracks every
+  // course this session has approved something for, so the publish step
+  // does not disappear along with the review queue entry that triggered it.
+  const [approvedCourseIds, setApprovedCourseIds] = useState<readonly string[]>([]);
+
+  const refresh = useCallback(() => setReloadToken((value) => value + 1), []);
+
+  useEffect(() => {
+    let active = true;
+    setState("loading");
+    void (async () => {
+      const [uploads, queue] = await Promise.all([
+        getIngestion<{ items: QuarantineItem[] }>("/api/learning/uploads"),
+        getIngestion<{ items: ReviewQueueItem[] }>("/api/ingestion/review"),
+      ]);
+      if (!active) return;
+      if (!uploads.ok || !queue.ok) {
+        setFailure(
+          ERROR_COPY[!uploads.ok ? uploads.code : (queue as { ok: false; code: string }).code] ??
+            "The ingestion pipeline state could not be read.",
+        );
+        setState("failed");
+        return;
+      }
+      setQuarantineItems(uploads.data.items.filter((item) => item.ingestionJobId !== null));
+      setQueueItems(queue.data.items);
+      setState("ready");
+    })();
+    return () => {
+      active = false;
+    };
+  }, [reloadToken]);
+
+  const openDetail = useCallback(async (jobId: string) => {
+    setOpenJobId(jobId);
+    setDetail(null);
+    setEditedText(null);
+    setDetailState("loading");
+    const response = await getIngestion<RevisionDetail>(`/api/ingestion/review/${jobId}`);
+    if (!response.ok) {
+      setDetailState("failed");
+      return;
+    }
+    setDetail(response.data);
+    setDetailState("ready");
+  }, []);
+
+  const processUpload = useCallback(
+    async (jobId: string) => {
+      setBusyJobId(jobId);
+      setNotice(null);
+      const extracted = await postIngestion(`/api/ingestion/extract`, { jobId });
+      if (!extracted.ok) {
+        setNotice(
+          ERROR_COPY[extracted.code] ?? "Extraction failed. The file stays safely in quarantine.",
+        );
+        setBusyJobId(null);
+        return;
+      }
+      const cleaned = await postIngestion(`/api/ingestion/clean`, { jobId });
+      setBusyJobId(null);
+      if (!cleaned.ok) {
+        setNotice(ERROR_COPY[cleaned.code] ?? "Cleaning failed after extraction succeeded.");
+        return;
+      }
+      setNotice("Cleaned and ready for your review below.");
+      refresh();
+    },
+    [refresh],
+  );
+
+  const approve = useCallback(
+    async (jobId: string, revisionId: string, edited: string | null) => {
+      setBusyJobId(jobId);
+      const result = await postIngestion(`/api/ingestion/review/${jobId}`, {
+        revisionId,
+        editedText: edited,
+      });
+      setBusyJobId(null);
+      if (!result.ok) {
+        setNotice(ERROR_COPY[result.code] ?? "Approval failed. Nothing was published.");
+        return;
+      }
+      const approvedCourseId = queueItems.find((item) => item.jobId === jobId)?.courseId;
+      if (approvedCourseId !== undefined) {
+        setApprovedCourseIds((previous) =>
+          previous.includes(approvedCourseId) ? previous : [...previous, approvedCourseId],
+        );
+      }
+      setNotice("Approved. Publish below to make it retrievable.");
+      setOpenJobId(null);
+      refresh();
+    },
+    [queueItems, refresh],
+  );
+
+  const publish = useCallback(
+    async (courseId: string) => {
+      setBusyJobId(courseId);
+      const result = await postIngestion(`/api/ingestion/publish`, { courseId });
+      setBusyJobId(null);
+      if (!result.ok) {
+        setNotice(ERROR_COPY[result.code] ?? "Publishing failed. Nothing changed for students.");
+        return;
+      }
+      setNotice("Published. Approved uploads for this course are now retrievable.");
+      refresh();
+    },
+    [refresh],
+  );
+
+  const pendingQuarantine = quarantineItems.filter(
+    (item) => item.mediaType === "text/plain" || item.mediaType === "text/markdown",
+  );
+  const courseIdsWithApprovals = approvedCourseIds;
+
+  return (
+    <div className={styles.editorRoot}>
+      <div className={shared.sectionHead}>
+        <div>
+          <p className={shared.eyebrow}>Knowledge pipeline</p>
+          <h4 className={shared.subtitle}>Extract, clean, review, publish</h4>
+        </div>
+        <Button disabled={state === "loading"} onClick={refresh} size="sm">
+          Refresh
+        </Button>
+      </div>
+
+      {state === "loading" ? (
+        <p className={shared.loading} role="status">
+          Reading the ingestion pipeline state…
+        </p>
+      ) : null}
+      {state === "failed" ? (
+        <div className={styles.failure} role="alert">
+          <span className={styles.messageBody}>{failure}</span>
+        </div>
+      ) : null}
+      {notice !== null ? (
+        <p className={styles.notice}>
+          <span className={styles.messageBody}>{notice}</span>
+        </p>
+      ) : null}
+
+      {state === "ready" ? (
+        <>
+          <div>
+            <p className={shared.eyebrow}>Step 1 — extract and clean</p>
+            {pendingQuarantine.length === 0 ? (
+              <EmptyState
+                compact
+                description="Text and markdown uploads appear here once quarantined."
+                headline="Nothing waiting"
+              />
+            ) : (
+              <ul className={styles.recordList}>
+                {pendingQuarantine.map((item) => (
+                  <li className={styles.recordRow} key={item.intentId}>
+                    <span className={styles.recordText}>
+                      <b>{item.filename}</b>
+                      <small>{item.mediaType}</small>
+                    </span>
+                    <Button
+                      disabled={busyJobId !== null}
+                      loading={busyJobId === item.ingestionJobId}
+                      onClick={() => void processUpload(item.ingestionJobId!)}
+                      size="sm"
+                    >
+                      Extract &amp; clean
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <p className={shared.eyebrow}>Step 2 — review</p>
+            {queueItems.length === 0 ? (
+              <EmptyState
+                compact
+                description="Cleaned uploads awaiting your approval appear here."
+                headline="Nothing awaiting review"
+              />
+            ) : (
+              <ul className={styles.recordList}>
+                {queueItems.map((item) => (
+                  <li className={styles.recordRow} key={item.jobId}>
+                    <span className={styles.recordText}>
+                      <b>{item.filename ?? "Upload"}</b>
+                      <small>
+                        Revision #{item.revisionNumber} · {item.stepCount} cleaning steps
+                      </small>
+                    </span>
+                    <Button
+                      onClick={() =>
+                        void (openJobId === item.jobId ? setOpenJobId(null) : openDetail(item.jobId))
+                      }
+                      size="sm"
+                    >
+                      {openJobId === item.jobId ? "Close" : "Review"}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {openJobId !== null ? (
+              <div className={styles.reviewDetail}>
+                {detailState === "loading" ? (
+                  <p className={shared.loading} role="status">
+                    Loading the cleaned revision…
+                  </p>
+                ) : null}
+                {detailState === "failed" ? (
+                  <p className={styles.messageBody}>The revision could not be loaded.</p>
+                ) : null}
+                {detailState === "ready" && detail?.revision ? (
+                  <>
+                    <div>
+                      <p className={shared.eyebrow}>Cleaned vs. original</p>
+                      <DiffView diff={detail.revision.diff} />
+                    </div>
+                    <div>
+                      <p className={shared.eyebrow}>What was removed and why</p>
+                      <ul className={styles.stepList}>
+                        {detail.revision.steps
+                          .filter((step) => step.removals.length > 0)
+                          .map((step) => (
+                            <li className={styles.stepRow} key={step.step}>
+                              <b>{STEP_LABEL[step.step] ?? step.step}</b>
+                              {step.removals.slice(0, 8).map((removal, index) => (
+                                <span className={styles.stepRemoval} key={index}>
+                                  <s>{removal.originalText}</s>
+                                  {removal.replacementText !== ""
+                                    ? ` → "${removal.replacementText}"`
+                                    : ""}{" "}
+                                  — {removal.reason}
+                                </span>
+                              ))}
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                    <TextAreaField
+                      help="Edit the cleaned text before approving, if anything still needs a fix."
+                      hideLabel
+                      id={`ingestion-edit-${openJobId}`}
+                      label="Edited text"
+                      onChange={(event) => setEditedText(event.target.value)}
+                      rows={6}
+                      value={editedText ?? detail.revision.cleanedText}
+                    />
+                    <div className={styles.formActions}>
+                      <Button
+                        disabled={busyJobId !== null}
+                        loading={busyJobId === openJobId}
+                        onClick={() => void approve(openJobId, detail.revision!.revisionId, null)}
+                        variant="primary"
+                      >
+                        Approve as cleaned
+                      </Button>
+                      <Button
+                        disabled={busyJobId !== null || editedText === null}
+                        onClick={() =>
+                          void approve(openJobId, detail.revision!.revisionId, editedText)
+                        }
+                      >
+                        Approve my edits
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div>
+            <p className={shared.eyebrow}>Step 3 — publish</p>
+            {courseIdsWithApprovals.length === 0 ? (
+              <EmptyState
+                compact
+                description="Once a revision is approved, publish it here to make it retrievable."
+                headline="Nothing to publish yet"
+              />
+            ) : (
+              courseIdsWithApprovals.map((courseId) => (
+                <div className={styles.courseGroup} key={courseId}>
+                  <div className={styles.courseGroupHead}>
+                    <span className={styles.recordText}>
+                      <b>{courses.find((c) => c.courseId === courseId)?.title ?? courseId}</b>
+                      <small>
+                        Approved this session.{" "}
+                        {queueItems.filter((item) => item.courseId === courseId).length > 0
+                          ? `${queueItems.filter((item) => item.courseId === courseId).length} more revision(s) still awaiting review.`
+                          : "Nothing else awaiting review for this course."}
+                      </small>
+                    </span>
+                    <Button
+                      disabled={busyJobId !== null}
+                      loading={busyJobId === courseId}
+                      onClick={() => void publish(courseId)}
+                      variant="primary"
+                    >
+                      Publish approved uploads
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </>
       ) : null}
     </div>

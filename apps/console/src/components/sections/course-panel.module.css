@@ -539,3 +539,93 @@
     transition: none;
   }
 }
+
+/* --- knowledge ingestion review (docs/PLAN.md Section 4, stage 4) -------- */
+
+.reviewDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: var(--raised);
+}
+
+.diffBox {
+  max-height: 18rem;
+  overflow-y: auto;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  background: var(--bg);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Removals and insertions are marked by background tint plus a
+ * strikethrough/underline, never by color alone — the running text stays
+ * --ink so the two-gray rule (docs/PLAN.md Section 3.2) is never bent for a
+ * highlight.
+ */
+.diffDelete {
+  background: var(--danger-soft);
+  text-decoration: line-through;
+  text-decoration-color: var(--danger);
+  border-radius: 3px;
+}
+
+.diffInsert {
+  background: color-mix(in srgb, var(--positive) 16%, var(--bg));
+  text-decoration: underline;
+  text-decoration-color: var(--positive);
+  border-radius: 3px;
+}
+
+.stepList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stepRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem;
+}
+
+.stepRemoval {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.stepRemoval s {
+  color: var(--danger);
+  text-decoration-color: var(--danger);
+}
+
+.courseGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+}
+
+.courseGroupHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
