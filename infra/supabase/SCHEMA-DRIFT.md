@@ -145,10 +145,43 @@ applied to this project and must not be read as one. Verify against real objects
 (`to_regclass`, `pg_proc`, `pg_constraint`) instead, as was done here.
 
 Reconciling it means deciding, per repo migration, whether it is genuinely
-applied and then inserting its version — 47 rows, against a live production
-ledger. That was deliberately **not** done as part of this change, because
-recording a migration as applied when it is not would hide a real gap. It needs
-its own verified pass.
+applied and then inserting its version. **That verification pass has now been
+done — see below. The insert itself is still outstanding.**
+
+### The verification pass (2026-07-27)
+
+All 56 repo migrations were confirmed already applied to the live database.
+Nothing was taken on faith from a filename.
+
+- **47 migrations** — every object each one creates was checked for existence:
+  350 tables, views and functions across `public` and `app_private`.
+  **350/350 present.**
+- **7 migrations** create no new object; they patch a function body in place or
+  only move privileges. Each was checked for its own specific effect:
+
+  | Migration | Check | Result |
+  |---|---|---|
+  | `0013` | `auth_select_tenant` definition contains `#variable_conflict use_column` | true |
+  | `0014` | `onboarding_update_tenant_profile` contains the qualified `…profile.idempotency_key` | true |
+  | `0015` | `onboarding_accept_invitation` contains `#variable_conflict use_variable` | true |
+  | `0016` | some definition contains `on conflict on constraint identity_principals_pkey do nothing;` | true |
+  | `0018` | `service_role` lacks EXECUTE on `learning_get_workspace()` | true |
+  | `0025` | `service_role` lacks / `authenticated` holds EXECUTE on `learning_search_chunks_hybrid(…)` | true |
+  | `20260724183637` | index `platform_administrators_created_by_idx` **and** policy `platform_administrators_no_direct_access` exist | true |
+
+- **2 migrations** (`20260724212458`, `20260724212646`) were already in the ledger.
+
+Since the nine recovery files landed, nine versions now match, so **47 rows**
+remain to be recorded.
+
+The prepared, idempotent statement is committed at
+`infra/supabase/release/LEDGER_RECONCILE.sql`, together with the evidence above.
+Rows are inserted with a NULL `statements` array — the same thing
+`supabase migration repair --status applied` does; the SQL itself lives in
+`infra/supabase/migrations/`.
+
+Until that statement is run, `supabase db push` remains unsafe against this
+project.
 
 ## Drift safety, verified rather than assumed
 
