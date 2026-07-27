@@ -46,6 +46,19 @@
 -- a NULL here as "the body was lost".
 --
 -- Idempotent: `on conflict (version) do nothing`. Safe to re-run.
+--
+-- RUN 2026-07-27 -- PARTIALLY COMPLETE
+-- -----------------------------------
+-- The 47 rows below were inserted through the dashboard SQL editor, taking the
+-- ledger from 39 to 86 rows exactly as predicted. The applied text hashed
+-- SHA-256 2151add4b581b99f88cee72318657352c64cdeaee5700ba319078273a953b671,
+-- verified in the editor before running.
+--
+-- This file was then extended with the three 2026-07-27 Phase 17 versions,
+-- which it predated -- they were applied to the database that same day but are
+-- not yet in the ledger. Re-running this file inserts exactly those three and
+-- no-ops on the other 47. Expected afterwards: 89 rows, all 59 repo versions
+-- present.
 
 insert into supabase_migrations.schema_migrations (version, name)
 select v, n from (values
@@ -95,18 +108,23 @@ select v, n from (values
   ('20260726099000','operational_debt'),
   ('20260726100000','billing_stripe'),
   ('20260726101000','character_avatars'),
-  ('20260727090000','knowledge_ingestion_pipeline')
+  ('20260727090000','knowledge_ingestion_pipeline'),
+  -- Added after the 2026-07-27 run. Applied to the database that day (see
+  -- SCHEMA-DRIFT.md), never recorded in the ledger.
+  ('20260727100000','retire_platform_admin_client_detail'),
+  ('20260727110000','malware_scan_checkpoint'),
+  ('20260727120000','inert_source_scan_clearance')
 ) as t(v, n)
 on conflict (version) do nothing;
 
--- Expected afterwards: 39 + 47 = 86 rows, and every one of the 56 repo
+-- Expected afterwards: 39 + 47 + 3 = 89 rows, and every one of the 59 repo
 -- migration versions present. Confirm with:
 --
 --   select count(*) as ledger_rows from supabase_migrations.schema_migrations;
---   -- expect 86
+--   -- expect 89 (86 if only the original 47 have been inserted)
 --
 --   select count(*) as still_missing
---   from (values ('0001'),('20260727090000')) as t(v)   -- widen to all 56 to be thorough
+--   from (values ('0001'),('20260727120000')) as t(v)   -- widen to all 59 to be thorough
 --   where not exists (
 --     select 1 from supabase_migrations.schema_migrations s where s.version = t.v
 --   );
