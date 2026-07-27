@@ -3,83 +3,63 @@
  *
  * Primitives are CHROME. They are neutral, always, for every tenant — see the
  * brand rule at the top of app-shell/shell.module.css. A tenant's colour
- * reaches a primitive only through --ui-primary / --ui-accent, and only on the
- * parts a brand is allowed to touch: a filled button, a focus ring, a small
- * status accent.
+ * reaches a primitive only through --brand-primary / --brand-accent, and only
+ * on the parts a brand is allowed to touch: a filled button, a focus ring, a
+ * small status accent.
  *
- * Neutrals are NOT derived from --brand-text / --brand-surface any more. They
- * read from the fixed ramp in globals.css :root, so a card, an input, a
- * hairline and a muted label look the same whatever colours a tenant picks —
- * which is also the only way the contrast ratios below can be guaranteed.
+ * Neutrals read straight from the Graphite tokens in app/tokens.css — --ink,
+ * --muted, --hairline, --surface, --bg, --elev — the same ones that gate the
+ * rest of the console via scripts/check-contrast.mjs. There used to be a
+ * second, parallel neutral ramp here (--ui-ink / --n-ink / a fixed --n-0…900
+ * scale) that never varied by ground; primitives mounted outside the shell
+ * would render it correctly on light ground and incorrectly (fixed instead
+ * of dark) on dark ground. That ramp is gone — see docs/PLAN.md Phase 16.
+ *
+ * A handful of `--ui-*` names below survive as derived aliases, not because
+ * they are a competing system, but because Graphite has no token for them:
+ * a "soft" wash of --good/--warn, a shadow, a focus ring. Each is built only
+ * from Graphite tokens (or the --brand-* pass-through) and colour-mix — never
+ * a literal hex.
  */
 .uiRoot {
-  /* Brand contract — accent surfaces only. */
-  --ui-primary: var(--brand-primary);
-  --ui-accent: var(--brand-accent);
-  --ui-on-primary: var(--brand-on-primary);
-
-  /* Neutral ink for primitives. Deliberately not the tenant's text colour. */
-  --ui-text: var(--n-ink);
+  /*
+   * Derived brand washes. --brand-primary / --brand-accent are the tenant
+   * contract published by app-shell (components/app-shell/brand.ts) — not a
+   * Graphite token, and out of this phase's scope. See README.md.
+   */
+  --ui-primary-soft: color-mix(in srgb, var(--brand-primary) 12%, var(--surface));
+  --ui-primary-strong: color-mix(in srgb, var(--brand-primary) 84%, var(--ink));
+  --ui-accent-soft: color-mix(in srgb, var(--brand-accent) 20%, var(--surface));
+  --ui-focus: color-mix(in srgb, var(--brand-primary) 42%, transparent);
 
   /*
-   * Two planes, not one. --ui-canvas is the page ground; --ui-surface is the
-   * raised plane a primitive actually paints on, lifted away from the canvas
-   * so a card reads as sitting above the page rather than merging into it.
-   * Re-stated here (rather than only inherited) so a primitive mounted outside
-   * the shell still resolves both.
+   * Status washes. Graphite defines exactly two status colours, --good and
+   * --warn (docs/PLAN.md Section 3.1) — there is no separate "critical" or
+   * "notice" hue. The old three-tier danger/warning/positive system (plus a
+   * fourth, near-identical "critical" tone declared again in app/globals.css)
+   * collapsed into these two on purpose; see the Phase 16 report for the full
+   * before/after. Graphite has no "soft" wash token, so these are synthesised
+   * the same way --accent-wash is: a percentage of the solid colour mixed
+   * into --surface.
    */
-  --ui-canvas: var(--n-canvas);
-  --ui-surface: var(--n-0);
-
-  /*
-   * Derived neutrals. The percentages are the tuned ones — 70% / 64% are the
-   * WCAG 2.2 AA floors for body and small meta text — but they now mix a fixed
-   * neutral ink into a fixed neutral ground, so the ratios are guaranteed
-   * rather than dependent on whatever palette a tenant saved. Do not lighten.
-   */
-  --ui-muted: color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas));
-  --ui-faint: color-mix(in srgb, var(--n-ink) 64%, var(--n-canvas));
-  --ui-line: color-mix(in srgb, var(--n-ink) 9%, var(--n-canvas));
-  --ui-line-strong: color-mix(in srgb, var(--n-ink) 20%, var(--n-canvas));
-  --ui-raised: color-mix(in srgb, var(--n-ink) 3%, var(--ui-surface));
-  --ui-sunken: color-mix(in srgb, var(--n-ink) 6%, var(--ui-surface));
-
-  /* Derived brand washes. */
-  --ui-primary-soft: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-surface));
-  --ui-primary-strong: color-mix(in srgb, var(--ui-primary) 84%, var(--ui-text));
-  --ui-accent-soft: color-mix(in srgb, var(--ui-accent) 20%, var(--ui-surface));
-
-  /*
-   * Semantic status hues. These are not brand colours: they carry meaning
-   * (a danger button must not read as "on brand") and are mixed into the
-   * surface so they stay legible on a light or a dark tenant surface.
-   */
-  --ui-danger: color-mix(in srgb, #b23a22 78%, var(--ui-text));
-  --ui-danger-soft: color-mix(in srgb, #b23a22 11%, var(--ui-surface));
-  --ui-warning: color-mix(in srgb, #9a6f18 78%, var(--ui-text));
-  --ui-warning-soft: color-mix(in srgb, #c8912c 16%, var(--ui-surface));
-  --ui-positive: color-mix(in srgb, #1f7a55 78%, var(--ui-text));
-  --ui-positive-soft: color-mix(in srgb, #1f7a55 12%, var(--ui-surface));
-
-  --ui-focus: color-mix(in srgb, var(--ui-primary) 42%, transparent);
+  --ui-danger-soft: color-mix(in srgb, var(--warn) 11%, var(--surface));
+  --ui-warning-soft: color-mix(in srgb, var(--warn) 16%, var(--surface));
+  --ui-positive-soft: color-mix(in srgb, var(--good) 12%, var(--surface));
 
   /*
    * Layered and low-contrast: a tight contact shadow under a wide soft pool.
    * A single heavy drop shadow is what makes a surface look like a generic
-   * admin card, so there isn't one here.
+   * admin card, so there isn't one here. Graphite has no shadow token, so
+   * this stays a local derivation off --ink.
    */
   --ui-shadow:
-    0 1px 3px color-mix(in srgb, var(--ui-text) 4%, transparent),
-    0 10px 28px color-mix(in srgb, var(--ui-text) 6%, transparent);
+    0 1px 3px color-mix(in srgb, var(--ink) 4%, transparent),
+    0 10px 28px color-mix(in srgb, var(--ink) 6%, transparent);
   --ui-shadow-lg:
-    0 4px 14px color-mix(in srgb, var(--ui-text) 5%, transparent),
-    0 28px 70px color-mix(in srgb, var(--ui-text) 12%, transparent);
+    0 4px 14px color-mix(in srgb, var(--ink) 5%, transparent),
+    0 28px 70px color-mix(in srgb, var(--ink) 12%, transparent);
 
-  --ui-radius-sm: 8px;
-  --ui-radius: 12px;
-  --ui-radius-lg: 18px;
-
-  color: var(--ui-text);
+  color: var(--ink);
   font-family: var(--font-ui);
   font-size: var(--text-md);
   line-height: var(--leading-normal);

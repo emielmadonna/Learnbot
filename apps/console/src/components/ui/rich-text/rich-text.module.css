@@ -9,7 +9,7 @@
 .prose {
   display: grid;
   gap: var(--space-3);
-  color: var(--ui-text);
+  color: var(--ink);
   font-size: var(--text-sm);
   line-height: 1.62;
   overflow-wrap: anywhere;
@@ -27,7 +27,7 @@
 .prose h3,
 .prose h4 {
   margin: var(--space-2) 0 0;
-  color: var(--ui-text);
+  color: var(--ink);
   font-weight: var(--weight-strong);
   letter-spacing: var(--tracking-snug);
   line-height: 1.25;
@@ -43,7 +43,7 @@
 
 .prose h4 {
   font-size: var(--text-sm);
-  color: var(--ui-muted);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
 }
@@ -61,14 +61,14 @@
 }
 
 .prose li::marker {
-  color: var(--ui-faint);
+  color: var(--muted);
 }
 
 .prose blockquote {
   margin: 0;
   padding: var(--space-1) 0 var(--space-1) var(--space-4);
-  border-left: 2px solid var(--ui-line-strong);
-  color: var(--ui-muted);
+  border-left: 2px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
+  color: var(--muted);
   font-style: italic;
 }
 
@@ -78,9 +78,9 @@
 
 .prose :not(pre) > code {
   padding: 1px 5px;
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: 4px;
-  background: var(--ui-sunken);
+  background: var(--bg);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.92em;
 }
@@ -88,9 +88,9 @@
 .code {
   margin: 0;
   padding: var(--space-3);
-  border: 1px solid var(--ui-line);
-  border-radius: var(--ui-radius-sm);
-  background: var(--ui-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--bg);
   /* Wide code scrolls here, never the page. */
   overflow-x: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -103,7 +103,7 @@
   content: attr(data-language);
   display: block;
   margin-bottom: var(--space-2);
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: 10px;
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
@@ -114,11 +114,11 @@
   height: 0;
   margin: var(--space-2) 0;
   border: 0;
-  border-top: 1px solid var(--ui-line);
+  border-top: 1px solid var(--hairline);
 }
 
 .link {
-  color: var(--ui-primary);
+  color: var(--brand-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -155,7 +155,7 @@
   min-width: 15px;
   margin-left: 2px;
   padding: 0 3px;
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
   border-radius: 999px;
   background: var(--ui-primary-soft);
   color: var(--ui-primary-strong);

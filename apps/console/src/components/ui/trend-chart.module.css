@@ -12,7 +12,7 @@
 }
 
 .caption {
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-2xs);
   font-weight: var(--weight-heavy);
   letter-spacing: 0.09em;
@@ -20,7 +20,7 @@
 }
 
 .latest {
-  color: var(--ui-text);
+  color: var(--ink);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-strong);
@@ -33,13 +33,13 @@
 }
 
 .area {
-  fill: var(--ui-primary);
+  fill: var(--brand-primary);
   opacity: 0.13;
 }
 
 .line {
   fill: none;
-  stroke: var(--ui-primary);
+  stroke: var(--brand-primary);
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2;
@@ -47,13 +47,13 @@
 }
 
 .baseline {
-  stroke: var(--ui-line);
+  stroke: var(--hairline);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
 
 .marker {
-  stroke: var(--ui-primary);
+  stroke: var(--brand-primary);
   stroke-linecap: round;
   stroke-width: 7;
   vector-effect: non-scaling-stroke;
@@ -64,12 +64,12 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-2xs);
 }
 
 .gap {
-  color: var(--ui-warning);
+  color: var(--warn);
   font-size: var(--text-2xs);
   font-weight: var(--weight-strong);
 }

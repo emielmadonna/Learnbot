@@ -34,15 +34,15 @@
 
 /* Status surface: the hue carries the meaning, so it must not read as brand. */
 .notice {
-  border: 1px solid color-mix(in srgb, #9a6f18 24%, var(--ui-line));
+  border: 1px solid color-mix(in srgb, var(--warn) 24%, var(--hairline));
   background: var(--ui-notice-soft);
-  color: var(--ui-ink);
+  color: var(--ink);
 }
 
 .alert {
-  border: 1px solid color-mix(in srgb, var(--ui-critical) 28%, var(--ui-line));
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--hairline));
   background: var(--ui-critical-soft);
-  color: var(--ui-critical);
+  color: var(--warn);
 }
 
 /* ------------------------------------------------------------------ hero
@@ -77,7 +77,7 @@
 
 .heroEyebrow {
   margin: 0 0 var(--space-1);
-  color: color-mix(in srgb, var(--brand-primary) 72%, var(--ui-muted));
+  color: color-mix(in srgb, var(--brand-primary) 72%, var(--muted));
   font-size: var(--text-xs);
   font-weight: var(--weight-heavy);
   letter-spacing: var(--tracking-wide);
@@ -91,7 +91,7 @@
 .heroTitle {
   max-width: 20ch;
   margin: 0;
-  color: var(--n-ink);
+  color: var(--ink);
   font-size: var(--text-display);
   font-weight: var(--weight-strong);
   letter-spacing: var(--tracking-display);
@@ -103,14 +103,14 @@
 .heroLede {
   max-width: 56ch;
   margin: 0;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-lg);
   line-height: var(--leading-relaxed);
 }
 
 .heroSigned {
   margin: 0;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-sm);
 }
 
@@ -132,15 +132,15 @@
   align-content: start;
   min-width: 0;
   padding: var(--space-6);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--ui-surface);
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
 
 .heroPanelLabel {
   margin: 0;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-2xs);
   font-weight: var(--weight-heavy);
   letter-spacing: var(--tracking-wide);
@@ -153,7 +153,7 @@
   align-items: baseline;
   gap: var(--space-2);
   margin: 0;
-  color: var(--n-ink);
+  color: var(--ink);
   font-size: var(--text-3xl);
   font-weight: var(--weight-strong);
   letter-spacing: var(--tracking-display);
@@ -161,7 +161,7 @@
 }
 
 .heroPanelValue > span {
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-md);
   font-weight: var(--weight-regular);
   letter-spacing: 0;
@@ -170,7 +170,7 @@
 
 .heroPanelAbsent {
   margin: 0;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-xl);
   font-weight: var(--weight-medium);
   letter-spacing: var(--tracking-snug);
@@ -179,8 +179,8 @@
 .heroPanelFoot {
   margin: 0;
   padding-top: var(--space-3);
-  border-top: 1px solid var(--ui-line);
-  color: var(--ui-muted);
+  border-top: 1px solid var(--hairline);
+  color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
@@ -204,7 +204,7 @@
   justify-content: space-between;
   gap: var(--space-3) var(--space-6);
   padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--ui-line);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .sectionHeading {
@@ -222,7 +222,7 @@
 
 .eyebrow {
   margin: 0;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-2xs);
   font-weight: var(--weight-heavy);
   letter-spacing: var(--tracking-wide);
@@ -231,7 +231,7 @@
 
 .sectionTitle {
   margin: 0;
-  color: var(--n-ink);
+  color: var(--ink);
   font-size: var(--text-2xl);
   font-weight: var(--weight-strong);
   letter-spacing: var(--tracking-tight);
@@ -241,7 +241,7 @@
 .lede {
   max-width: 68ch;
   margin: 0;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-md);
   line-height: var(--leading-relaxed);
 }
@@ -254,14 +254,14 @@
 
 .status {
   margin: 0;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-md);
 }
 
 .footnote {
   max-width: 68ch;
   margin: 0;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
 }
@@ -269,8 +269,8 @@
 .countChip {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-pill);
-  background: var(--ui-surface-sunken);
-  color: var(--ui-muted);
+  background: var(--bg);
+  color: var(--muted);
   font-size: var(--text-xs);
   font-weight: var(--weight-strong);
   white-space: nowrap;
@@ -323,25 +323,25 @@
 }
 
 .linkPrimary:hover {
-  background: color-mix(in srgb, var(--brand-primary) 86%, var(--n-ink));
+  background: color-mix(in srgb, var(--brand-primary) 86%, var(--ink));
 }
 
 .linkSecondary {
-  border-color: var(--ui-line-strong);
-  background: var(--ui-surface);
-  color: var(--n-ink);
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
+  background: var(--surface);
+  color: var(--ink);
 }
 
 /* Secondary buttons are chrome: neutral at rest and neutral on hover. */
 .linkSecondary:hover {
-  border-color: var(--ui-line-strong);
-  background: var(--ui-surface-sunken);
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
+  background: var(--bg);
 }
 
 .linkQuiet {
   padding-inline: var(--space-2);
   background: transparent;
-  color: color-mix(in srgb, var(--brand-primary) 82%, var(--n-ink));
+  color: color-mix(in srgb, var(--brand-primary) 82%, var(--ink));
 }
 
 .linkQuiet:hover {
@@ -356,10 +356,10 @@
   align-content: start;
   min-width: 0;
   padding: var(--space-6);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--ui-surface);
-  color: var(--n-ink);
+  background: var(--surface);
+  color: var(--ink);
   text-decoration: none;
   transition:
     border-color var(--motion-fast) var(--motion-ease),
@@ -368,7 +368,7 @@
 
 /* Hover lifts the card; it does not tint it. */
 .quickAction:hover {
-  border-color: var(--ui-line-strong);
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
   box-shadow: var(--shadow-md);
 }
 
@@ -383,11 +383,11 @@
 }
 
 .quickTitle > span {
-  color: color-mix(in srgb, var(--brand-primary) 78%, var(--n-ink));
+  color: color-mix(in srgb, var(--brand-primary) 78%, var(--ink));
 }
 
 .quickCopy {
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
 }
@@ -415,15 +415,15 @@
   gap: var(--space-3) var(--space-5);
   min-width: 0;
   padding: var(--space-5);
-  border: 1px solid var(--ui-line);
-  border-left: 3px solid var(--ui-line-strong);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
   border-radius: var(--radius-md);
-  background: var(--ui-surface);
+  background: var(--surface);
 }
 
 .attentionBlocking {
-  border-left-color: var(--ui-critical);
-  background: color-mix(in srgb, var(--ui-critical-soft) 55%, var(--ui-surface));
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--ui-critical-soft) 55%, var(--surface));
 }
 
 .attentionCopy {
@@ -435,7 +435,7 @@
 
 .attentionHeadline {
   margin: 0;
-  color: var(--n-ink);
+  color: var(--ink);
   font-size: var(--text-md);
   font-weight: var(--weight-strong);
   letter-spacing: var(--tracking-snug);
@@ -445,7 +445,7 @@
 .attentionDetail {
   max-width: 68ch;
   margin: 0;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
 }
@@ -458,10 +458,10 @@
   align-content: start;
   min-width: 0;
   padding: var(--space-6);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--ui-surface);
-  color: var(--n-ink);
+  background: var(--surface);
+  color: var(--ink);
   text-align: left;
   text-decoration: none;
 }
@@ -474,7 +474,7 @@
 }
 
 .cardLink:hover {
-  border-color: var(--ui-line-strong);
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
 }
@@ -499,7 +499,7 @@
 .cardCopy {
   display: -webkit-box;
   overflow: hidden;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
   -webkit-box-orient: vertical;
@@ -511,21 +511,21 @@
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-5);
   padding-top: var(--space-1);
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-xs);
 }
 
 .cardFacts b {
-  color: var(--n-ink);
+  color: var(--ink);
   font-weight: var(--weight-strong);
 }
 
 .cardWarn {
-  color: var(--ui-critical);
+  color: var(--warn);
 }
 
 .cardWarn b {
-  color: var(--ui-critical);
+  color: var(--warn);
 }
 
 /* ------------------------------------------------------------------ pills */
@@ -544,12 +544,12 @@
 
 .pillLive {
   background: var(--ui-positive-soft);
-  color: var(--ui-positive);
+  color: var(--good);
 }
 
 .pillDraft {
-  background: var(--ui-surface-sunken);
-  color: var(--ui-ink-soft);
+  background: var(--bg);
+  color: var(--ink);
 }
 
 /* --------------------------------------------------- learner assistant dock */
@@ -561,10 +561,10 @@
   width: 100%;
   min-width: 0;
   padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--ui-surface);
-  color: var(--n-ink);
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
   font: inherit;
   text-align: left;
@@ -574,7 +574,7 @@
 }
 
 .assistantDock:hover {
-  border-color: color-mix(in srgb, var(--brand-primary) 34%, var(--ui-line));
+  border-color: color-mix(in srgb, var(--brand-primary) 34%, var(--hairline));
   box-shadow: var(--shadow-md);
 }
 
@@ -586,7 +586,7 @@
   background:
     radial-gradient(
       circle at 32% 28%,
-      color-mix(in srgb, var(--brand-accent) 82%, var(--n-canvas)) 0,
+      color-mix(in srgb, var(--brand-accent) 82%, var(--bg)) 0,
       var(--brand-primary) 74%
     );
 }
@@ -605,7 +605,7 @@
 }
 
 .dockCopy small {
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-sm);
 }
 
@@ -617,7 +617,7 @@
   width: 100%;
   height: 6px;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--brand-primary) 12%, var(--ui-surface-sunken));
+  background: color-mix(in srgb, var(--brand-primary) 12%, var(--bg));
 }
 
 .progressTrack > span {

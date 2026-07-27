@@ -21,7 +21,7 @@
   flex-wrap: wrap;
   gap: var(--space-4);
   padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--ui-line);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .toolbarText {
@@ -43,7 +43,7 @@
 
 .eyebrow {
   margin: 0;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-xs);
   font-weight: var(--weight-heavy);
   letter-spacing: var(--tracking-wide);
@@ -52,13 +52,13 @@
 
 .rangeLine {
   margin: 0;
-  color: var(--ui-ink-soft);
+  color: var(--ink);
   font-size: var(--text-md);
 }
 
 .status {
   margin: 0;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-sm);
 }
 
@@ -68,16 +68,16 @@
   display: grid;
   gap: var(--space-4);
   padding: var(--space-5);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--ui-surface);
+  background: var(--surface);
 }
 
 /* The headline surface: question distribution reads first. It earns emphasis
    from size and elevation, not from a brand-tinted border. */
 .sectionHeadline {
   padding: clamp(var(--space-5), 2.4vw, var(--space-7));
-  border-color: var(--ui-line-strong);
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
   box-shadow: var(--shadow-sm);
 }
 
@@ -97,7 +97,7 @@
 
 .sectionTitle {
   margin: 0;
-  color: var(--n-ink);
+  color: var(--ink);
   font-size: var(--text-xl);
   font-weight: var(--weight-strong);
   letter-spacing: var(--tracking-tight);
@@ -111,7 +111,7 @@
 .sectionLede {
   max-width: 68ch;
   margin: 0;
-  color: var(--ui-ink-soft);
+  color: var(--ink);
   font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
@@ -159,10 +159,10 @@
   display: grid;
   gap: var(--space-4);
   padding: var(--space-4);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-left: 3px solid var(--brand-primary);
   border-radius: var(--radius-md);
-  background: var(--ui-surface-sunken);
+  background: var(--bg);
 }
 
 .drillNested {
@@ -179,14 +179,14 @@
 
 .drillTitle {
   margin: 0;
-  color: var(--n-ink);
+  color: var(--ink);
   font-size: var(--text-lg);
   font-weight: var(--weight-strong);
 }
 
 .drillEyebrow {
   margin: 0 0 var(--space-1);
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-xs);
   font-weight: var(--weight-heavy);
   letter-spacing: var(--tracking-wide);
@@ -208,14 +208,14 @@
 }
 
 .factLabel {
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .factValue {
-  color: var(--n-ink);
+  color: var(--ink);
   font-size: var(--text-md);
   font-weight: var(--weight-strong);
 }
@@ -234,14 +234,14 @@
   display: grid;
   gap: var(--space-2);
   padding: var(--space-3);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
-  background: var(--ui-surface-sunken);
+  background: var(--bg);
 }
 
 .questionText {
   margin: 0;
-  color: var(--n-ink);
+  color: var(--ink);
   font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
@@ -255,9 +255,9 @@
 
 .tag {
   padding: 2px var(--space-2);
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
   border-radius: var(--radius-sm);
-  color: var(--ui-ink-soft);
+  color: var(--ink);
   font-size: var(--text-xs);
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -265,15 +265,15 @@
 
 /* Semantic, never brand: an ungrounded answer must not read as "on brand". */
 .tagUngrounded {
-  border-color: color-mix(in srgb, var(--ui-critical) 30%, var(--ui-line));
+  border-color: color-mix(in srgb, var(--warn) 30%, var(--hairline));
   background: var(--ui-notice-soft);
-  color: var(--ui-ink);
+  color: var(--ink);
 }
 
 .tagGrounded {
-  border-color: color-mix(in srgb, var(--ui-positive) 40%, var(--ui-line));
+  border-color: color-mix(in srgb, var(--good) 40%, var(--hairline));
   background: var(--ui-positive-soft);
-  color: var(--ui-positive);
+  color: var(--good);
 }
 
 .signalList {
@@ -288,26 +288,26 @@
   display: grid;
   gap: var(--space-3);
   padding: var(--space-4);
-  border: 1px solid var(--ui-line);
-  border-left: 3px solid var(--ui-line-strong);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
   border-radius: var(--radius-md);
-  background: var(--ui-surface-sunken);
+  background: var(--bg);
 }
 
 .signalCritical {
-  border-left-color: var(--ui-critical);
+  border-left-color: var(--warn);
 }
 
 .signalElevated {
   border-left-color: color-mix(
     in srgb,
-    var(--ui-critical) 55%,
-    var(--ui-line-strong)
+    var(--warn) 55%,
+    color-mix(in srgb, var(--ink) 30%, var(--hairline))
   );
 }
 
 .signalWatch {
-  border-left-color: var(--ui-line-strong);
+  border-left-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
 }
 
 .signalReviewed {
@@ -324,7 +324,7 @@
 
 .signalHeadline {
   margin: 0;
-  color: var(--n-ink);
+  color: var(--ink);
   font-size: var(--text-md);
   font-weight: var(--weight-strong);
   line-height: var(--leading-tight);
@@ -332,7 +332,7 @@
 
 .signalDetail {
   margin: 0;
-  color: var(--ui-ink-soft);
+  color: var(--ink);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
@@ -351,14 +351,14 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-xs);
 }
 
 .evidenceRef {
   padding: 1px var(--space-2);
   border-radius: var(--radius-sm);
-  background: var(--ui-surface-sunken);
+  background: var(--bg);
   font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
   word-break: break-all;
 }
@@ -367,7 +367,7 @@
 
 .note {
   margin: 0;
-  color: var(--ui-ink-soft);
+  color: var(--ink);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
@@ -377,7 +377,7 @@
   padding: var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--ui-notice-soft);
-  color: var(--ui-ink);
+  color: var(--ink);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
@@ -387,7 +387,7 @@
   gap: var(--space-2);
   margin: 0;
   padding: 0 0 0 var(--space-4);
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
@@ -399,14 +399,14 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   padding: var(--space-3);
-  border: 1px dashed var(--ui-line-strong);
+  border: 1px dashed color-mix(in srgb, var(--ink) 30%, var(--hairline));
   border-radius: var(--radius-sm);
-  color: var(--ui-ink-soft);
+  color: var(--ink);
   font-size: var(--text-sm);
 }
 
 .unattributed strong {
-  color: var(--n-ink);
+  color: var(--ink);
   font-weight: var(--weight-strong);
 }
 
@@ -414,13 +414,13 @@
 
 .definitions {
   padding: var(--space-4);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--ui-surface-sunken);
+  background: var(--bg);
 }
 
 .definitions > summary {
-  color: var(--n-ink);
+  color: var(--ink);
   cursor: pointer;
   font-size: var(--text-md);
   font-weight: var(--weight-strong);
@@ -439,14 +439,14 @@
 }
 
 .definitionList dt {
-  color: var(--n-ink);
+  color: var(--ink);
   font-size: var(--text-sm);
   font-weight: var(--weight-strong);
 }
 
 .definitionList dd {
   margin: var(--space-1) 0 0;
-  color: var(--ui-ink-soft);
+  color: var(--ink);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
@@ -455,14 +455,14 @@
   margin: 0;
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--ui-surface-sunken);
-  color: var(--ui-ink-soft);
+  background: var(--bg);
+  color: var(--ink);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
 
 .boundary strong {
-  color: var(--n-ink);
+  color: var(--ink);
 }
 
 @media (max-width: 640px) {
@@ -486,10 +486,10 @@
 .surfaceNote {
   margin: 0;
   padding: var(--space-3);
-  border-left: 2px solid var(--ui-line-strong);
+  border-left: 2px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
   border-radius: var(--radius-sm);
-  background: var(--ui-surface-sunken);
-  color: var(--ui-muted);
+  background: var(--bg);
+  color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
@@ -506,14 +506,14 @@
   display: grid;
   gap: var(--space-2);
   padding: var(--space-3);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
-  background: var(--ui-surface-sunken);
+  background: var(--bg);
 }
 
 .deflectionTitle {
   margin: 0;
-  color: var(--n-ink);
+  color: var(--ink);
   font-size: var(--text-md);
   font-weight: 600;
   line-height: var(--leading-tight);
@@ -524,7 +524,7 @@
 .deflectionPath {
   margin: 0;
   overflow-wrap: anywhere;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);

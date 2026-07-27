@@ -8,16 +8,16 @@
  */
 
 .editorRoot {
-  --edge: color-mix(in srgb, var(--n-ink) 9%, var(--n-canvas));
-  --edge-strong: color-mix(in srgb, var(--n-ink) 20%, var(--n-canvas));
-  --muted: color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas));
-  --raised: color-mix(in srgb, var(--n-ink) 4%, var(--n-canvas));
-  --sunken: color-mix(in srgb, var(--n-ink) 7%, var(--n-canvas));
-  --danger: color-mix(in srgb, #b23a22 78%, var(--n-ink));
-  --danger-soft: color-mix(in srgb, #b23a22 11%, var(--n-canvas));
-  --warning: color-mix(in srgb, #9a6f18 78%, var(--n-ink));
-  --warning-soft: color-mix(in srgb, #c8912c 16%, var(--n-canvas));
-  --positive: color-mix(in srgb, #1f7a55 78%, var(--n-ink));
+  --edge: color-mix(in srgb, var(--ink) 9%, var(--bg));
+  --edge-strong: color-mix(in srgb, var(--ink) 20%, var(--bg));
+  --muted: color-mix(in srgb, var(--ink) 70%, var(--bg));
+  --raised: color-mix(in srgb, var(--ink) 4%, var(--bg));
+  --sunken: color-mix(in srgb, var(--ink) 7%, var(--bg));
+  --danger: color-mix(in srgb, var(--warn) 78%, var(--ink));
+  --danger-soft: color-mix(in srgb, var(--warn) 11%, var(--bg));
+  --warning: color-mix(in srgb, var(--warn) 78%, var(--ink));
+  --warning-soft: color-mix(in srgb, var(--warn) 16%, var(--bg));
+  --positive: color-mix(in srgb, var(--good) 78%, var(--ink));
 
   display: flex;
   flex-direction: column;
@@ -107,7 +107,7 @@
 .moduleCard {
   border: 1px solid var(--edge);
   border-radius: 16px;
-  background: var(--n-canvas);
+  background: var(--bg);
   overflow: hidden;
 }
 
@@ -266,7 +266,7 @@
 }
 
 .ordinalDone {
-  background: color-mix(in srgb, var(--positive) 16%, var(--n-canvas));
+  background: color-mix(in srgb, var(--positive) 16%, var(--bg));
   color: var(--positive);
 }
 
@@ -389,9 +389,9 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
-  border: 1px solid color-mix(in srgb, #9a6f18 45%, transparent);
-  background: color-mix(in srgb, #c8912c 16%, var(--n-canvas));
-  color: color-mix(in srgb, #9a6f18 78%, var(--n-ink));
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 16%, var(--bg));
+  color: color-mix(in srgb, var(--warn) 78%, var(--ink));
 }
 
 /* --- publishing ---------------------------------------------------------- */
@@ -437,7 +437,7 @@
   border: 1px solid var(--edge);
   border-radius: 12px;
   padding: 0.75rem;
-  background: var(--n-canvas);
+  background: var(--bg);
 }
 
 .formRow {
@@ -516,7 +516,7 @@
 
 .recordCurrent {
   border-color: color-mix(in srgb, var(--brand-primary) 45%, transparent);
-  background: color-mix(in srgb, var(--brand-primary) 7%, var(--n-canvas));
+  background: color-mix(in srgb, var(--brand-primary) 7%, var(--bg));
 }
 
 .scroller {

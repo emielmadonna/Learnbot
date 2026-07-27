@@ -53,12 +53,12 @@
   flex-direction: column;
   gap: var(--space-4);
   padding: var(--space-5);
-  border: 1px solid color-mix(in srgb, var(--n-ink) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--n-canvas) 40%, #fff);
+  background: color-mix(in srgb, var(--bg) 40%, var(--surface));
   box-shadow:
-    0 1px 3px color-mix(in srgb, var(--n-ink) 4%, transparent),
-    0 10px 28px color-mix(in srgb, var(--n-ink) 5%, transparent);
+    0 1px 3px color-mix(in srgb, var(--ink) 4%, transparent),
+    0 10px 28px color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .cardHead {
@@ -82,18 +82,18 @@
 .securityLead,
 .previewNote {
   margin: 0;
-  color: color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas));
+  color: color-mix(in srgb, var(--ink) 70%, var(--bg));
   font-size: var(--text-sm);
   line-height: var(--leading-normal, 1.55);
 }
 
 .meta {
-  color: color-mix(in srgb, var(--n-ink) 62%, var(--n-canvas));
+  color: color-mix(in srgb, var(--ink) 62%, var(--bg));
   font-size: var(--text-xs);
 }
 
 .securityLead {
-  color: color-mix(in srgb, var(--n-ink) 78%, var(--n-canvas));
+  color: color-mix(in srgb, var(--ink) 78%, var(--bg));
   font-size: var(--text-md);
 }
 
@@ -101,10 +101,10 @@
 .conflict {
   margin: 0;
   padding: var(--space-4);
-  border: 1px solid color-mix(in srgb, #b23a22 34%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 34%, transparent);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, #b23a22 9%, var(--n-canvas));
-  color: color-mix(in srgb, #b23a22 76%, var(--n-ink));
+  background: color-mix(in srgb, var(--warn) 9%, var(--bg));
+  color: color-mix(in srgb, var(--warn) 76%, var(--ink));
   font-size: var(--text-sm);
 }
 
@@ -136,7 +136,7 @@
 
 .inheritedLead {
   margin: 0;
-  color: color-mix(in srgb, var(--n-ink) 76%, var(--n-canvas));
+  color: color-mix(in srgb, var(--ink) 76%, var(--bg));
   font-size: var(--text-sm);
   line-height: 1.55;
 }
@@ -150,7 +150,7 @@
 
 .inheritedGrid dt {
   margin: 0 0 2px;
-  color: color-mix(in srgb, var(--n-ink) 62%, var(--n-canvas));
+  color: color-mix(in srgb, var(--ink) 62%, var(--bg));
   font-size: var(--text-2xs);
   font-weight: var(--weight-strong);
   letter-spacing: 0.06em;
@@ -173,7 +173,7 @@
   display: block;
   width: 18px;
   height: 18px;
-  border: 1px solid color-mix(in srgb, var(--n-ink) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
   border-radius: 5px;
 }
 
@@ -239,7 +239,7 @@
   margin: 0;
   padding: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--n-ink) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
   border-radius: var(--radius-md);
   list-style: none;
 }
@@ -249,11 +249,11 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-  background: color-mix(in srgb, var(--n-ink) 3%, transparent);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
 }
 
 .originRow + .originRow {
-  border-top: 1px solid color-mix(in srgb, var(--n-ink) 10%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
 }
 
 .originValue {
@@ -267,7 +267,7 @@
 .originWarn {
   flex-basis: 100%;
   order: 3;
-  color: color-mix(in srgb, #9a6f18 82%, var(--n-ink));
+  color: color-mix(in srgb, var(--warn) 82%, var(--ink));
   font-size: var(--text-xs);
 }
 
@@ -279,15 +279,15 @@
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
-  background: var(--ui-surface-sunken);
+  background: var(--bg);
 }
 
 .keyLabel {
   display: block;
   margin-bottom: 4px;
-  color: color-mix(in srgb, var(--n-ink) 62%, var(--n-canvas));
+  color: color-mix(in srgb, var(--ink) 62%, var(--bg));
   font-size: var(--text-2xs);
   font-weight: var(--weight-strong);
   letter-spacing: 0.06em;
@@ -298,7 +298,7 @@
   display: block;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--n-ink) 7%, var(--n-canvas));
+  background: color-mix(in srgb, var(--ink) 7%, var(--bg));
   font-family: ui-monospace, sfmono-regular, "SF Mono", menlo, monospace;
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
@@ -307,7 +307,7 @@
 
 .keyNote {
   margin: 0;
-  color: color-mix(in srgb, var(--n-ink) 74%, var(--n-canvas));
+  color: color-mix(in srgb, var(--ink) 74%, var(--bg));
   font-size: var(--text-sm);
   line-height: 1.55;
 }
@@ -334,7 +334,7 @@
 .snippetHead p {
   margin: 2px 0 0;
   max-width: 52ch;
-  color: color-mix(in srgb, var(--n-ink) 68%, var(--n-canvas));
+  color: color-mix(in srgb, var(--ink) 68%, var(--bg));
   font-size: var(--text-xs);
   line-height: 1.5;
 }
@@ -343,9 +343,9 @@
   margin: 0;
   padding: var(--space-3) var(--space-4);
   overflow-x: auto;
-  border: 1px solid color-mix(in srgb, var(--n-ink) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--n-ink) 6%, var(--n-canvas));
+  background: color-mix(in srgb, var(--ink) 6%, var(--bg));
   font-family: ui-monospace, sfmono-regular, "SF Mono", menlo, monospace;
   font-size: var(--text-xs);
   line-height: 1.6;
@@ -359,7 +359,7 @@
 .snippetStatus {
   margin: 0;
   min-height: 1em;
-  color: color-mix(in srgb, var(--n-ink) 64%, var(--n-canvas));
+  color: color-mix(in srgb, var(--ink) 64%, var(--bg));
   font-size: var(--text-xs);
 }
 
@@ -383,13 +383,13 @@
   position: relative;
   overflow: hidden;
   min-height: 200px;
-  border: 1px solid color-mix(in srgb, var(--n-ink) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
   border-radius: var(--radius-md);
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--n-canvas) 70%, #fff),
-      color-mix(in srgb, var(--n-ink) 5%, var(--n-canvas))
+      color-mix(in srgb, var(--bg) 70%, var(--surface)),
+      color-mix(in srgb, var(--ink) 5%, var(--bg))
     );
 }
 
@@ -415,7 +415,7 @@
 .previewNote code {
   padding: 1px 4px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--n-ink) 8%, var(--n-canvas));
+  background: color-mix(in srgb, var(--ink) 8%, var(--bg));
   font-family: ui-monospace, sfmono-regular, "SF Mono", menlo, monospace;
   font-size: 0.92em;
 }

@@ -23,15 +23,23 @@ the top of `components/app-shell/shell.module.css`; the short version:
 tenant-supplied *neutrals*, and deriving greys from them is what once painted
 the entire console in one client's green.
 
-Neutrals (`--ui-line`, `--ui-muted`, `--ui-sunken`, …) come from the fixed ramp
-in `app/globals.css` (`--n-0` … `--n-900`). It does not vary by tenant, which is
-the only way the documented contrast ratios can be guaranteed whatever colours a
-tenant saves. Backgrounds, card surfaces, body text, borders and muted labels
-are always neutral.
+Neutrals read straight from the Graphite tokens in `app/tokens.css`: `--ink`,
+`--muted`, `--hairline`, `--bg`, `--surface`, `--elev`. Those are ground-aware
+(dark by default, light via `prefers-color-scheme` or `[data-ground="light"]`)
+and gated by `scripts/check-contrast.mjs`, which is the only way the documented
+contrast ratios can be guaranteed whatever ground or colours a tenant ends up
+on. Backgrounds, card surfaces, body text, borders and muted labels are always
+neutral. There used to be a second neutral ramp here (`--ui-ink`, `--n-0` …
+`--n-900`, fixed and never ground-aware); it is gone — see docs/PLAN.md Phase
+16. If you see a `--ui-*` name in this codebase now, it is one of a small set
+of derived aliases (a status wash, a shadow, a focus ring) that exist only
+because Graphite has no token for them — never a competing neutral system.
 
-No component hardcodes a brand colour. Status hues (danger, warning, positive)
-are fixed *semantic* colours — mixed into the surface for legibility but never
-inheriting the brand, because a destructive action must not read as "on brand".
+No component hardcodes a brand colour. Status hues collapse onto Graphite's
+two status colours, `--good` and `--warn` — there is no separate "danger",
+"critical" or "notice" hue any more. They are mixed into the surface for
+legibility but never inherit the brand, because a destructive action must not
+read as "on brand".
 
 Derived tokens live in `tokens.module.css` under the `.uiRoot` class, which each
 component applies to its own root. Nothing outside this directory needs to know

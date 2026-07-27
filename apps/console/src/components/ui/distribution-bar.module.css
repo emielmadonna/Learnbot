@@ -9,7 +9,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-2xs);
   font-weight: var(--weight-heavy);
   letter-spacing: 0.09em;
@@ -34,7 +34,7 @@
   gap: var(--space-2) var(--space-4);
   padding: var(--space-3);
   border: 1px solid transparent;
-  border-radius: var(--ui-radius-sm);
+  border-radius: var(--r-sm);
   background: transparent;
   color: inherit;
   text-align: left;
@@ -47,8 +47,8 @@
 }
 
 .interactive:hover {
-  border-color: var(--ui-line);
-  background: var(--ui-raised);
+  border-color: var(--hairline);
+  background: var(--elev);
 }
 
 .interactive:focus-visible {
@@ -57,7 +57,7 @@
 }
 
 .emphasis {
-  border-color: var(--ui-line);
+  border-color: var(--hairline);
   background: var(--ui-primary-soft);
 }
 
@@ -77,7 +77,7 @@
 
 .name small {
   overflow: hidden;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-2xs);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -98,7 +98,7 @@
 
 .share {
   min-width: 34px;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-xs);
   text-align: right;
 }
@@ -108,21 +108,21 @@
   grid-column: 1 / -1;
   height: 6px;
   border-radius: 999px;
-  background: var(--ui-sunken);
+  background: var(--bg);
 }
 
 .fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--ui-primary);
+  background: var(--brand-primary);
 }
 
 .fillEmphasis {
-  background: var(--ui-accent);
+  background: var(--brand-accent);
 }
 
 .remainder {
   margin: 2px 0 0;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-2xs);
 }

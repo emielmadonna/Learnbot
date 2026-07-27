@@ -8,8 +8,9 @@
   the product from the tenant's --brand-text and --brand-surface, which painted
   every surface, hairline and muted label in one client's colour and made the
   whole console read as a themed admin template. That derivation is gone: the
-  neutral ramp lives in globals.css :root, it is fixed, and it is identical for
-  every tenant.
+  neutral ramp is Graphite (app/tokens.css — --ink, --muted, --hairline, --bg,
+  --surface, --elev), it does not vary by tenant, and it adapts only to
+  light/dark ground, never to a tenant's palette.
 
   --brand-primary / --brand-accent may colour ONLY:
     - primary (filled) buttons
@@ -19,7 +20,7 @@
     - links and small status accents (dots, meters, progress fills)
 
   They may NEVER colour page backgrounds, card/panel surfaces, body text,
-  borders or muted labels. Those are --ui-* neutrals, always.
+  borders or muted labels. Those are Graphite neutrals, always.
 
   ---------------------------------------------------------------------------
   ADMIN vs LEARNER — scoped by plane, so there are no scattered exceptions.
@@ -59,8 +60,8 @@
   display: flex;
   min-height: 100vh;
   flex-direction: column;
-  background: var(--ui-canvas);
-  color: var(--ui-ink);
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--font-ui);
   font-size: var(--text-md);
   line-height: var(--leading-normal);
@@ -83,8 +84,8 @@
   display: grid;
   min-height: 100vh;
   padding: var(--space-6);
-  background: var(--ui-canvas);
-  color: var(--ui-ink);
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--font-ui);
   place-items: center;
 }
@@ -95,9 +96,9 @@
   justify-items: center;
   gap: var(--space-4);
   padding: var(--space-9) var(--space-8);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-2xl);
-  background: var(--ui-surface);
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
   text-align: center;
 }
@@ -112,7 +113,7 @@
 
 .closed p {
   margin: 0;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-md);
   line-height: var(--leading-normal);
 }
@@ -161,8 +162,8 @@
   gap: var(--space-6);
   padding: var(--space-2) clamp(var(--space-5), 4vw, var(--space-9));
   /* Admin chrome: neutral hairline over a frosted neutral ground. */
-  border-bottom: 1px solid color-mix(in srgb, var(--ui-ink) 7%, transparent);
-  background: color-mix(in srgb, var(--ui-canvas) 78%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
   backdrop-filter: blur(24px) saturate(160%);
 }
 
@@ -212,7 +213,7 @@
 
 .brandText small {
   overflow: hidden;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -242,7 +243,7 @@
   align-items: center;
   padding: 0 var(--space-4);
   border-radius: var(--radius-pill);
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   letter-spacing: var(--tracking-snug);
@@ -255,8 +256,8 @@
 
 /* Hover is a neutral lift. Only the ACTIVE item earns the brand. */
 .navItem:hover {
-  background: var(--ui-surface-sunken);
-  color: var(--ui-ink);
+  background: var(--bg);
+  color: var(--ink);
 }
 
 .navItem[data-active] {
@@ -279,9 +280,9 @@
   gap: var(--space-2);
   padding: 0 var(--space-4);
   /* Neutral hairline; the accent lives in the label and the live dot. */
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--ui-surface) 70%, transparent);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
   color: var(--brand-primary);
   font-size: var(--text-sm);
   font-weight: var(--weight-strong);
@@ -293,8 +294,8 @@
 }
 
 .voiceAction:hover {
-  border-color: var(--ui-line-strong);
-  background: var(--ui-surface-sunken);
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
+  background: var(--bg);
 }
 
 .liveDot {
@@ -316,7 +317,7 @@
   height: 36px;
   border: 1px solid color-mix(in srgb, var(--brand-primary) 16%, transparent);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--brand-primary) 9%, var(--ui-surface));
+  background: color-mix(in srgb, var(--brand-primary) 9%, var(--surface));
   color: var(--brand-primary);
   cursor: pointer;
   font-size: var(--text-2xs);
@@ -327,7 +328,7 @@
 }
 
 .avatar:hover {
-  background: color-mix(in srgb, var(--brand-primary) 16%, var(--ui-surface));
+  background: color-mix(in srgb, var(--brand-primary) 16%, var(--surface));
 }
 
 .avatar img {
@@ -344,9 +345,9 @@
   display: grid;
   width: 264px;
   padding: var(--space-2);
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  background: var(--ui-surface);
+  background: var(--surface);
   box-shadow: var(--shadow-md);
 }
 
@@ -354,7 +355,7 @@
   display: grid;
   gap: var(--space-1);
   padding: var(--space-3) var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--ui-line);
+  border-bottom: 1px solid var(--hairline);
   margin-bottom: var(--space-2);
 }
 
@@ -366,7 +367,7 @@
 
 .accountIdentity small {
   overflow: hidden;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-xs);
   text-overflow: ellipsis;
 }
@@ -393,7 +394,7 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--ui-ink);
+  color: var(--ink);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
@@ -403,7 +404,7 @@
 }
 
 .accountItem:hover {
-  background: var(--ui-surface-sunken);
+  background: var(--bg);
 }
 
 /* ------------------------------------------------------------------ canvas */
@@ -498,8 +499,8 @@
   width: min(600px, 100%);
   max-width: 100%;
   flex-direction: column;
-  border-left: 1px solid var(--ui-line);
-  background: var(--ui-surface);
+  border-left: 1px solid var(--hairline);
+  background: var(--surface);
   box-shadow: var(--shadow-lg);
   transform: translateX(100%);
   transition: transform var(--motion-sheet) var(--motion-ease);
@@ -533,13 +534,13 @@
   gap: var(--space-5);
   padding: var(--space-7) clamp(var(--space-5), 3vw, var(--space-8))
     var(--space-5);
-  border-bottom: 1px solid var(--ui-line);
-  background: var(--ui-surface);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface);
 }
 
 .panelTitle {
   margin: 0;
-  color: var(--ui-ink);
+  color: var(--ink);
   font-size: var(--text-2xl);
   font-weight: var(--weight-strong);
   letter-spacing: var(--tracking-tight);
@@ -549,7 +550,7 @@
 .panelSubtitle {
   max-width: 56ch;
   margin: var(--space-2) 0 0;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
@@ -559,10 +560,10 @@
   width: 36px;
   height: 36px;
   flex: 0 0 auto;
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--ui-muted);
+  color: var(--muted);
   cursor: pointer;
   font-size: var(--text-sm);
   place-items: center;
@@ -572,8 +573,8 @@
 }
 
 .panelClose:hover {
-  background: var(--ui-surface-sunken);
-  color: var(--ui-ink);
+  background: var(--bg);
+  color: var(--ink);
 }
 
 .panelBody {

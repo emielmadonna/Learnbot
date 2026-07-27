@@ -9,9 +9,9 @@
   justify-items: center;
   gap: var(--space-3);
   padding: var(--space-9) var(--space-7);
-  border: 1px dashed var(--ui-line-strong);
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-raised);
+  border: 1px dashed color-mix(in srgb, var(--ink) 30%, var(--hairline));
+  border-radius: var(--r-lg);
+  background: var(--elev);
   text-align: center;
 }
 
@@ -21,9 +21,9 @@
   height: 44px;
   margin-bottom: var(--space-1);
   place-items: center;
-  border-radius: var(--ui-radius);
-  background: var(--ui-sunken);
-  color: var(--ui-muted);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--muted);
 }
 
 .headline {
@@ -37,7 +37,7 @@
 .description {
   max-width: 48ch;
   margin: 0;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
 }
@@ -49,24 +49,24 @@
 /* Restricted is a solid, settled surface — nothing is missing, it is withheld. */
 .restricted {
   border-style: solid;
-  border-color: var(--ui-line);
-  background: var(--ui-sunken);
+  border-color: var(--hairline);
+  background: var(--bg);
 }
 
 .restricted .icon {
   background: var(--ui-warning-soft);
-  color: var(--ui-warning);
+  color: var(--warn);
 }
 
 .error {
   border-style: solid;
-  border-color: var(--ui-danger);
+  border-color: var(--warn);
   background: var(--ui-danger-soft);
 }
 
 .error .icon {
-  background: var(--ui-surface);
-  color: var(--ui-danger);
+  background: var(--surface);
+  color: var(--warn);
 }
 
 .compact {

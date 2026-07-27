@@ -15,7 +15,7 @@
 
 .bordered {
   padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--ui-line);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .copy {
@@ -42,7 +42,7 @@
 .description {
   max-width: 60ch;
   margin: 0;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
@@ -53,9 +53,9 @@
   height: 28px;
   flex: 0 0 auto;
   padding: 0;
-  border: 1px solid var(--ui-line-strong);
+  border: 1px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
   border-radius: var(--radius-pill);
-  background: var(--ui-sunken);
+  background: var(--bg);
   cursor: pointer;
   transition:
     background var(--motion-fast) var(--motion-ease),
@@ -69,17 +69,17 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--ui-surface);
+  background: var(--surface);
   box-shadow:
-    0 1px 1px color-mix(in srgb, var(--ui-text) 8%, transparent),
-    0 2px 6px color-mix(in srgb, var(--ui-text) 20%, transparent);
+    0 1px 1px color-mix(in srgb, var(--ink) 8%, transparent),
+    0 2px 6px color-mix(in srgb, var(--ink) 20%, transparent);
   transition: transform var(--motion-fast) var(--motion-ease);
   content: "";
 }
 
 .switch[aria-checked="true"] {
-  border-color: var(--ui-primary);
-  background: var(--ui-primary);
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
 }
 
 .switch[aria-checked="true"]::after {

@@ -13,8 +13,8 @@
   justify-content: center;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-pill);
-  background: var(--ui-sunken);
-  color: var(--ui-muted);
+  background: var(--bg);
+  color: var(--muted);
   font-size: var(--text-2xs);
   font-weight: var(--weight-heavy);
   letter-spacing: 0.05em;
@@ -25,12 +25,12 @@
 
 .known {
   background: var(--ui-positive-soft);
-  color: var(--ui-positive);
+  color: var(--good);
 }
 
 .partial {
   background: var(--ui-warning-soft);
-  color: var(--ui-warning);
+  color: var(--warn);
 }
 
 /*
@@ -40,7 +40,7 @@
 .unknown,
 .restricted {
   background: var(--ui-danger-soft);
-  color: var(--ui-danger);
+  color: var(--warn);
 }
 
 .tile {
@@ -49,9 +49,9 @@
   min-height: 200px;
   flex-direction: column;
   padding: var(--space-6);
-  border: 1px solid var(--ui-line);
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  background: var(--surface);
 }
 
 .top {
@@ -64,7 +64,7 @@
 .eyebrow {
   margin: 0;
   overflow: hidden;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-2xs);
   font-weight: var(--weight-heavy);
   letter-spacing: var(--tracking-wide);
@@ -75,7 +75,7 @@
 
 .label {
   margin: var(--space-7) 0 var(--space-2);
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
 }
@@ -100,7 +100,7 @@
 }
 
 .absent {
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-xl);
   font-weight: var(--weight-medium);
   letter-spacing: var(--tracking-snug);
@@ -109,7 +109,7 @@
 .detail {
   min-height: 34px;
   margin: var(--space-3) 0 0;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
@@ -119,11 +119,11 @@
   gap: var(--space-1);
   margin-top: auto;
   padding-top: var(--space-4);
-  border-top: 1px solid var(--ui-line);
+  border-top: 1px solid var(--hairline);
 }
 
 .foot span,
 .foot time {
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-xs);
 }

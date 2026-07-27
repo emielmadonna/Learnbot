@@ -98,75 +98,33 @@ h1 {
 
 :root {
   /* ====================================================== neutral foundation
-     A FIXED ramp. It does not vary by tenant — that is the whole point.
-
-     Derivation: the public landing page (`.lbLanding`, formerly in this file
-     and now in `apps/console/src/app/landing.css`) is the design reference.
-     Its three anchors are --lb-ink #14211c, --lb-muted #5e6b65 and
-     --lb-line #dde6e1 over a #fbfdfc/#f7faf8/#fff ground. Each anchor was kept
-     at its landing lightness and hue (~157deg) but had its chroma cut by
-     roughly two thirds, which lands it below the perceptual threshold for a
-     colour cast. The result reads as grey next to anything saturated, while
-     still sitting in the same family as the landing page, so the signed-out
-     and signed-in halves feel like one product.
-
-     Steps are named by lightness, 0 = white, 900 = ink. */
-  --n-0: #ffffff;
-  --n-25: #fbfcfc;
-  --n-50: #f7f8f8;
-  --n-100: #f1f3f2;
-  --n-150: #e9ecea;
-  --n-200: #e2e5e4;
-  --n-300: #d3d7d5;
-  --n-400: #a8afac;
-  --n-500: #7c8481;
-  --n-600: #5f6764;
-  --n-700: #454c49;
-  --n-800: #2c3230;
-  --n-900: #181d1b;
-
-  /* ------------------------------------------------------------- neutrals
-     Semantic aliases onto the ramp. Everything structural in the app reads
-     from these, never from --brand-*.
-
-     Contrast on --ui-surface (#fff) / --ui-canvas (#f7f8f8):
-       ink      17.1:1 / 16.0:1
-       ink-soft  8.8:1 /  8.3:1
-       muted     5.8:1 /  5.5:1
-       faint     4.9:1 /  4.6:1
-     All clear WCAG 2.2 AA for body and small text on both planes. Because the
-     ramp is fixed, these hold for every tenant regardless of the colours they
-     pick — which is the second reason chrome is not derived from brand. */
-  --ui-ink: var(--n-900);
-  --ui-ink-soft: var(--n-700);
-  --ui-muted: var(--n-600);
-  --ui-faint: #6b726f;
-  --ui-line: var(--n-200);
-  --ui-line-strong: var(--n-300);
-  --ui-canvas: var(--n-50);
-  --ui-surface: var(--n-0);
-  --ui-surface-sunken: var(--n-100);
-  --ui-overlay: rgb(24 29 27 / 34%);
-
-  /*
-    Neutral mix sources. Stylesheets that need a partial neutral — a hairline
-    at 9%, a wash at 5%, meta text at 64% — mix these two, NOT --brand-text and
-    --brand-surface. Same percentages as before, fixed neutral source.
-  */
-  --n-ink: var(--n-900);
-  --n-canvas: var(--n-50);
+     Formerly a FIXED ramp (--n-0…--n-900) that never varied by ground, plus a
+     parallel `--ui-*` alias layer on top of it (--ui-ink, --ui-muted,
+     --ui-line, --ui-canvas, --ui-surface, …). Both are gone — see
+     docs/PLAN.md Phase 16. Every structural neutral in the app now reads
+     directly from the Graphite tokens in app/tokens.css: --ink, --muted,
+     --hairline, --bg, --surface, --elev. Those are ground-aware (dark by
+     default, light via `@media (prefers-color-scheme: light)` or
+     `[data-ground="light"]`) and contrast-gated by
+     scripts/check-contrast.mjs, which the old ramp was neither. Only
+     `--ui-overlay` survives here, because it has no Graphite equivalent. */
+  --ui-overlay: color-mix(in srgb, var(--ink) 34%, transparent);
 
   /* Tint every shadow shares, so elevation reads as one light source. */
   --shadow-tint: 24 29 27;
 
-  /* Status — deliberately off-brand. These carry meaning, so they must never
-     be mistaken for the tenant's colour. Positive is a brighter, cleaner green
-     than a typical deep brand green for exactly that reason. */
-  --ui-positive: #1d7c37;
-  --ui-positive-soft: #e8f4ea;
-  --ui-critical: #a3352c;
-  --ui-critical-soft: #fbebe9;
-  --ui-notice-soft: #f6f0e0;
+  /* Status washes still read by components/sections/*.module.css (outside
+     the components/ui primitives, which get their own copies from
+     components/ui/tokens.module.css). Graphite defines exactly two status
+     colours, --good and --warn (docs/PLAN.md Section 3.1) — there is no
+     third "critical" or "notice" hue, so the three-tier
+     positive/critical/notice system below collapsed onto those two. Graphite
+     has no "soft" wash token for either, so these are synthesised the same
+     way --accent-wash is: a percentage of the solid colour mixed into
+     --surface. */
+  --ui-positive-soft: color-mix(in srgb, var(--good) 12%, var(--surface));
+  --ui-critical-soft: color-mix(in srgb, var(--warn) 11%, var(--surface));
+  --ui-notice-soft: color-mix(in srgb, var(--warn) 16%, var(--surface));
 
   /* --------------------------------------------------------- spacing (4px)
      Steps 1-6 are component-internal. 7-12 are layout rhythm: the gap
@@ -261,20 +219,26 @@ h1 {
   /* Layout */
   --shell-header-height: 72px;
   --shell-max-width: 1120px;
-  --focus-ring: 0 0 0 2px var(--ui-surface), 0 0 0 4px var(--brand-primary);
+  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--brand-primary);
 
   /* ---------------------------------------------------------------- brand
      Fallbacks only — the shell root overrides these from the tenant's
      AgentConfig. They are deliberately NEUTRAL graphite, not a sample brand:
      an unconfigured tenant should look like an unbranded product, not like
      somebody else's. Accent-only surfaces (buttons, active nav, focus rings)
-     degrade to a calm dark grey, which is correct. */
-  --brand-primary: var(--n-800);
-  --brand-accent: var(--n-600);
-  --brand-surface: var(--n-50);
-  --brand-text: var(--n-900);
-  --brand-on-primary: #ffffff;
-  --brand-on-accent: #ffffff;
+     degrade to a calm neutral, which is correct.
+
+     Values route through Graphite (app/tokens.css) rather than the deleted
+     --n-800 / --n-600 / --n-50 / --n-900 ramp — see docs/PLAN.md Phase 16.
+     --elev paired with --ink is a guaranteed >=4.5:1 pair on both grounds
+     (tokens.css comments it at 11.35:1 dark / matches --bg's 18.82:1 light),
+     which is what makes it a safe on/fill pairing for an unbranded button. */
+  --brand-primary: var(--elev);
+  --brand-accent: var(--muted);
+  --brand-surface: var(--surface);
+  --brand-text: var(--ink);
+  --brand-on-primary: var(--ink);
+  --brand-on-accent: var(--ink);
 }
 
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {

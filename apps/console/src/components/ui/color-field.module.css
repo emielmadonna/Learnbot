@@ -6,7 +6,7 @@
 
 .label {
   display: block;
-  color: var(--ui-muted);
+  color: var(--muted);
   font-size: var(--text-xs);
   font-weight: var(--weight-heavy);
   letter-spacing: 0.02em;
@@ -17,18 +17,18 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1);
-  border: 1px solid var(--ui-line-strong);
-  border-radius: var(--ui-radius-sm);
-  background: var(--ui-surface);
+  border: 1px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
+  border-radius: var(--r-sm);
+  background: var(--surface);
 }
 
 .row:focus-within {
-  border-color: var(--ui-primary);
+  border-color: var(--brand-primary);
   box-shadow: 0 0 0 3px var(--ui-focus);
 }
 
 .invalid {
-  border-color: var(--ui-danger);
+  border-color: var(--warn);
 }
 
 .swatch {
@@ -36,7 +36,7 @@
   height: 36px;
   flex: 0 0 auto;
   padding: 0;
-  border: 1px solid var(--ui-line);
+  border: 1px solid var(--hairline);
   border-radius: 6px;
   background: none;
   cursor: pointer;
@@ -63,7 +63,7 @@
   padding: 0 var(--space-2);
   border: 0;
   background: transparent;
-  color: var(--ui-text);
+  color: var(--ink);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
@@ -75,19 +75,19 @@
 }
 
 .hex:disabled {
-  color: var(--ui-faint);
+  color: var(--muted);
 }
 
 .help {
   margin: 0;
-  color: var(--ui-faint);
+  color: var(--muted);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
 }
 
 .error {
   margin: 0;
-  color: var(--ui-danger);
+  color: var(--warn);
   font-size: var(--text-xs);
   font-weight: var(--weight-strong);
 }
@@ -97,22 +97,22 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--ui-positive);
-  border-radius: var(--ui-radius-sm);
+  border: 1px solid var(--good);
+  border-radius: var(--r-sm);
   background: var(--ui-positive-soft);
-  color: var(--ui-positive);
+  color: var(--good);
 }
 
 .contrastFail {
-  border-color: var(--ui-warning);
+  border-color: var(--warn);
   background: var(--ui-warning-soft);
-  color: var(--ui-warning);
+  color: var(--warn);
 }
 
 .contrastUnknown {
-  border-color: var(--ui-line-strong);
-  background: var(--ui-sunken);
-  color: var(--ui-muted);
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
+  background: var(--bg);
+  color: var(--muted);
 }
 
 .ratio {

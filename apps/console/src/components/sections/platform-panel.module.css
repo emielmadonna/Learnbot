@@ -1,20 +1,27 @@
 /*
  * Platform panel — client account control.
  *
- * Local to this section. This is admin chrome, so its neutrals come from the
- * fixed ramp in globals.css, never from the tenant's palette — see the brand
- * rule at the top of app-shell/shell.module.css. Only --pp-primary/--pp-accent
- * carry brand, and only on accent surfaces.
+ * Local to this section. This is admin chrome, so its neutrals come from
+ * Graphite (app/tokens.css — --ink, --bg), never from the tenant's palette —
+ * see the brand rule at the top of app-shell/shell.module.css. Only
+ * --pp-primary/--pp-accent carry brand, and only on accent surfaces.
  *
  * The alert hues are fixed semantic colours: an "operating inside a client
- * workspace" bar and a suspension control must never read as on-brand.
+ * workspace" bar and a suspension control must never read as on-brand. The
+ * impersonation/suspension banner below (.bar and friends) intentionally
+ * keeps literal hex rather than routing through --warn: --warn is
+ * ground-aware (light salmon on dark ground, dark red on light ground,
+ * calibrated for text contrast) and this banner wants to stay a fixed, loud
+ * red regardless of ground or theme — the same reason it was never on-brand.
+ * See the Phase 16 report for the full reasoning; this is a deliberate
+ * exception, not an oversight.
  */
 
 .root {
   --pp-primary: var(--brand-primary);
   --pp-accent: var(--brand-accent);
-  --pp-surface: var(--n-canvas);
-  --pp-text: var(--n-ink);
+  --pp-surface: var(--bg);
+  --pp-text: var(--ink);
 
   --pp-muted: color-mix(in srgb, var(--pp-text) 70%, var(--pp-surface));
   --pp-faint: color-mix(in srgb, var(--pp-text) 64%, var(--pp-surface));
@@ -22,9 +29,9 @@
   --pp-raised: color-mix(in srgb, var(--pp-text) 4%, var(--pp-surface));
   --pp-sunken: color-mix(in srgb, var(--pp-text) 7%, var(--pp-surface));
 
-  --pp-danger: color-mix(in srgb, #b23a22 78%, var(--pp-text));
-  --pp-danger-soft: color-mix(in srgb, #b23a22 11%, var(--pp-surface));
-  --pp-positive: color-mix(in srgb, #1f7a55 78%, var(--pp-text));
+  --pp-danger: color-mix(in srgb, var(--warn) 78%, var(--pp-text));
+  --pp-danger-soft: color-mix(in srgb, var(--warn) 11%, var(--pp-surface));
+  --pp-positive: color-mix(in srgb, var(--good) 78%, var(--pp-text));
 
   display: flex;
   flex-direction: column;
@@ -111,7 +118,7 @@
 }
 
 .failure {
-  border-color: color-mix(in srgb, #b23a22 34%, var(--pp-surface));
+  border-color: color-mix(in srgb, var(--warn) 34%, var(--pp-surface));
   background: var(--pp-danger-soft);
   color: var(--pp-danger);
 }
@@ -248,7 +255,7 @@
   justify-content: space-between;
   gap: 14px;
   padding: 16px 18px;
-  border: 2px solid color-mix(in srgb, #b23a22 46%, var(--pp-surface));
+  border: 2px solid color-mix(in srgb, var(--warn) 46%, var(--pp-surface));
   border-radius: 16px;
   background: var(--pp-danger-soft);
 }
@@ -305,8 +312,8 @@
 }
 
 .client[data-entered="true"] {
-  border-color: color-mix(in srgb, #b23a22 46%, var(--pp-surface));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #b23a22 24%, var(--pp-surface));
+  border-color: color-mix(in srgb, var(--warn) 46%, var(--pp-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 24%, var(--pp-surface));
 }
 
 .client[data-status="suspended"] {
@@ -367,7 +374,7 @@
   align-self: flex-start;
   padding: 3px 9px;
   border-radius: 999px;
-  background: color-mix(in srgb, #b23a22 16%, var(--pp-surface));
+  background: color-mix(in srgb, var(--warn) 16%, var(--pp-surface));
   color: var(--pp-danger);
   font-size: var(--text-2xs);
   font-weight: 700;
@@ -454,7 +461,7 @@
 }
 
 .session[data-caller="true"] {
-  border-color: color-mix(in srgb, #b23a22 40%, var(--pp-surface));
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--pp-surface));
   background: var(--pp-danger-soft);
 }
 
@@ -471,7 +478,7 @@
   justify-content: space-between;
   gap: 14px;
   padding: 16px 18px;
-  border: 1px solid color-mix(in srgb, #b23a22 34%, var(--pp-surface));
+  border: 1px solid color-mix(in srgb, var(--warn) 34%, var(--pp-surface));
   border-radius: 16px;
   background: var(--pp-danger-soft);
 }
@@ -501,7 +508,7 @@
 }
 
 .confirmDanger {
-  border-color: color-mix(in srgb, #b23a22 52%, var(--pp-surface));
+  border-color: color-mix(in srgb, var(--warn) 52%, var(--pp-surface));
 }
 
 .confirmBody {
