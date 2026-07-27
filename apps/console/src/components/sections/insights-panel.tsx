@@ -22,16 +22,22 @@ import {
   type AnalyticsWidgetSnapshot,
 } from "../../lib/supabase/analytics-rpc";
 import {
+  parseAnalyticsLearnerSignals,
   parseAnalyticsQuestionLabels,
   parseAnalyticsSignals,
+  type AnalyticsLearnerSignals,
   type AnalyticsQuestionLabels,
   type AnalyticsSignals,
   type DetectedSignal,
+  type EscalationState,
+  type LearnerSignalRow,
   type QuestionGroundingOutcome,
   type QuestionImportanceName,
   type QuestionIntentName,
+  type ReadinessTier,
   type SignalKind,
   type SignalReviewAction,
+  type StuckCluster,
 } from "../../lib/supabase/question-intelligence-rpc";
 import {
   Button,
@@ -45,6 +51,7 @@ import {
   type TrendPoint,
 } from "../ui";
 import styles from "./insights-panel.module.css";
+import learnerStyles from "./learner-signals-panel.module.css";
 
 /*
  * Insights — durable learning analytics.
@@ -2247,6 +2254,280 @@ function SignalsSection({
   );
 }
 
+// -------------------------------------------------------- learner signals
+
+const ESCALATION_LABELS: Record<EscalationState, string> = {
+  declining: "Declining",
+  escalating: "Escalating",
+  insufficient_data: "Not enough data yet",
+  steady: "Steady",
+};
+
+const ESCALATION_BADGE_STATE: Record<
+  EscalationState,
+  AnalyticsMetric<unknown>["state"]
+> = {
+  declining: "partial",
+  escalating: "known",
+  insufficient_data: "unknown",
+  steady: "partial",
+};
+
+const READINESS_LABELS: Record<ReadinessTier, string> = {
+  insufficient_data: "Not enough data yet",
+  likely_ready: "Looks ready for a next offer",
+  not_yet: "Not yet",
+  possible: "Possible",
+};
+
+const READINESS_BADGE_STATE: Record<
+  ReadinessTier,
+  AnalyticsMetric<unknown>["state"]
+> = {
+  insufficient_data: "unknown",
+  likely_ready: "known",
+  not_yet: "partial",
+  possible: "partial",
+};
+
+function learnerLabel(row: LearnerSignalRow): string {
+  if (row.displayName !== null && row.displayName.trim() !== "") {
+    return row.displayName;
+  }
+  return `Learner ${row.subjectUserId.slice(0, 8)}`;
+}
+
+function StuckClusterList({
+  clusters,
+}: {
+  readonly clusters: readonly StuckCluster[];
+}) {
+  if (clusters.length === 0) return null;
+  return (
+    <ul className={learnerStyles.stuckList}>
+      {clusters.map((cluster) => (
+        <li
+          className={learnerStyles.stuckItem}
+          key={`${cluster.lessonId ?? "none"}:${cluster.topicKey}`}
+        >
+          <span className={learnerStyles.stuckLesson}>
+            {cluster.lessonTitle ?? cluster.courseTitle ?? "No course context"}
+          </span>
+          <span className={learnerStyles.stuckDetail}>
+            {`"${cluster.topicLabel}" asked ${count(cluster.repeats)} times · last ${
+              formatMoment(cluster.lastAskedAt) ?? "not recorded"
+            }`}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function LearnerRow({ row }: { readonly row: LearnerSignalRow }) {
+  const depthShare = sharePercent(row.depth.notableOrCriticalShare);
+  return (
+    <li className={cx(styles.questionItem, learnerStyles.learnerItem)}>
+      <div className={learnerStyles.learnerHead}>
+        <p className={styles.questionText}>{learnerLabel(row)}</p>
+        <span className={learnerStyles.learnerMeta}>
+          {`${count(row.questions)} ${plural(row.questions, "question")} · last ${
+            formatMoment(row.lastAskedAt) ?? "not recorded"
+          }`}
+        </span>
+      </div>
+
+      <div className={styles.tagRow}>
+        <StateBadge state={depthShare === null ? "unknown" : "known"}>
+          {depthShare === null
+            ? "Depth: not enough data"
+            : `Depth: ${depthShare} notable/critical`}
+        </StateBadge>
+        <StateBadge state={ESCALATION_BADGE_STATE[row.escalation.state]}>
+          {ESCALATION_LABELS[row.escalation.state]}
+        </StateBadge>
+        {row.stuck.clusterCount > 0 && (
+          <StateBadge state="partial">
+            {`Stuck on ${count(row.stuck.clusterCount)} ${plural(
+              row.stuck.clusterCount,
+              "lesson",
+            )}`}
+          </StateBadge>
+        )}
+        <StateBadge state={READINESS_BADGE_STATE[row.readiness.tier]}>
+          {READINESS_LABELS[row.readiness.tier]}
+        </StateBadge>
+      </div>
+
+      <Facts
+        items={[
+          { label: "Topics", value: count(row.distinctTopics) },
+          { label: "Lessons", value: count(row.distinctLessons) },
+          {
+            label: "Notable or critical",
+            value: `${count(row.notableOrCriticalQuestions)} of ${count(
+              row.questions,
+            )}`,
+          },
+          {
+            label: "Escalation basis",
+            value:
+              row.escalation.state === "insufficient_data"
+                ? `${count(row.escalation.sampleSize)} ranked question(s) so far`
+                : `${row.escalation.firstHalfAvgSpecificity ?? "—"} → ${
+                    row.escalation.secondHalfAvgSpecificity ?? "—"
+                  } avg specificity`,
+          },
+          {
+            label: "Readiness basis",
+            value: [
+              row.readiness.evidence.hasCompletedCourse
+                ? "completed a course"
+                : row.readiness.evidence.maxPercentComplete === null
+                  ? "no recorded course progress"
+                  : `${Math.round(
+                      row.readiness.evidence.maxPercentComplete,
+                    )}% through a course`,
+              `${count(row.readiness.evidence.notableOrCriticalQuestions)} notable/critical`,
+            ].join(" · "),
+          },
+        ]}
+      />
+
+      <StuckClusterList clusters={row.stuck.clusters} />
+    </li>
+  );
+}
+
+/**
+ * Per-learner signals: depth, escalating specificity, stuck lessons and
+ * next-offer readiness.
+ *
+ * Depth and stuck counts are direct aggregates over recorded rows. Escalation
+ * and readiness are explicitly labelled heuristics: a learner with too few
+ * classified questions to compute a trend, or no recorded course-progress row
+ * at all, is shown as "not enough data" rather than assigned a guessed
+ * direction or tier.
+ */
+function LearnerSignalsSection({
+  learnerSignals,
+}: {
+  readonly learnerSignals: AnalyticsLearnerSignals;
+}) {
+  const coverage = learnerSignals.metrics.learnerCoverage;
+  const rows = learnerSignals.metrics.learnerRows;
+  const learners = rows.state === "unknown" ? [] : rows.value.learners;
+
+  const escalatingCount = learners.filter(
+    (row) => row.escalation.state === "escalating",
+  ).length;
+  const stuckCount = learners.filter(
+    (row) => row.stuck.clusterCount > 0,
+  ).length;
+  const readyCount = learners.filter(
+    (row) => row.readiness.tier === "likely_ready",
+  ).length;
+
+  return (
+    <section className={styles.section}>
+      <SectionHead
+        eyebrow="Learner signals"
+        lede="Depth and stuck lessons are direct counts over classified questions. Escalation and readiness are explicitly labelled heuristics, ranked so the learners most worth a look come first — never a certainty and never rounded into a false precision."
+        state={coverage.state}
+        title="Who is worth your attention"
+      />
+
+      <div className={styles.tiles}>
+        <Tile
+          eyebrow="Coverage"
+          label="Learners with a classified question"
+          metricState={coverage.state}
+          reason={
+            coverage.state === "unknown"
+              ? reasonFrom(
+                  coverage.limitations,
+                  "The platform did not report learner coverage for this range.",
+                )
+              : `${count(coverage.value.classifiedQuestions)} of ${count(
+                  coverage.value.questions,
+                )} questions carry a recorded label.`
+          }
+          value={
+            coverage.state === "unknown"
+              ? undefined
+              : count(coverage.value.classifiedLearners)
+          }
+        />
+        <Tile
+          eyebrow="Escalating"
+          label="Trending toward applied questions"
+          metricState={rows.state}
+          reason="Learners whose second half of classified questions in range ranks more specific, on average, than their first half. Requires at least a handful of classified questions; a thin history is excluded, never guessed."
+          value={rows.state === "unknown" ? undefined : count(escalatingCount)}
+        />
+        <Tile
+          eyebrow="Repeated on one lesson"
+          label="Stuck"
+          metricState={rows.state}
+          reason={`The same topic asked ${count(
+            learnerSignals.thresholds.stuckRepeatThreshold,
+          )} or more times within one lesson in this range — a direct count, not an inference about confusion.`}
+          value={rows.state === "unknown" ? undefined : count(stuckCount)}
+        />
+        <Tile
+          eyebrow="Heuristic"
+          label="Looks ready for a next offer"
+          metricState={rows.state}
+          reason="Course completion combined with recent notable or critical questions. A prioritised list to review, never a certainty — and never shown for a learner with no recorded course-progress row."
+          value={rows.state === "unknown" ? undefined : count(readyCount)}
+        />
+      </div>
+
+      {rows.state === "unknown" ? (
+        <EmptyState
+          description={reasonFrom(
+            rows.limitations,
+            "No question in this range carries a recorded classification, so no learner can be profiled. Nothing is substituted for it.",
+          )}
+          headline="Nothing to profile yet"
+          tone="neutral"
+        />
+      ) : learners.length === 0 ? (
+        <EmptyState
+          description="No learner in this range has a classified question, so there is no row to show."
+          headline="No learner rows yet"
+        />
+      ) : (
+        <div className={styles.stack}>
+          <ul className={styles.questionList}>
+            {learners.map((row) => (
+              <LearnerRow key={row.subjectUserId} row={row} />
+            ))}
+          </ul>
+          {rows.value.omittedLearners > 0 && (
+            <Truncation>
+              {`This list is truncated: ${count(
+                rows.value.omittedLearners,
+              )} further ${plural(
+                rows.value.omittedLearners,
+                "learner",
+              )} are not returned; the query caps at the top ${count(
+                learnerSignals.limits.learners,
+              )} ranked by critical and notable questions, stuck clusters and volume.`}
+            </Truncation>
+          )}
+        </div>
+      )}
+
+      <Limitations
+        items={coverage.limitations}
+        label="Learner coverage limitations"
+      />
+      <Limitations items={rows.limitations} label="Learner row limitations" />
+    </section>
+  );
+}
+
 // --------------------------------------------------------- learner progress
 
 function ProgressSection({
@@ -2696,6 +2977,39 @@ async function loadWidgetAnalytics(
   };
 }
 
+/**
+ * Per-learner signals load on their own, same reason as the widget snapshot
+ * above: a workspace whose database has not yet taken the
+ * learner-signal-readout migration must still get the rest of this surface.
+ */
+async function loadLearnerSignals(
+  days: number,
+): Promise<AnalyticsLearnerSignals> {
+  const { end, start } = rangeQuery(days);
+  const query = new URLSearchParams({ end, start });
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `/api/analytics/learner-signals?${query.toString()}`,
+      { cache: "no-store", headers: { accept: "application/json" } },
+    );
+  } catch {
+    throw new AnalyticsRpcError("request_failed");
+  }
+
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new AnalyticsRpcError(
+      mapErrorCode(response.status, isRecord(body) ? body.code : undefined),
+    );
+  }
+  if (!isRecord(body) || body.ok !== true) {
+    throw new AnalyticsRpcError("unverifiable");
+  }
+  return parseAnalyticsLearnerSignals(body.learnerSignals);
+}
+
 function toLoadError(error: unknown): LoadError {
   if (error instanceof AnalyticsRpcError) {
     if (
@@ -2738,6 +3052,10 @@ export function InsightsPanel({ payload, refresh }: PanelProps) {
   const [intelligenceVersion, setIntelligenceVersion] = useState(0);
   const [widget, setWidget] = useState<AnalyticsWidgetSnapshot | null>(null);
   const [widgetFailure, setWidgetFailure] = useState<LoadError | null>(null);
+  const [learnerSignals, setLearnerSignals] =
+    useState<AnalyticsLearnerSignals | null>(null);
+  const [learnerSignalsFailure, setLearnerSignalsFailure] =
+    useState<LoadError | null>(null);
 
   const days = Number(range);
 
@@ -2799,6 +3117,27 @@ export function InsightsPanel({ payload, refresh }: PanelProps) {
         if (!active) return;
         setWidget(null);
         setWidgetFailure(toLoadError(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, [days, dataVersion]);
+
+  // Per-learner signals load independently for the same reason: a database
+  // without the learner-signal-readout migration must not take the rest of
+  // the panel down with it.
+  useEffect(() => {
+    let active = true;
+    loadLearnerSignals(days)
+      .then((next) => {
+        if (!active) return;
+        setLearnerSignals(next);
+        setLearnerSignalsFailure(null);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setLearnerSignals(null);
+        setLearnerSignalsFailure(toLoadError(error));
       });
     return () => {
       active = false;
@@ -2880,13 +3219,14 @@ export function InsightsPanel({ payload, refresh }: PanelProps) {
       ...(widget === null
         ? []
         : [widget.breakdown, widget.engagement, widget.contentGaps]),
+      ...(learnerSignals === null ? [] : [learnerSignals]),
     ]) {
       for (const [term, meaning] of Object.entries(section.definitions)) {
         if (!merged.has(term)) merged.set(term, meaning);
       }
     }
     return [...merged.entries()];
-  }, [snapshot, intelligence, widget]);
+  }, [snapshot, intelligence, widget, learnerSignals]);
 
   const toolbar = (
     <div className={styles.toolbar}>
@@ -3024,6 +3364,31 @@ export function InsightsPanel({ payload, refresh }: PanelProps) {
           <SurfaceSection widget={widget} />
           <WidgetSection widget={widget} />
         </>
+      )}
+
+      {learnerSignals === null ? (
+        <section className={styles.section}>
+          <SectionHead
+            eyebrow="Learner signals"
+            state="unknown"
+            title="Who is worth your attention"
+          />
+          <EmptyState
+            description={
+              learnerSignalsFailure === "denied"
+                ? "Your current role is not permitted to read per-learner signals. Nothing is substituted for them."
+                : "The learner-signal functions did not answer. This is expected until the learner-signal-readout migration has been applied to this project's database. No sample learners are shown in their place."
+            }
+            headline={
+              learnerSignalsFailure === "denied"
+                ? "Learner signals are restricted for this role"
+                : "Learner signals are not available yet"
+            }
+            tone={learnerSignalsFailure === "denied" ? "restricted" : "neutral"}
+          />
+        </section>
+      ) : (
+        <LearnerSignalsSection learnerSignals={learnerSignals} />
       )}
 
       <VolumeSection overview={snapshot.overview} />

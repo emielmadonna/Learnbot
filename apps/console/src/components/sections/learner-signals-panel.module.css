@@ -1,0 +1,56 @@
+/*
+  Learner signals panel — supplemental layout only.
+
+  The card shell (border, background, spacing rhythm) is inherited from
+  `.questionItem` in insights-panel.module.css; this file only adds the
+  header row and the stuck-lesson list. Colour here comes exclusively from
+  the Graphite tokens in app/tokens.css (--ink / --muted / --hairline) per
+  docs/PLAN.md Section 3.2 — never a hardcoded hex, and --hairline is used
+  only as a non-text divider, never as text colour.
+*/
+
+.learnerItem {
+  gap: var(--space-3, 0.75rem);
+}
+
+.learnerHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2, 0.5rem);
+}
+
+.learnerMeta {
+  color: var(--muted);
+  font-size: var(--text-xs, 0.75rem);
+  white-space: nowrap;
+}
+
+.stuckList {
+  display: grid;
+  gap: var(--space-1, 0.25rem);
+  margin: 0;
+  padding: var(--space-2, 0.5rem) 0 0;
+  border-top: 1px solid var(--hairline);
+  list-style: none;
+}
+
+.stuckItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2, 0.5rem);
+}
+
+.stuckLesson {
+  color: var(--ink);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+}
+
+.stuckDetail {
+  color: var(--muted);
+  font-size: var(--text-xs, 0.75rem);
+}

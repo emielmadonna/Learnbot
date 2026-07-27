@@ -52,7 +52,13 @@ switched off, and the platform admin still sees their data.
   chart, no SVG. `public.attachments` has zero writers and nothing produces a diagram.
 - **Per-client chat branding.** The contrast math above is never called by the chat.
   The conversation surface ignores `tenant_branding` entirely.
-- **Signals readout.** Written on every turn, read by nothing. No UI.
+- **Signals readout — per learner.** *(Corrected 2026-07-26: an earlier revision of this
+  document claimed signals were "read by nothing." That was wrong.
+  `api/analytics/question-intelligence/route.ts` and `insights-panel.tsx` already read
+  them at the **cohort** level — topics, intents, important questions, and threshold
+  signals like `topic_spike` / `post_lesson_stall` / `repeated_question_cluster`.)* What
+  was missing is the **per-learner** view the product actually sells: who is escalating,
+  who is stuck, who is ready for the next offer.
 - **Voice rate limiting.** An in-process `Map` — meaningless on serverless.
 - **Audit ledger.** Written by some paths, not by conversations, voice, uploads,
   onboarding, or provisioning. No reader UI.
@@ -526,20 +532,21 @@ Status is maintained here — update it in the same commit as the work.
 | # | Phase | Size | Status |
 |---|---|---|---|
 | 1 | Token file | S | **done** |
-| 2 | `globals.css` colour sweep | M | not started |
-| 3 | Streaming | S | in progress |
-| 4 | Agent controls | M | in progress |
-| 5 | Landing page | S | queued |
-| 6 | Brand the chat | S | not started |
+| 2 | `globals.css` colour sweep | M | **done** |
+| 3 | Streaming | S | **done** |
+| 4 | Agent controls | M | **done** |
+| 5 | Landing page | S | **done** |
+| 6 | Brand the chat | S | **done** |
+| 14 | Wire agent config into the answer path | S | **done** |
+| 8 | Signals readout | M | in progress |
 | 7 | The assistant / embeddable widget | XL | not started |
-| 8 | Signals readout | M | not started |
+| 16 | `--ui-*` token consolidation | M | not started |
 | 9 | Character avatars | M | not started |
+| 15 | Billing, margins, Stripe | L | not started |
 | 10 | Knowledge pipeline | XL | not started |
 | 11 | Figures in chat | M | not started |
 | 12 | Operational debt | M | not started |
 | 13 | Management MCP | M | not started |
-| 14 | Wire agent config into the answer path | S | not started |
-| 15 | Billing, margins, Stripe | L | not started |
 
 **Phase 1 — Token file.** ✅ Section 3 shipped as `apps/console/src/app/tokens.css`, with
 `scripts/check-contrast.mjs` gating the build so a failing token cannot ship. `body` now

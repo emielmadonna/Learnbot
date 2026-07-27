@@ -222,6 +222,141 @@ export type AnalyticsSignals = QuestionEnvelope & {
   };
 };
 
+// ------------------------------------------------------ per-learner signals
+
+/**
+ * Per-learner readout: depth, escalating specificity, stuck lessons and
+ * next-offer readiness. Every learner row is derived in SQL from
+ * `public.question_labels`, `public.student_progress` and
+ * `app_private.user_access_accounts` by `public.analytics_learner_signals` —
+ * see that migration for the exact honesty rules. Nothing here is estimated
+ * client-side: a learner whose trend cannot be computed carries
+ * `escalation.state === "insufficient_data"` rather than a guessed direction,
+ * and `readiness.tier === "insufficient_data"` whenever no course-progress
+ * record exists at all.
+ */
+export type EscalationState =
+  | "escalating"
+  | "steady"
+  | "declining"
+  | "insufficient_data";
+
+export type LearnerEscalation = {
+  state: EscalationState;
+  sampleSize: number;
+  firstHalfAvgSpecificity: number | null;
+  secondHalfAvgSpecificity: number | null;
+};
+
+export type StuckCluster = {
+  lessonId: string | null;
+  lessonTitle: string | null;
+  courseId: string | null;
+  courseTitle: string | null;
+  topicKey: string;
+  topicLabel: string;
+  repeats: number;
+  lastAskedAt: string;
+};
+
+export type LearnerStuck = {
+  clusterCount: number;
+  clusters: StuckCluster[];
+};
+
+export type ReadinessTier =
+  | "likely_ready"
+  | "possible"
+  | "not_yet"
+  | "insufficient_data";
+
+export type LearnerReadiness = {
+  tier: ReadinessTier;
+  evidence: {
+    maxPercentComplete: number | null;
+    hasCompletedCourse: boolean;
+    questions: number;
+    notableOrCriticalQuestions: number;
+  };
+};
+
+export type LearnerSignalRow = {
+  subjectUserId: string;
+  /** An account email, or `null` when the learner has no admin-provisioned account row. */
+  displayName: string | null;
+  questions: number;
+  distinctTopics: number;
+  distinctLessons: number;
+  distinctCourses: number;
+  notableOrCriticalQuestions: number;
+  criticalQuestions: number;
+  ungroundedAnswers: number;
+  firstAskedAt: string;
+  lastAskedAt: string;
+  depth: { notableOrCriticalShare: number | null };
+  escalation: LearnerEscalation;
+  stuck: LearnerStuck;
+  readiness: LearnerReadiness;
+};
+
+export type LearnerCoverage = {
+  questions: number;
+  classifiedQuestions: number;
+  unclassifiedQuestions: number;
+  learners: number;
+  classifiedLearners: number;
+};
+
+export type LearnerRowsValue = {
+  learners: LearnerSignalRow[];
+  omittedLearners: number;
+};
+
+export type AnalyticsLearnerSignals = QuestionEnvelope & {
+  limits: { learners: number; truncated: boolean };
+  thresholds: {
+    minQuestionsForTrend: number;
+    stuckRepeatThreshold: number;
+    escalationMargin: number;
+  };
+  specificityTaxonomy: Record<string, number>;
+  metrics: {
+    learnerCoverage: AnalyticsMetric<LearnerCoverage>;
+    /** `unknown` whenever nothing in the range has been classified. */
+    learnerRows: AnalyticsMetric<LearnerRowsValue>;
+  };
+};
+
+export function parseAnalyticsLearnerSignals(
+  value: unknown,
+): AnalyticsLearnerSignals {
+  const result = requireAnalyticsRpcSuccess(value);
+  if (!isRecord(result.metrics) || !isRecord(result.limits)) {
+    throw new AnalyticsRpcError("invalid_response");
+  }
+  requireMetric(result.metrics.learnerCoverage);
+  requireMetric(result.metrics.learnerRows);
+  if (
+    !isRecord(result.thresholds) ||
+    !isRecord(result.specificityTaxonomy)
+  ) {
+    throw new AnalyticsRpcError("invalid_response");
+  }
+  return result as unknown as AnalyticsLearnerSignals;
+}
+
+export async function getAnalyticsLearnerSignals(
+  supabase: SupabaseClient,
+  range: AnalyticsRangeInput,
+): Promise<AnalyticsLearnerSignals> {
+  return parseAnalyticsLearnerSignals(
+    await executeRpc(supabase, "analytics_learner_signals", {
+      range_start: range.rangeStart,
+      range_end: range.rangeEnd,
+    }),
+  );
+}
+
 export type QuestionIntelligenceSnapshot = {
   labels: AnalyticsQuestionLabels;
   signals: AnalyticsSignals;
