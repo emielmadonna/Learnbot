@@ -129,6 +129,33 @@ function textPrice(model: string | null): TextPrice {
   return DEFAULT_TEXT_PRICES[key] ?? UNKNOWN_MODEL_PRICE;
 }
 
+/**
+ * Whether a text model has a genuine price entry — the platform's default
+ * price book or a well-formed `LEARNINGBOT_MODEL_PRICES` override — as
+ * opposed to silently falling back to `UNKNOWN_MODEL_PRICE`.
+ *
+ * A model a creator can select must pass this check first (PLAN.md §6.1,
+ * §10): an unpriced model is a model this platform cannot bill correctly, so
+ * it must never be sent to the provider on the strength of a stored
+ * configuration value alone. Callers that resolve agent configuration use
+ * this to decide whether to honour a stored `agent_model` or fall back to
+ * the platform default.
+ */
+export function isKnownTextModel(model: string | null | undefined): boolean {
+  const key = model?.trim() ?? "";
+  if (key === "") return false;
+  if (Object.hasOwn(DEFAULT_TEXT_PRICES, key)) return true;
+  const override = parseOverrides()[key];
+  if (!override || typeof override !== "object" || Array.isArray(override)) {
+    return false;
+  }
+  const record = override as Record<string, unknown>;
+  return (
+    positiveNumber(record.inputPerMillionTokens) !== null &&
+    positiveNumber(record.outputPerMillionTokens) !== null
+  );
+}
+
 function unitPrice(model: string | null, fallbackUnit: string): UnitPrice {
   const key = model?.trim() || "";
   const override = parseOverrides()[key];

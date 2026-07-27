@@ -11,6 +11,20 @@ import {
   type GroundingSource,
   type LearningIntent,
 } from "../../../../lib/learning-provider";
+import {
+  estimateTextCostMicro,
+  readTokenUsage,
+  recordProviderCost,
+  reserveProviderCall,
+} from "../../../../lib/cost-metering";
+import {
+  ANSWER_ADAPTER_ID,
+  resolveAgentDirective,
+  resolveEscalationOffer,
+  sharedResponsesAdapter,
+  type EscalationOffer,
+  type ResolvedAgentDirective,
+} from "../../../../lib/provider-runtime";
 import { classifyLearnerQuestion } from "../../../../lib/question-classification";
 import { recordQuestionLabel } from "../../../../lib/supabase/question-intelligence-rpc";
 import {
@@ -64,6 +78,10 @@ function requestKey(value: unknown) {
   return crypto.randomUUID();
 }
 
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function normalizeSources(value: unknown): GroundingSource[] {
   if (!isRecord(value) || !Array.isArray(value.matches)) return [];
   return value.matches.flatMap((candidate) => {
@@ -102,9 +120,65 @@ function normalizeSources(value: unknown): GroundingSource[] {
         lessonId: stringValue(source.lessonId),
         lessonTitle: stringValue(source.lessonName),
         sectionName: stringValue(source.sectionName),
+        // Present only for a true semantic/hybrid match; `null` for a
+        // lexical-only match, which has no comparable score. Used below to
+        // apply the tenant's configured similarity floor.
+        similarity: numberValue(candidate.semanticSimilarity),
       },
     ];
   });
+}
+
+/**
+ * The tenant's configured retrieval behaviour, applied to an already-fetched
+ * candidate pool (Phase 14, PLAN.md §6.1).
+ *
+ * The retrieval RPCs themselves are out of scope here and already cap a
+ * single request at 12 candidates, so this route always asks for that many
+ * and narrows down afterwards rather than varying the request size — that
+ * keeps one request shape working for every retrieval count a creator can
+ * configure (1–20) without a second round trip. A similarity floor only
+ * screens semantic matches: a lexical-degraded match has no comparable score
+ * and is left alone rather than dropped on a metric it was never scored on.
+ */
+function applyRetrievalDirective(
+  sources: readonly GroundingSource[],
+  directive: ResolvedAgentDirective,
+): GroundingSource[] {
+  const floored = sources.filter(
+    (source) =>
+      source.similarity === null ||
+      source.similarity === undefined ||
+      source.similarity >= directive.retrievalSimilarityFloor,
+  );
+  return floored.slice(0, directive.retrievalCount);
+}
+
+/**
+ * A simple, honest heuristic for "the learner is visibly stuck": the current
+ * question repeats the most recent question they actually asked (not the
+ * assistant's reply in between). This is the only signal
+ * `escalationTrigger: "after_repeated_question"` (agent-panel.tsx) has to
+ * work with on this path.
+ */
+function isRepeatedQuestion(
+  question: string,
+  history: readonly ConversationHistoryItem[],
+): boolean {
+  const normalized = question.trim().toLowerCase();
+  if (!normalized) return false;
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const entry = history[index];
+    if (!entry) continue;
+    if (entry.actorType !== "assistant") {
+      return entry.body.trim().toLowerCase() === normalized;
+    }
+  }
+  return false;
+}
+
+function escalationPayload(offer: EscalationOffer) {
+  return { offered: offer.offered, trigger: offer.trigger, message: offer.message };
 }
 
 function learningIntent(value: unknown): LearningIntent {
@@ -275,21 +349,16 @@ function groundedAnswerMessages(input: {
   ];
 }
 
-const streamingRuntime = globalThis as typeof globalThis & {
-  __learningBotStreamingAdapter?: OpenAIResponsesAdapter;
-};
-
 function streamingAdapter() {
-  const credential = process.env.OPENAI_API_KEY?.trim();
-  if (!credential) {
+  // Shared with the non-streaming path (`lib/learning-provider.ts`) via the
+  // same adapter id, so both halves of the answer path — and every ledger
+  // row and recorded assistant message they produce — are attributable to
+  // one provider integration.
+  const adapter = sharedResponsesAdapter(ANSWER_ADAPTER_ID);
+  if (!adapter) {
     throw new LearningProviderError("provider_not_configured", false);
   }
-  streamingRuntime.__learningBotStreamingAdapter ??=
-    new OpenAIResponsesAdapter({
-      id: "openai-responses-production-v1",
-      credentialResolver: async () => credential,
-    });
-  return streamingRuntime.__learningBotStreamingAdapter;
+  return adapter;
 }
 
 function wantsEventStream(request: Request, modality: "text" | "voice") {

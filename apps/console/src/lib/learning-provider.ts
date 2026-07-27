@@ -1,9 +1,22 @@
 import type {
+  ChatCompletion,
   ChatCompletionInput,
   JsonValue,
+  ProviderOutcome,
   ProviderRequestContext,
 } from "@course-ai/contracts";
-import { OpenAIResponsesAdapter } from "@course-ai/provider-router";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  ANSWER_ADAPTER_ID,
+  ProviderRuntimeError,
+  resolveAgentDirective,
+  runMeteredCompletion,
+  sharedResponsesAdapter,
+  type ResolvedAgentDirective,
+} from "./provider-runtime";
+
+export type { ResolvedAgentDirective } from "./provider-runtime";
+export { resolveAgentDirective } from "./provider-runtime";
 
 export type GroundingSource = {
   chunkId: string;
@@ -16,7 +29,24 @@ export type GroundingSource = {
   lessonId: string | null;
   lessonTitle: string | null;
   sectionName: string | null;
+  /**
+   * Cosine-style semantic similarity in the retrieval RPC's own scale
+   * (present only for hybrid/semantic matches; `null` for a lexical-only
+   * match, which has no comparable score). Optional so existing callers that
+   * construct a `GroundingSource` without it keep compiling unchanged.
+   */
+  similarity?: number | null;
 };
+
+function isResolvedAgentDirective(
+  value: unknown,
+): value is ResolvedAgentDirective {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    typeof (value as { modelFellBack?: unknown }).modelFellBack === "boolean"
+  );
+}
 
 export type LearningIntent = "explain" | "practice" | "check";
 
@@ -27,29 +57,27 @@ export type ConversationHistoryItem = {
 
 export class LearningProviderError extends Error {
   constructor(
-    readonly code: "provider_not_configured" | "provider_failed",
+    readonly code:
+      | "provider_not_configured"
+      | "provider_failed"
+      | "operation_secret_unavailable"
+      | "spend_refused",
     readonly retryable: boolean,
+    /** Safe to show a learner. Falls back to a generic message per-code. */
+    readonly publicMessage?: string,
+    readonly retryAfterSeconds = 0,
   ) {
     super(code);
     this.name = "LearningProviderError";
   }
 }
 
-const providerRuntime = globalThis as typeof globalThis & {
-  __learningBotOpenAIResponsesAdapter?: OpenAIResponsesAdapter;
-};
-
 function configuredAdapter() {
-  const credential = process.env.OPENAI_API_KEY?.trim();
-  if (!credential) {
+  const adapter = sharedResponsesAdapter(ANSWER_ADAPTER_ID);
+  if (!adapter) {
     throw new LearningProviderError("provider_not_configured", false);
   }
-  providerRuntime.__learningBotOpenAIResponsesAdapter ??=
-    new OpenAIResponsesAdapter({
-      id: "openai-responses-production-v1",
-      credentialResolver: async () => credential,
-    });
-  return providerRuntime.__learningBotOpenAIResponsesAdapter;
+  return adapter;
 }
 
 function sourceContext(sources: readonly GroundingSource[]) {
@@ -129,11 +157,34 @@ export async function answerGroundedLearningQuestion(input: {
   tone?: string | null;
   history: readonly ConversationHistoryItem[];
   sources: readonly GroundingSource[];
+  /**
+   * The raw `learning_get_agent_directive` payload, or an already-resolved
+   * directive. Optional, and every field of it is re-validated on read
+   * regardless (`resolveAgentDirective`): a missing directive, a directive
+   * from a tenant that predates the agent-control-surface migration, or an
+   * out-of-range stored value all fall back to the same safe platform
+   * defaults rather than reaching the provider.
+   */
+  agentDirective?: unknown;
+  /**
+   * Supplying the caller's Supabase client meters this completion into
+   * `public.cost_ledger` under the resolved model and subjects it to the
+   * tenant's durable budget. Optional so callers that have not been updated
+   * (the widget and preview answer paths) keep working exactly as before,
+   * unmetered.
+   */
+  supabase?: SupabaseClient | null;
+  conversationId?: string | null;
+  operationToken?: string | null;
 }) {
+  const directive: ResolvedAgentDirective =
+    isResolvedAgentDirective(input.agentDirective)
+      ? input.agentDirective
+      : resolveAgentDirective(input.agentDirective);
+
   if (input.sources.length === 0) {
     return {
-      answer:
-        "I couldn’t find this in the published learning yet. Try naming the course, lesson, or idea you want to understand.",
+      answer: directive.noResultsMessage,
       provider: "grounding-boundary",
       adapterId: "no-source-safe-answer",
       providerRequestRef: input.requestId,
@@ -142,7 +193,6 @@ export async function answerGroundedLearningQuestion(input: {
     };
   }
 
-  const adapter = configuredAdapter();
   const context: ProviderRequestContext = {
     tenantId: input.tenantId,
     actorId: input.actorId,
@@ -152,9 +202,8 @@ export async function answerGroundedLearningQuestion(input: {
     fundingSource: "platform",
     deadlineMs: Date.now() + 30_000,
   };
-  const model =
-    process.env.LEARNINGBOT_LLM_MODEL?.trim() || "gpt-5.6-luna";
-  const outcome = await adapter.complete(context, {
+  const model = directive.model;
+  const request: ChatCompletionInput = {
     model,
     messages: [
       {
@@ -188,7 +237,38 @@ export async function answerGroundedLearningQuestion(input: {
         ].join("\n\n"),
       },
     ],
-  });
+  };
+
+  let outcome: ProviderOutcome<ChatCompletion>;
+  if (input.supabase) {
+    try {
+      outcome = (
+        await runMeteredCompletion({
+          supabase: input.supabase,
+          capability: "conversation.answer",
+          adapterId: ANSWER_ADAPTER_ID,
+          context,
+          request,
+          subjectKey: `${input.tenantId || "unscoped"}:${input.actorId}`,
+          conversationId: input.conversationId ?? null,
+          tenantId: input.tenantId || null,
+          operationToken: input.operationToken ?? null,
+        })
+      ).outcome;
+    } catch (error) {
+      if (error instanceof ProviderRuntimeError) {
+        throw new LearningProviderError(
+          error.code,
+          error.retryable,
+          error.publicMessage,
+          error.retryAfterSeconds,
+        );
+      }
+      throw error;
+    }
+  } else {
+    outcome = await configuredAdapter().complete(context, request);
+  }
   if (!outcome.ok) {
     throw new LearningProviderError(
       "provider_failed",

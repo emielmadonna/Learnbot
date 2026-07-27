@@ -8,6 +8,7 @@ import { OpenAIResponsesAdapter } from "@course-ai/provider-router";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   estimateTextCostMicro,
+  isKnownTextModel,
   readTokenUsage,
   recordProviderCost,
   reserveProviderCall,
@@ -255,4 +256,208 @@ export async function runMeteredCompletion(
     });
   }
   return { outcome, model, costMicro };
+}
+
+// ---------------------------------------------------------------------------
+// Agent configuration — validated on read (Phase 14, PLAN.md §6)
+// ---------------------------------------------------------------------------
+
+/**
+ * The adapter id shared by every text completion on the answer path (the
+ * main JSON response and its SSE-streamed twin). One id, so every ledger row
+ * and every recorded assistant message on the answer path is attributable to
+ * the same provider integration.
+ */
+export const ANSWER_ADAPTER_ID = "openai-responses-production-v1";
+
+const DEFAULT_AGENT_MODEL =
+  process.env.LEARNINGBOT_LLM_MODEL?.trim() || "gpt-5.6-luna";
+const DEFAULT_TEMPERATURE = 0.4;
+const DEFAULT_TOP_P = 1.0;
+const DEFAULT_MAX_OUTPUT_TOKENS = 800;
+const DEFAULT_RETRIEVAL_COUNT = 6;
+const DEFAULT_RETRIEVAL_SIMILARITY_FLOOR = 0.2;
+// Identical wording to the fallback the answer path already used before this
+// column existed, so a tenant that has never touched this setting sees no
+// change in the refusal they already know.
+const DEFAULT_NO_RESULTS_MESSAGE =
+  "I couldn’t find this in the published learning yet. Try naming the course, lesson, or idea you want to understand.";
+const DEFAULT_ESCALATION_TRIGGER = "manual";
+const DEFAULT_ESCALATION_MESSAGE =
+  "A member of this workspace's team can help with this — ask, and it will be flagged for follow-up.";
+
+const ESCALATION_TRIGGERS = new Set([
+  "manual",
+  "always_available",
+  "after_no_results",
+  "after_repeated_question",
+]);
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function boundedNumber(value: unknown, min: number, max: number): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (value < min || value > max) return null;
+  return value;
+}
+
+function boundedInteger(value: unknown, min: number, max: number): number | null {
+  const resolved = boundedNumber(value, min, max);
+  return resolved === null ? null : Math.round(resolved);
+}
+
+function boundedText(value: unknown, maxLength: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > maxLength) return null;
+  return trimmed;
+}
+
+export type ResolvedAgentDirective = {
+  readonly model: string;
+  /**
+   * True when the stored model was rejected — unpriced, invalid, or absent —
+   * and the platform default was substituted instead.
+   */
+  readonly modelFellBack: boolean;
+  readonly temperature: number;
+  readonly topP: number;
+  readonly maxOutputTokens: number;
+  readonly retrievalCount: number;
+  readonly retrievalSimilarityFloor: number;
+  readonly noResultsMessage: string;
+  readonly escalationEnabled: boolean;
+  readonly escalationTrigger: string;
+  readonly escalationMessage: string | null;
+  readonly personaInstructions: string | null;
+  readonly tone: string | null;
+};
+
+/**
+ * Turns the raw `learning_get_agent_directive` payload — or nothing at all —
+ * into a directive every field of which is safe to hand to a provider call.
+ *
+ * This is the validate-on-read boundary PLAN.md §6.1/§10 requires: a stored
+ * temperature outside 0–2, a model with no price entry in
+ * `cost-metering.ts`, a null where a number is expected, or a directive from
+ * a tenant whose `tenant_branding` row predates this migration (every new
+ * field simply absent) all fall back to the same safe default rather than
+ * reaching the provider or crashing the turn.
+ *
+ * What this function deliberately does *not* decide: whether to refuse when
+ * retrieval is empty. That decision is not the creator's, stays in the
+ * callers of this function as an unconditional code path, and is never read
+ * from the directive. Only `noResultsMessage` — the wording of that refusal
+ * — is read here.
+ */
+export function resolveAgentDirective(raw: unknown): ResolvedAgentDirective {
+  const directive = isPlainRecord(raw) ? raw : {};
+
+  const requestedModel =
+    typeof directive.model === "string" ? directive.model.trim() : "";
+  let model = requestedModel;
+  let modelFellBack = false;
+  if (!model || !isKnownTextModel(model)) {
+    if (model) {
+      // A stored model with no price entry cannot be billed correctly
+      // (PLAN.md §6.1, §10). Fall back rather than silently call an unpriced
+      // model, and log it so the gap in the price book is visible.
+      console.warn(
+        "agent.directive.model_unpriced_fallback",
+        JSON.stringify({
+          requestedModel: model,
+          fallbackModel: DEFAULT_AGENT_MODEL,
+        }),
+      );
+    }
+    model = DEFAULT_AGENT_MODEL;
+    modelFellBack = true;
+  }
+
+  const temperature =
+    boundedNumber(directive.temperature, 0, 2) ?? DEFAULT_TEMPERATURE;
+  const topP = boundedNumber(directive.topP, 0.01, 1) ?? DEFAULT_TOP_P;
+  const maxOutputTokens =
+    boundedInteger(directive.maxOutputTokens, 64, 4000) ??
+    DEFAULT_MAX_OUTPUT_TOKENS;
+  const retrievalCount =
+    boundedInteger(directive.retrievalCount, 1, 20) ?? DEFAULT_RETRIEVAL_COUNT;
+  const retrievalSimilarityFloor =
+    boundedNumber(directive.retrievalSimilarityFloor, 0, 1) ??
+    DEFAULT_RETRIEVAL_SIMILARITY_FLOOR;
+  const noResultsMessage =
+    boundedText(directive.noResultsMessage, 500) ?? DEFAULT_NO_RESULTS_MESSAGE;
+
+  const escalationEnabled = directive.escalationEnabled === true;
+  const escalationTrigger =
+    typeof directive.escalationTrigger === "string" &&
+    ESCALATION_TRIGGERS.has(directive.escalationTrigger)
+      ? directive.escalationTrigger
+      : DEFAULT_ESCALATION_TRIGGER;
+  const escalationMessage = escalationEnabled
+    ? boundedText(directive.escalationMessage, 500) ?? DEFAULT_ESCALATION_MESSAGE
+    : null;
+
+  const personaInstructions =
+    typeof directive.personaInstructions === "string"
+      ? directive.personaInstructions
+      : null;
+  const tone = typeof directive.tone === "string" ? directive.tone : null;
+
+  return {
+    model,
+    modelFellBack,
+    temperature,
+    topP,
+    maxOutputTokens,
+    retrievalCount,
+    retrievalSimilarityFloor,
+    noResultsMessage,
+    escalationEnabled,
+    escalationTrigger,
+    escalationMessage,
+    personaInstructions,
+    tone,
+  };
+}
+
+export type EscalationOffer = {
+  readonly offered: boolean;
+  readonly trigger: string;
+  readonly message: string | null;
+};
+
+/**
+ * Whether to offer a hand-off to a human on this turn, and what to say.
+ *
+ * The trigger vocabulary matches the creator-facing options in
+ * `agent-panel.tsx`: `always_available` offers on every answer,
+ * `after_no_results` offers alongside the refusal, `after_repeated_question`
+ * offers once a learner visibly repeats themselves, and `manual` never
+ * offers proactively — a student has to ask, which this function has no way
+ * to observe from here and therefore never triggers on its own.
+ */
+export function resolveEscalationOffer(
+  directive: ResolvedAgentDirective,
+  context: { readonly refused: boolean; readonly repeated: boolean },
+): EscalationOffer {
+  if (!directive.escalationEnabled) {
+    return {
+      offered: false,
+      trigger: directive.escalationTrigger,
+      message: null,
+    };
+  }
+  const offered =
+    directive.escalationTrigger === "always_available" ||
+    (directive.escalationTrigger === "after_no_results" && context.refused) ||
+    (directive.escalationTrigger === "after_repeated_question" &&
+      context.repeated);
+  return {
+    offered,
+    trigger: directive.escalationTrigger,
+    message: offered ? directive.escalationMessage : null,
+  };
 }
