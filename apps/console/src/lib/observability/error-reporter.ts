@@ -12,6 +12,7 @@
  *    Client errors have to be relayed through a server route.
  */
 
+import { after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 import { readSupabasePublicConfig } from "../supabase/config";
@@ -185,5 +186,30 @@ export async function reportError(
     };
   } catch {
     return { reported: false, reason: "intake_threw" };
+  }
+}
+
+/**
+ * Fire-and-forget reporting from a route's catch block.
+ *
+ * Scheduled with `after()` so the report never delays the response the user is
+ * waiting on, and — importantly on serverless — is not cut off when the
+ * handler returns. A bare floating promise would frequently be killed by the
+ * freeze before it reached the database, which is the failure mode where the
+ * errors you most want are the ones you never see.
+ *
+ * Returns nothing on purpose. There is no outcome a caller should branch on:
+ * the request has already failed, and the reporting result is not the caller's
+ * problem.
+ */
+export function reportUnexpectedError(input: ReportErrorInput): void {
+  try {
+    after(async () => {
+      await reportError(input);
+    });
+  } catch {
+    // `after()` throws outside a request scope (unit tests, scripts). Falling
+    // back to a floating promise is correct there: nothing is about to freeze.
+    void reportError(input).catch(() => undefined);
   }
 }

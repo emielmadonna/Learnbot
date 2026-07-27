@@ -15,6 +15,6 @@ export async function GET(request: Request) {
     const result = await executeLearningRpc(supabase, "learning_ingestion_review_queue");
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
-    return ingestionErrorResponse(error);
+    return ingestionErrorResponse(error, "api/ingestion/review");
   }
 }

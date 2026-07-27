@@ -163,6 +163,6 @@ export async function POST(request: Request) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    return ingestionErrorResponse(error);
+    return ingestionErrorResponse(error, "api/ingestion/scan");
   }
 }

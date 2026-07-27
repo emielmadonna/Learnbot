@@ -23,7 +23,7 @@ export async function GET(
     });
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
-    return ingestionErrorResponse(error);
+    return ingestionErrorResponse(error, "api/ingestion/review/[jobId]");
   }
 }
 
@@ -54,6 +54,6 @@ export async function POST(
     });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return ingestionErrorResponse(error);
+    return ingestionErrorResponse(error, "api/ingestion/review/[jobId]");
   }
 }

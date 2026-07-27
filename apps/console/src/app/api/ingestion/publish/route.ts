@@ -32,6 +32,6 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return ingestionErrorResponse(error);
+    return ingestionErrorResponse(error, "api/ingestion/publish");
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthenticationBoundaryError } from "../../../lib/supabase/auth-boundary";
 import { LearningRpcError } from "../../../lib/supabase/learning-rpc";
+import { reportUnexpectedError } from "../../../lib/observability/error-reporter";
 
 const safeCodes = new Set([
   "access_denied",
@@ -37,7 +38,22 @@ export function uuid(value: unknown): string {
   return value;
 }
 
-export function ingestionErrorResponse(error: unknown) {
+export function ingestionErrorResponse(error: unknown, route?: string) {
+  // Anything that is not a known code is a bug, not a refusal. Those are the
+  // ones worth recording — the safe codes above are the pipeline's gates
+  // working as designed, and reporting them would bury the real failures.
+  const expected =
+    error instanceof AuthenticationBoundaryError ||
+    (error instanceof LearningRpcError && safeCodes.has(error.code));
+  if (!expected) {
+    reportUnexpectedError({
+      error,
+      source: "api",
+      route: route ?? "api/ingestion",
+      severity: "error",
+    });
+  }
+
   if (error instanceof AuthenticationBoundaryError) {
     return NextResponse.json(
       { ok: false, code: "authentication_required" },
