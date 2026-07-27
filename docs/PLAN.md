@@ -538,14 +538,15 @@ Status is maintained here — update it in the same commit as the work.
 | 5 | Landing page | S | **done** |
 | 6 | Brand the chat | S | **done** |
 | 14 | Wire agent config into the answer path | S | **done** |
-| 8 | Signals readout | M | in progress |
-| 7 | The assistant / embeddable widget | XL | not started |
-| 16 | `--ui-*` token consolidation | M | not started |
-| 9 | Character avatars | M | not started |
-| 15 | Billing, margins, Stripe | L | not started |
-| 10 | Knowledge pipeline | XL | not started |
+| 8 | Signals readout | M | **done** |
+| 16 | `--ui-*` token consolidation | M | **done** |
+| 15 | Billing, margins, Stripe | L | **done** |
+| 9 | Character avatars | M | **done** |
+| 7 | The assistant / embeddable widget | XL | **done** |
+| 10 | Knowledge pipeline | XL | **built, gated closed** |
+| 12 | Operational debt | M | partial — rate limiting + outbox drain done; audit coverage and invitation email not |
+| 17 | Malware scan checkpoint | M | **not started — blocks Phase 10 end to end** |
 | 11 | Figures in chat | M | not started |
-| 12 | Operational debt | M | not started |
 | 13 | Management MCP | M | not started |
 
 **Phase 1 — Token file.** ✅ Section 3 shipped as `apps/console/src/app/tokens.css`, with
