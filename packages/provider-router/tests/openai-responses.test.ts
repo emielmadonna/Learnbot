@@ -8,6 +8,7 @@ import type {
 } from "@course-ai/contracts";
 import {
   OpenAIResponsesAdapter,
+  type ChatTextStreamEvent,
   type OpenAIResponsesAdapterOptions,
   type OpenAIResponsesStreamOptions,
 } from "../src/openai-responses.js";
@@ -458,6 +459,119 @@ test("complete accumulates the neutral ChatCompletion result", async () => {
     message: { role: "assistant", content: "final answer" },
     finishReason: "stop",
   });
+});
+
+async function collectText(
+  instance: OpenAIResponsesAdapter,
+  requestContext = context(),
+  requestInput = input,
+  options: OpenAIResponsesStreamOptions = {},
+): Promise<readonly ChatTextStreamEvent[]> {
+  const events: ChatTextStreamEvent[] = [];
+  for await (const event of instance.streamChatText(
+    requestContext,
+    requestInput,
+    options,
+  )) {
+    events.push(event);
+  }
+  return events;
+}
+
+test("streamChatText forwards deltas unbuffered and ends with a done event", async () => {
+  const instance = adapter(
+    (async () =>
+      streamResponse([
+        sse("response.output_text.delta", { delta: "final" }),
+        sse("response.output_text.delta", { delta: " answer" }),
+        completed(),
+      ])) as typeof fetch,
+  );
+  const events = await collectText(instance);
+  assert.deepEqual(events.map((event) => event.type), [
+    "delta",
+    "delta",
+    "done",
+  ]);
+  assert.deepEqual(events[0], { type: "delta", text: "final" });
+  assert.deepEqual(events[1], { type: "delta", text: " answer" });
+  const terminal = events[2];
+  assert.equal(terminal?.type, "done");
+  if (terminal?.type !== "done") {
+    assert.fail("expected a done event");
+  }
+  assert.equal(terminal.finishReason, "stop");
+  assert.deepEqual(terminal.result.usage, [
+    { unit: "input_tokens", quantity: 3 },
+    { unit: "output_tokens", quantity: 2 },
+    { unit: "total_tokens", quantity: 5 },
+  ]);
+  assert.equal(terminal.result.provider, "openai");
+  assert.equal(terminal.result.adapterId, "openai-responses");
+});
+
+test("streamChatText surfaces a provider error instead of a done event", async () => {
+  const events = await collectText(
+    adapter(
+      (async () =>
+        streamResponse([
+          sse("response.failed", {
+            response: {
+              status: "failed",
+              error: { message: "provider-internal-failure" },
+            },
+          }),
+        ])) as typeof fetch,
+    ),
+  );
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.type, "error");
+  assert.equal(
+    events[0]?.type === "error" ? events[0].error.code : undefined,
+    "provider_error",
+  );
+  assert.equal(JSON.stringify(events).includes("provider-internal"), false);
+});
+
+test("streamChatText reports an error, not a done event, for a truncated stream", async () => {
+  const events = await collectText(
+    adapter(
+      (async () =>
+        streamResponse([
+          sse("response.output_text.delta", { delta: "partial" }),
+        ])) as typeof fetch,
+    ),
+  );
+  assert.equal(events[0]?.type, "delta");
+  assert.equal(events[1]?.type, "error");
+  assert.equal(
+    events.some((event) => event.type === "done"),
+    false,
+  );
+});
+
+test("streamChatText propagates caller abort as an error, never a done event", async () => {
+  const hangingFetch = (async (_url: unknown, init?: RequestInit) => {
+    return await new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener(
+        "abort",
+        () => reject(new DOMException("aborted", "AbortError")),
+        { once: true },
+      );
+    });
+  }) as typeof fetch;
+  const controller = new AbortController();
+  const pending = collectText(adapter(hangingFetch), context(), input, {
+    signal: controller.signal,
+  });
+  controller.abort();
+  const events = await pending;
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.type, "error");
+  assert.equal(
+    events[0]?.type === "error" ? events[0].error.code : undefined,
+    "aborted",
+  );
 });
 
 test("requires request-scoped model selection and HTTPS endpoints", async () => {

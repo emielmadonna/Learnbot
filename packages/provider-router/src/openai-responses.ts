@@ -8,6 +8,7 @@ import type {
   ProviderError,
   ProviderOutcome,
   ProviderRequestContext,
+  ProviderResult,
   ProviderStreamEvent,
   UsageQuantity,
 } from "@course-ai/contracts";
@@ -44,6 +45,15 @@ export interface OpenAIResponsesAdapterOptions {
 export interface OpenAIResponsesStreamOptions {
   readonly signal?: AbortSignal;
 }
+
+export type ChatTextStreamEvent =
+  | { readonly type: "delta"; readonly text: string }
+  | {
+      readonly type: "done";
+      readonly finishReason: string;
+      readonly result: Omit<ProviderResult<void>, "value">;
+    }
+  | { readonly type: "error"; readonly error: ProviderError };
 
 interface NormalizedOptions {
   readonly id: string;
@@ -1095,6 +1105,52 @@ export class OpenAIResponsesAdapter implements LLMProvider {
       unlinkSignal();
       await reader.cancel().catch(() => undefined);
     }
+  }
+
+  /**
+   * A caller-friendly view of {@link streamChat} for transports (SSE, etc.)
+   * that want to forward text as it arrives instead of buffering it.
+   *
+   * `streamChat` yields the low-level `ProviderStreamEvent<ChatStreamChunk>`
+   * union, which nests the interesting cases (`data.value.type ===
+   * "text.delta"`, `data.value.type === "finish"`) inside two levels of
+   * tagged unions. This flattens that into three events a route handler can
+   * forward almost verbatim: `delta` (text as it arrives), `done` (terminal,
+   * carries the same result metadata `complete()` would have produced), and
+   * `error`. It does not buffer text and it does not change what `complete()`
+   * does — `complete()` still accumulates `streamChat` itself, unchanged.
+   */
+  async *streamChatText(
+    context: ProviderRequestContext,
+    input: ChatCompletionInput,
+    streamOptions: OpenAIResponsesStreamOptions = {},
+  ): AsyncGenerator<ChatTextStreamEvent> {
+    let finishReason = "stop";
+    for await (const event of this.streamChat(context, input, streamOptions)) {
+      if (event.type === "error") {
+        yield { type: "error", error: event.error };
+        return;
+      }
+      if (event.type === "data") {
+        if (event.value.type === "text.delta") {
+          yield { type: "delta", text: event.value.text };
+        } else if (event.value.type === "finish") {
+          finishReason = event.value.reason;
+        }
+        continue;
+      }
+      yield { type: "done", finishReason, result: event.result };
+      return;
+    }
+    yield {
+      type: "error",
+      error: providerError(
+        this.id,
+        "response_invalid",
+        "The OpenAI response stream ended without a terminal event.",
+        true,
+      ),
+    };
   }
 
   async complete(
