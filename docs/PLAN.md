@@ -112,14 +112,18 @@ limiting were listed here until 2026-07-27. All three have shipped and moved up 
   Production failures surface only when a person notices — which is exactly how the
   2026-07-27 outage of the agent, insights and billing panels was found.
 
-### The two things that can destroy a live tenant
+### The thing that can destroy a live tenant
 
-1. **`supabase db push` against this project.** As of 2026-07-27 the migration ledger and
-   `infra/supabase/migrations/` share **zero** versions, so a push replays all 56
-   migrations from `0001` over live data. `infra/supabase/release/LEDGER_RECONCILE.sql`
-   fixes this and has **not been run**. Read `infra/supabase/SCHEMA-DRIFT.md` first.
-2. **No backups.** The project is on the Supabase Free plan: no scheduled backups, no
-   PITR. Nothing above is recoverable.
+**No backups.** The project is on the Supabase Free plan: no scheduled backups, no
+PITR. Nothing is recoverable. Every hand-apply so far has been done knowing this.
+
+*(The `supabase db push` full-replay hazard was resolved 2026-07-27.
+`infra/supabase/release/LEDGER_RECONCILE.sql` was run in two passes, taking
+`supabase_migrations.schema_migrations` from 39 rows sharing **zero** versions with
+the repo to **89 rows carrying all 59**. A push no longer sees `0001` as unapplied.
+It is still not a routine command here — the ledger's `statements` arrays are NULL
+for the 50 hand-recorded rows, so verify against real objects. Read
+`infra/supabase/SCHEMA-DRIFT.md` first.)*
 
 *(Until 2026-07-27 this section named the `admin_provision_auth_user` downgrade. That
 specific hazard is resolved — the nine hand-applied migrations were recovered into
