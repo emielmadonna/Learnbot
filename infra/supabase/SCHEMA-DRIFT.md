@@ -369,6 +369,22 @@ reads the ledger.
 
 ## Outstanding
 
+- **Apply `20260727130000_audit_coverage.sql`.** Written 2026-07-27, not yet
+  applied. Adds `app_private.lifecycle_append_audit` and three AFTER triggers
+  covering `public.messages`, `public.upload_intents` and
+  `app_private.user_access_accounts`.
+
+  It deliberately does **not** `create or replace` any existing function, so the
+  four RPCs it covers must come out byte-identical. Fingerprint them before and
+  after and confirm all four are unchanged:
+
+  | Function | md5 of `pg_get_functiondef`, before |
+  |---|---|
+  | `learning_record_user_message` | `926bb45a912c2f1862563ece16f891d2` |
+  | `learning_record_assistant_message` | `ff7bd3d652ff334e870f6005378f4ba7` |
+  | `learning_create_upload_intent` | `2695588eec02cca629ea837ccd04851c` |
+  | `learning_confirm_quarantine_upload` | `99ef8cbe971219ce7e232ca1b86a48b5` |
+
 - Backups remain disabled (Free plan). The next hand-apply will again have no
   rollback.
 - ~~`platform_admin_client_detail` / `platform_admin_tenant_detail` overlap.~~
