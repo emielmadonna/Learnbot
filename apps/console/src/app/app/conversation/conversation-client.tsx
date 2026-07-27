@@ -12,6 +12,10 @@ import {
 } from "react";
 import { brandInitial, readableOn } from "../../../components/app-shell/brand";
 import type { AgentConfig } from "../../../components/app-shell/contract";
+import {
+  AvatarCharacter,
+  type AvatarPose,
+} from "../../../components/avatar-character";
 import { PlainText, RichText } from "../../../components/ui/rich-text";
 import { recordUsageEvent } from "../usage-signal";
 import styles from "./conversation.module.css";
@@ -41,6 +45,16 @@ type ConversationMessage = {
   createdAt: string | null;
   sources: SourceEvidence[];
   richParts: RichMessagePart[];
+  /** Text is still arriving from `/api/learning/respond`'s SSE stream. */
+  streaming?: boolean;
+  /**
+   * The stream that produced this message ended with a mid-stream `error`
+   * event (or closed without a terminal `done`) rather than completing.
+   * PLAN.md §5: "a stream that dies must not look like a finished answer" —
+   * this is what lets the render show that visibly instead of quietly
+   * treating a truncated answer as done.
+   */
+  streamError?: boolean;
 };
 
 type RichMessagePart =
@@ -398,6 +412,69 @@ async function readJson(response: Response) {
   }
 }
 
+/**
+ * Reads the SSE body `/api/learning/respond` returns when the request sends
+ * `Accept: text/event-stream` (PLAN.md §5): a `sources` event first, then
+ * zero or more `text.delta`-shaped `delta` events, then either a terminal
+ * `done` or a terminal `error`. Frames are separated by a blank line; a
+ * frame may straddle two chunks off the wire, so partial lines are buffered
+ * across reads rather than assumed to land whole.
+ */
+async function readEventStream(
+  response: Response,
+  handlers: {
+    onSources: (payload: JsonRecord) => void;
+    onDelta: (payload: JsonRecord) => void;
+    onDone: (payload: JsonRecord) => void;
+    onError: (payload: JsonRecord) => void;
+  },
+): Promise<{ sawDone: boolean; sawError: boolean }> {
+  const body = response.body;
+  if (!body) throw new Error("stream_unavailable");
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let sawDone = false;
+  let sawError = false;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let frameEnd = buffer.indexOf("\n\n");
+    while (frameEnd !== -1) {
+      const frame = buffer.slice(0, frameEnd);
+      buffer = buffer.slice(frameEnd + 2);
+      let eventName = "message";
+      let dataLine = "";
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event:")) eventName = line.slice(6).trim();
+        else if (line.startsWith("data:")) dataLine += line.slice(5).trim();
+      }
+      if (dataLine) {
+        let payload: unknown = null;
+        try {
+          payload = JSON.parse(dataLine);
+        } catch {
+          payload = null;
+        }
+        if (isRecord(payload)) {
+          if (eventName === "sources") handlers.onSources(payload);
+          else if (eventName === "delta") handlers.onDelta(payload);
+          else if (eventName === "done") {
+            sawDone = true;
+            handlers.onDone(payload);
+          } else if (eventName === "error") {
+            sawError = true;
+            handlers.onError(payload);
+          }
+        }
+      }
+      frameEnd = buffer.indexOf("\n\n");
+    }
+  }
+  return { sawDone, sawError };
+}
+
 function requestErrorMessage(response: Response, payload: unknown) {
   if (response.status === 401) return "Your session has expired.";
   if (response.status === 403) return "This workspace denied the request.";
@@ -448,6 +525,20 @@ export default function ConversationClient({
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Streaming/avatar state (PLAN.md §5, §7.1). `streamPhase` is null once a
+  // turn's stream has settled (done, errored, or never started); while a
+  // turn is in flight it is "awaiting-first-token" between the request going
+  // out and the first `delta` event, then "streaming" until `done`/`error`.
+  // The avatar's `thinking` pose is exactly the first phase; `speaking` is
+  // the second — this is the real state the avatar is documented to reflect,
+  // not a decorative timer.
+  const [streamPhase, setStreamPhase] = useState<
+    "awaiting-first-token" | "streaming" | null
+  >(null);
+  // The most recently completed turn refused for lack of grounding — drives
+  // the avatar's `unsure` pose (PLAN.md §7.1) until the next question is
+  // asked.
+  const [lastAnswerRefused, setLastAnswerRefused] = useState(false);
   const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
   const [voiceReadiness, setVoiceReadiness] = useState<VoiceReadiness>(
     initialMode === "voice" ? "checking" : "unchecked",
@@ -745,6 +836,7 @@ export default function ConversationClient({
     retryTurnRef.current = { content, key: turnKey };
     setDraft("");
     setError(null);
+    setLastAnswerRefused(false);
     const optimisticMessage: ConversationMessage = {
       messageId: `pending-${crypto.randomUUID()}`,
       role: "user",
@@ -755,12 +847,21 @@ export default function ConversationClient({
     };
     setMessages((current) => [...current, optimisticMessage]);
     setSending(true);
+    // Text turns stream (PLAN.md §5). Voice always needs the complete text in
+    // one piece — it feeds the realtime model's "read this back" turn — and
+    // the server force-excludes voice from streaming regardless of headers,
+    // so the voice path simply never asks for it.
+    const wantsStream = modality === "text";
+    let streamedMessageId: string | null = null;
     try {
       const activeConversationId = await ensureConversation(signal);
       const response = await fetch("/api/learning/respond", {
         method: "POST",
         credentials: "same-origin",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(wantsStream ? { accept: "text/event-stream" } : {}),
+        },
         signal: signal ?? null,
         body: JSON.stringify({
           conversationId: activeConversationId,
@@ -772,38 +873,156 @@ export default function ConversationClient({
           modality,
         }),
       });
-      const payload = await readJson(response);
       if (response.status === 401) {
         window.location.assign(
           `/auth/sign-in?error=authentication_required&next=${encodeURIComponent("/app/conversation")}`,
         );
         return null;
       }
+      const isEventStream = (response.headers.get("content-type") ?? "")
+        .toLowerCase()
+        .includes("text/event-stream");
+
+      if (!wantsStream || !isEventStream) {
+        // Either this was always a non-streaming call (voice), or the server
+        // replied JSON anyway (e.g. an idempotent replay). Same handling as
+        // before streaming existed.
+        const payload = await readJson(response);
+        if (!response.ok) {
+          throw new Error(requestErrorMessage(response, payload));
+        }
+        const normalized = normalizeResponse(payload, activeConversationId);
+        if (!normalized.message) {
+          throw new Error("The assistant returned an invalid response.");
+        }
+        setConversationId(normalized.conversationId);
+        setMessages((current) => [...current, normalized.message!]);
+        void recordUsageEvent("conversation.turn_completed", {
+          conversationId: normalized.conversationId ?? activeConversationId,
+          modality,
+          intent: learningIntent,
+          sourceCount: normalized.message.sources.length,
+        });
+        retryTurnRef.current = null;
+        return {
+          conversationId: normalized.conversationId ?? activeConversationId,
+          message: normalized.message,
+        };
+      }
+
       if (!response.ok) {
+        const payload = await readJson(response);
         throw new Error(requestErrorMessage(response, payload));
       }
-      const normalized = normalizeResponse(payload, activeConversationId);
-      if (!normalized.message) {
-        throw new Error("The assistant returned an invalid response.");
+
+      // Streaming path. Sources are the first event, so citation chips can
+      // render before any text has arrived (PLAN.md §5.3); tokens then
+      // render as they arrive (§5, "no streaming needs to be built").
+      const streamingId = `assistant-${crypto.randomUUID()}`;
+      streamedMessageId = streamingId;
+      let assistantText = "";
+      let assistantSources: SourceEvidence[] = [];
+      let refused = false;
+      setStreamPhase("awaiting-first-token");
+      const outcome = await readEventStream(response, {
+        onSources(payload) {
+          assistantSources = Array.isArray(payload.sources)
+            ? payload.sources
+                .map((source, index) => normalizeSource(source, index))
+                .filter((source): source is SourceEvidence => Boolean(source))
+            : [];
+          setMessages((current) => [
+            ...current,
+            {
+              messageId: streamingId,
+              role: "assistant",
+              content: "",
+              createdAt: new Date().toISOString(),
+              sources: assistantSources,
+              richParts: [],
+              streaming: true,
+            },
+          ]);
+        },
+        onDelta(payload) {
+          const delta = stringValue(payload.text);
+          if (!delta) return;
+          assistantText += delta;
+          setStreamPhase("streaming");
+          setMessages((current) =>
+            current.map((message) =>
+              message.messageId === streamingId
+                ? { ...message, content: assistantText }
+                : message,
+            ),
+          );
+        },
+        onDone(payload) {
+          const provider = isRecord(payload.provider) ? payload.provider : null;
+          refused =
+            stringValue(provider?.adapterId) === "no-source-safe-answer";
+        },
+        onError() {
+          // Nothing to do per-event — `outcome.sawError` below is what
+          // decides the visible failure state once the stream has settled.
+        },
+      });
+
+      if (
+        !outcome.sawDone ||
+        outcome.sawError ||
+        assistantText.trim() === ""
+      ) {
+        // A stream that ends without a terminal `done` must not look like a
+        // finished answer (PLAN.md §5). The partial text (if any) and the
+        // sources that already arrived stay visible; only the status
+        // changes, so the learner sees exactly how far it got.
+        setMessages((current) =>
+          current.map((message) =>
+            message.messageId === streamingId
+              ? { ...message, streaming: false, streamError: true }
+              : message,
+          ),
+        );
+        setError(
+          "This answer stopped before it finished. Your question was saved — try asking again.",
+        );
+        return null;
       }
-      setConversationId(normalized.conversationId);
-      setMessages((current) => [...current, normalized.message!]);
+
+      setMessages((current) =>
+        current.map((message) =>
+          message.messageId === streamingId
+            ? { ...message, streaming: false }
+            : message,
+        ),
+      );
+      setLastAnswerRefused(refused);
       void recordUsageEvent("conversation.turn_completed", {
-        conversationId: normalized.conversationId ?? activeConversationId,
+        conversationId: activeConversationId,
         modality,
         intent: learningIntent,
-        sourceCount: normalized.message.sources.length,
+        sourceCount: assistantSources.length,
       });
       retryTurnRef.current = null;
       return {
-        conversationId: normalized.conversationId ?? activeConversationId,
-        message: normalized.message,
+        conversationId: activeConversationId,
+        message: {
+          messageId: streamingId,
+          role: "assistant",
+          content: assistantText,
+          createdAt: new Date().toISOString(),
+          sources: assistantSources,
+          richParts: [],
+        },
       };
     } catch (caught) {
       if (modality === "text") setDraft(content);
       setMessages((current) =>
         current.filter(
-          (message) => message.messageId !== optimisticMessage.messageId,
+          (message) =>
+            message.messageId !== optimisticMessage.messageId &&
+            message.messageId !== streamedMessageId,
         ),
       );
       if (
@@ -816,6 +1035,7 @@ export default function ConversationClient({
       }
       return null;
     } finally {
+      setStreamPhase(null);
       setSending(false);
       if (modality === "text") textareaRef.current?.focus();
     }
@@ -1791,6 +2011,38 @@ export default function ConversationClient({
         ? "Interrupt"
         : "Speak";
 
+  // The generated character avatar's pose (PLAN.md §7.1, Section 7 table):
+  // `thinking` while a request is out and no token has arrived yet,
+  // `speaking` while tokens stream or voice audio plays, `listening` while
+  // voice input is active, `unsure` when the last turn refused for lack of
+  // grounding, `idle` otherwise. No avatar images are wired into this
+  // workspace yet (Phase 9), so `poseUrls` is always empty and every pose
+  // renders the monogram fallback — the pose still drives the fallback's own
+  // idle/listening/thinking/speaking animation in avatar-character.module.css.
+  // Whether an assistant row is already in the feed for the in-flight turn
+  // (it appears as soon as the `sources` SSE event arrives). Until then the
+  // generic "thinking" placeholder below is what shows the avatar.
+  const hasStreamingRow = messages.some((message) => message.streaming);
+
+  const avatarPose: AvatarPose =
+    mode === "voice"
+      ? voicePhase === "recording"
+        ? "listening"
+        : ["requesting", "reconnecting", "transcribing", "thinking"].includes(
+              voicePhase,
+            )
+          ? "thinking"
+          : voicePhase === "speaking"
+            ? "speaking"
+            : "idle"
+      : streamPhase === "awaiting-first-token"
+        ? "thinking"
+        : streamPhase === "streaming"
+          ? "speaking"
+          : lastAnswerRefused
+            ? "unsure"
+            : "idle";
+
   return (
     <div className={styles.workspace} data-mode={mode} style={brandVars}>
       <div
@@ -2029,91 +2281,123 @@ export default function ConversationClient({
                     key={message.messageId}
                   >
                     {message.role === "assistant" ? (
-                      <span className={styles.messageOrb} aria-hidden="true" />
+                      <AvatarCharacter
+                        className={styles.messageAvatar ?? ""}
+                        monogram={mark}
+                        // Only the turn currently in flight reflects the live
+                        // pose; a historical answer just sits idle.
+                        pose={message.streaming ? avatarPose : "idle"}
+                        poseUrls={{}}
+                      />
                     ) : null}
-                    <div>
-                      {message.role === "assistant" ? (
-                        <AssistantAnswer message={message} />
-                      ) : (
-                        // A learner's own words are never re-interpreted as
-                        // formatting: they are printed exactly as typed.
-                        <PlainText
-                          className={styles.messageContent}
-                          value={message.content}
-                        />
-                      )}
-                      {message.richParts.length ? (
-                        <div className={styles.richParts}>
-                          {message.richParts.map((part) =>
-                            part.type === "attachment" ? (
-                              <article
-                                className={styles.attachmentPart}
-                                key={`${part.type}-${part.id}`}
-                              >
-                                <span aria-hidden="true">↥</span>
-                                <div>
-                                  <b>{part.label}</b>
-                                  {part.caption ? <small>{part.caption}</small> : null}
-                                </div>
-                              </article>
-                            ) : (
-                              <figure
-                                className={styles.diagramPart}
-                                key={`${part.type}-${part.id}`}
-                                aria-label={part.altText}
-                              >
-                                <div>
-                                  <span aria-hidden="true">◇</span>
-                                  <b>Grounded diagram</b>
-                                </div>
-                                <figcaption>
-                                  {part.caption}
-                                  <small>{part.altText}</small>
-                                </figcaption>
-                              </figure>
-                            ),
-                          )}
-                        </div>
-                      ) : null}
-                      {message.sources.length ? (
-                        <details className={styles.sources} open>
-                          <summary>
-                            {message.sources.length} learning{" "}
-                            {message.sources.length === 1 ? "source" : "sources"}
-                          </summary>
-                          <div>
-                            {message.sources.map((source, sourceIndex) => (
-                              /**
-                               * Numbered so a `[2]` in the answer above has
-                               * somewhere to point, and given an id so the
-                               * citation reference actually jumps here.
-                               */
-                              <article
-                                id={`${citationAnchorPrefix(
-                                  message.messageId,
-                                )}${sourceIndex + 1}`}
-                                key={source.sourceId}
-                              >
-                                <b>
-                                  <span aria-hidden="true">
-                                    {sourceIndex + 1}.{" "}
-                                  </span>
-                                  {source.title}
-                                </b>
-                                {source.courseTitle || source.lessonTitle ? (
-                                  <small>
-                                    {[source.courseTitle, source.lessonTitle]
-                                      .filter(Boolean)
-                                      .join(" · ")}
-                                  </small>
-                                ) : null}
-                                <p>{source.excerpt}</p>
-                              </article>
-                            ))}
+                    <div className={styles.answerLayout}>
+                      <div>
+                        {message.role === "assistant" ? (
+                          message.streaming && message.content.length === 0 ? (
+                            <div
+                              className={styles.thinkingRow}
+                              aria-label={`${assistantName} is thinking`}
+                            >
+                              <div className={styles.thinkingDots}>
+                                <i />
+                                <i />
+                                <i />
+                              </div>
+                            </div>
+                          ) : (
+                            <AssistantAnswer message={message} />
+                          )
+                        ) : (
+                          // A learner's own words are never re-interpreted as
+                          // formatting: they are printed exactly as typed.
+                          <PlainText
+                            className={styles.messageContent}
+                            value={message.content}
+                          />
+                        )}
+                        {message.streamError ? (
+                          <p className={styles.streamNotice} role="alert">
+                            This answer stopped before it finished. Try
+                            asking again.
+                          </p>
+                        ) : null}
+                        {message.richParts.length ? (
+                          <div className={styles.richParts}>
+                            {message.richParts.map((part) =>
+                              part.type === "attachment" ? (
+                                <article
+                                  className={styles.attachmentPart}
+                                  key={`${part.type}-${part.id}`}
+                                >
+                                  <span aria-hidden="true">↥</span>
+                                  <div>
+                                    <b>{part.label}</b>
+                                    {part.caption ? <small>{part.caption}</small> : null}
+                                  </div>
+                                </article>
+                              ) : (
+                                <figure
+                                  className={styles.diagramPart}
+                                  key={`${part.type}-${part.id}`}
+                                  aria-label={part.altText}
+                                >
+                                  <div>
+                                    <span aria-hidden="true">◇</span>
+                                    <b>Grounded diagram</b>
+                                  </div>
+                                  <figcaption>
+                                    {part.caption}
+                                    <small>{part.altText}</small>
+                                  </figcaption>
+                                </figure>
+                              ),
+                            )}
                           </div>
-                        </details>
-                      ) : null}
-                    </div>
+                        ) : null}
+                      </div>
+                      {message.sources.length ? (
+                          <details className={styles.sources}>
+                            <summary>
+                              {message.sources.length}{" "}
+                              {message.sources.length === 1 ? "source" : "sources"}
+                            </summary>
+                            <div>
+                              {message.sources.map((source, sourceIndex) => (
+                                /**
+                                 * Numbered so a `[2]` in the answer above has
+                                 * somewhere to point, and given an id so the
+                                 * citation reference actually jumps here. One
+                                 * element only — see conversation.module.css's
+                                 * `.sources` comment for why it is never
+                                 * duplicated between compact and wide.
+                                 */
+                                <article
+                                  className={styles.sourceCard}
+                                  id={`${citationAnchorPrefix(
+                                    message.messageId,
+                                  )}${sourceIndex + 1}`}
+                                  key={source.sourceId}
+                                >
+                                  <b>
+                                    <span aria-hidden="true">
+                                      {sourceIndex + 1}.{" "}
+                                    </span>
+                                    {source.title}
+                                  </b>
+                                  {source.courseTitle || source.lessonTitle ? (
+                                    <small>
+                                      {[source.courseTitle, source.lessonTitle]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </small>
+                                  ) : null}
+                                  <p>{source.excerpt}</p>
+                                </article>
+                              ))}
+                            </div>
+                          </details>
+                        ) : null}
+                      </div>
                   </article>
                 ))
               ) : (
@@ -2135,13 +2419,18 @@ export default function ConversationClient({
                   </div>
                 </section>
               )}
-              {sending ? (
+              {sending && !hasStreamingRow ? (
                 <article className={styles.assistantMessage}>
-                  <span
-                    className={`${styles.messageOrb} ${styles.orbThinking}`}
-                    aria-hidden="true"
+                  <AvatarCharacter
+                    className={styles.messageAvatar ?? ""}
+                    monogram={mark}
+                    pose={mode === "voice" ? avatarPose : "thinking"}
+                    poseUrls={{}}
                   />
-                  <div className={styles.thinkingDots} aria-label={`${assistantName} is thinking`}>
+                  <div
+                    className={styles.thinkingDots}
+                    aria-label={`${assistantName} is thinking`}
+                  >
                     <i />
                     <i />
                     <i />

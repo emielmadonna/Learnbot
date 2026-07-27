@@ -1,72 +1,153 @@
-.shell {
-  --canvas: color-mix(in srgb, var(--brand-surface) 76%, #ffffff);
-  min-height: 100vh;
-  min-height: 100dvh;
-  margin: 0;
-  overflow-x: clip;
-  background: var(--canvas);
-  color: var(--brand-text);
-  font-family:
-    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Segoe UI", sans-serif;
-}
+/*
+ * Conversation surface — Graphite (docs/PLAN.md Section 3, Phase 7).
+ *
+ * EVERY colour below is a Graphite token from app/tokens.css, or a
+ * `color-mix()` derived from one. There is no hardcoded hex literal in this
+ * file — that was the ~39-hex debt this file used to carry as a private
+ * `--brand-*` opacity ramp.
+ *
+ * THE TWO-GRAY RULE (PLAN.md §3.2): the only readable text colours anywhere
+ * below are `var(--ink)` and `var(--muted)`. `--hairline` appears only on
+ * `border`, decorative `background` washes, or `::marker`/icon strokes —
+ * never on anything a learner reads. Where the old file built a five-stop
+ * grey ramp via `color-mix(in srgb, var(--brand-text) N%, transparent)`, this
+ * file picks exactly one of the two: `--ink` for primary copy, `--muted` for
+ * secondary/caption copy.
+ *
+ * BRANDING (PLAN.md §3.3): the only tenant-controlled values reachable here
+ * are `--accent` / `--accent-wash` / `--accent-ink` (scoped onto `.workspace`
+ * by conversation-client.tsx's inline style) plus the mark and assistant
+ * name, which are content, not colour. `--brand-primary` / `--brand-accent`
+ * are re-declared once, below, as aliases of `--accent` — they are NOT a
+ * second brand system; they exist because `components/ui/tokens.module.css`
+ * (out of this phase's file scope) derives `--ui-primary-soft` /
+ * `--ui-primary-strong` from those two names, and this subtree is mounted
+ * without the app-shell's `brandStyle()` wrapper that normally supplies them.
+ * Aliasing them to `--accent` here is what makes citation chips and inline
+ * links in the rich-text renderer resolve to a real colour instead of an
+ * invalid, silently-dropped `color-mix()`.
+ *
+ * DOCUMENT, NOT BUBBLE: the assistant's reply has no bubble chrome at all —
+ * it is full-width typeset prose (headings/lists/quotes/code come from the
+ * shared `RichText` renderer's own `rich-text.module.css`, already
+ * token-correct). Only the learner's question gets a compact, right-aligned,
+ * accent-filled bubble. This is the single biggest lever against the
+ * surface reading as a generic chat template.
+ *
+ * CONTAINER QUERIES, NOT VIEWPORT (PLAN.md §3.4): the assistant is embedded
+ * in a Circle column, not the viewport. `.assistantMessage` is the query
+ * container; its three named widths (compact <420px, regular 420–720px,
+ * wide >720px) drive source-rail placement, source collapsing and figure
+ * scroll boxes. The handful of `@media` blocks that remain govern the
+ * *shell chrome* (nav, composer, voice screen), which really is sized by the
+ * viewport because it is fixed-position UI, not part of the answer document.
+ *
+ * LIST MARKERS: `<li>` from the rich-text renderer never gets `display:flex`
+ * or `display:grid` in this file. An inline child like `<strong>` inside an
+ * `<li>` gets blockified by a flex/grid container while the surrounding bare
+ * text is wrapped anonymously, producing three boxes and marker-orphaned
+ * text — a bug that has already happened once. `<li>` stays the default
+ * block box (native `::marker` from rich-text.module.css, or the
+ * counter-driven `::before` below), so nothing about its children is ever
+ * blockified.
+ */
 
-.closed {
-  display: grid;
+.workspace {
+  /* See the file banner above: aliases so `--ui-primary-soft` /
+     `--ui-primary-strong` (components/ui/tokens.module.css) resolve inside
+     this subtree, which mounts without app-shell's brandStyle() wrapper. */
+  --brand-primary: var(--accent);
+  --brand-accent: var(--accent);
+  /* Derived from whichever --accent is in scope (tenant override or the
+     tokens.css default) so it can never drift out of sync with it. */
+  --accent-wash: color-mix(in srgb, var(--accent) 16%, transparent);
+
+  position: relative;
   min-height: 100vh;
   min-height: 100dvh;
-  place-items: center;
-  box-sizing: border-box;
-  padding: 24px;
+  isolation: isolate;
   background:
-    radial-gradient(circle at 50% 30%, rgb(210 168 95 / 12%), transparent 38%),
-    #f5f4ef;
-  color: #17231e;
+    radial-gradient(circle at 50% -12%, var(--accent-wash), transparent 32%),
+    var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
 }
 
-.closed section {
-  width: min(460px, 100%);
-  box-sizing: border-box;
-  padding: 42px;
-  border-radius: 30px;
-  background: rgb(255 255 255 / 80%);
-  box-shadow: 0 28px 90px rgb(24 48 38 / 8%);
-  text-align: center;
+.spectralEdge {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 380ms var(--ease);
 }
 
-.closed h1 {
-  margin: 20px 0 8px;
-  font-size: clamp(30px, 5vw, 42px);
-  font-weight: 460;
-  letter-spacing: -0.045em;
+.spectralEdge::before {
+  position: absolute;
+  inset: -18px;
+  border: 12px solid transparent;
+  border-radius: 38px;
+  background:
+    linear-gradient(
+        118deg,
+        var(--accent),
+        color-mix(in srgb, var(--accent) 35%, var(--ink)) 55%,
+        var(--accent)
+      )
+      border-box;
+  /* Only the alpha channel of this mask matters (mask-composite: exclude
+     punches out the padding-box), so it draws from a token like everything
+     else here rather than a literal. */
+  mask:
+    linear-gradient(var(--ink) 0 0) padding-box,
+    linear-gradient(var(--ink) 0 0);
+  mask-composite: exclude;
+  filter: blur(22px);
+  content: "";
 }
 
-.closed p {
-  color: rgb(23 35 30 / 58%);
-  font-size: 13px;
-  line-height: 1.6;
+.spectralEdgeActive {
+  opacity: 0.7;
 }
 
-.closedMark {
+.floatingNav {
+  position: fixed;
+  z-index: 20;
+  top: max(16px, env(safe-area-inset-top));
+  left: 50%;
   display: grid;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--brand-primary, #234f40);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: -0.02em;
+  width: min(1020px, calc(100% - 40px));
+  min-height: 58px;
+  box-sizing: border-box;
+  grid-template-columns: minmax(142px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 9px 11px 9px 13px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  box-shadow: 0 14px 48px color-mix(in srgb, var(--bg) 40%, transparent);
+  backdrop-filter: blur(26px) saturate(1.15);
+  transform: translateX(-50%);
+}
+
+.brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
 }
 
 /*
-  The one tenant-branded mark on this surface (PLAN.md §3.3). `--accent` and
-  `--accent-ink` come from tokens.css by default and are overridden per
-  tenant, scoped to `.workspace`, by the inline style conversation-client.tsx
-  sets from the durable brand colour — `--accent-ink` is always
-  `readableOn(--accent)`, so this never needs a hardcoded text colour.
+  The one tenant-branded chrome mark on this surface (PLAN.md §3.3).
+  --accent / --accent-ink come from tokens.css by default and are overridden
+  per tenant, scoped to `.workspace`, by the inline style
+  conversation-client.tsx sets from the durable brand colour — `--accent-ink`
+  is always `readableOn(--accent)`, so this never needs a hardcoded text
+  colour.
 */
 .brandMark {
   display: grid;
@@ -87,111 +168,6 @@
   box-shadow: 0 0 0 6px var(--accent-wash);
 }
 
-.workspace {
-  /* Derived from whatever --accent is in scope (tenant override or the
-     tokens.css default) rather than duplicated, so it can never drift out
-     of sync with the colour it is a wash of. */
-  --accent-wash: color-mix(in srgb, var(--accent) 16%, transparent);
-  position: relative;
-  min-height: 100vh;
-  min-height: 100dvh;
-  isolation: isolate;
-  background:
-    radial-gradient(
-      circle at 50% -12%,
-      color-mix(in srgb, var(--brand-accent) 11%, transparent),
-      transparent 32%
-    ),
-    radial-gradient(
-      circle at 88% 65%,
-      color-mix(in srgb, var(--brand-primary) 4%, transparent),
-      transparent 32%
-    ),
-    var(--canvas);
-}
-
-.spectralEdge {
-  position: fixed;
-  z-index: 30;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 380ms ease;
-}
-
-.spectralEdge::before,
-.spectralEdge::after {
-  position: absolute;
-  content: "";
-  filter: blur(22px);
-}
-
-.spectralEdge::before {
-  inset: -18px;
-  border: 12px solid transparent;
-  border-radius: 38px;
-  background:
-    linear-gradient(
-        118deg,
-        color-mix(in srgb, var(--brand-accent) 72%, #fff6c8),
-        #a7d9ce 28%,
-        color-mix(in srgb, var(--brand-primary) 78%, #68a4a7) 58%,
-        #d9a7c7 82%,
-        color-mix(in srgb, var(--brand-accent) 60%, white)
-      )
-      border-box;
-  mask:
-    linear-gradient(#000 0 0) padding-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
-}
-
-.spectralEdge::after {
-  top: -22px;
-  right: 18%;
-  width: 34%;
-  height: 34px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--brand-accent) 65%, #b7dfff);
-  opacity: 0.48;
-}
-
-.spectralEdgeActive {
-  opacity: 0.7;
-}
-
-.floatingNav {
-  position: fixed;
-  z-index: 20;
-  top: max(16px, env(safe-area-inset-top));
-  left: 50%;
-  display: grid;
-  width: min(1020px, calc(100% - 40px));
-  min-height: 58px;
-  box-sizing: border-box;
-  grid-template-columns: minmax(142px, auto) minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 18px;
-  padding: 9px 11px 9px 13px;
-  border-radius: 999px;
-  background: color-mix(in srgb, #fff 78%, transparent);
-  box-shadow:
-    0 14px 48px rgb(20 40 32 / 8%),
-    inset 0 0 0 1px rgb(255 255 255 / 52%);
-  backdrop-filter: blur(26px) saturate(1.15);
-  transform: translateX(-50%);
-}
-
-.brand {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-  color: inherit;
-  text-decoration: none;
-}
-
 .brandCopy {
   display: grid;
   min-width: 0;
@@ -199,6 +175,7 @@
 
 .brandCopy b {
   overflow: hidden;
+  color: var(--ink);
   font-size: 11px;
   font-weight: 720;
   letter-spacing: -0.015em;
@@ -209,7 +186,7 @@
 .brandCopy small {
   overflow: hidden;
   margin-top: 1px;
-  color: color-mix(in srgb, var(--brand-text) 48%, transparent);
+  color: var(--muted);
   font-size: 8px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -234,7 +211,7 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: color-mix(in srgb, var(--brand-text) 70%, transparent);
+  color: var(--muted);
   font: inherit;
   font-size: 9px;
   font-weight: 630;
@@ -243,8 +220,8 @@
 }
 
 .contextBar select:hover {
-  background: color-mix(in srgb, var(--brand-primary) 5%, transparent);
-  color: var(--brand-text);
+  background: var(--elev);
+  color: var(--ink);
 }
 
 .contextBar select:disabled {
@@ -253,7 +230,7 @@
 }
 
 .contextSeparator {
-  color: color-mix(in srgb, var(--brand-text) 21%, transparent);
+  color: var(--muted);
   font-size: 10px;
 }
 
@@ -267,7 +244,7 @@
   display: flex;
   padding: 3px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--brand-text) 5%, transparent);
+  background: var(--elev);
 }
 
 .modeSwitch button {
@@ -276,7 +253,7 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: color-mix(in srgb, var(--brand-text) 48%, transparent);
+  color: var(--muted);
   font: inherit;
   font-size: 9px;
   font-weight: 700;
@@ -284,14 +261,14 @@
 
 .modeSwitch button span {
   margin-right: 4px;
-  color: #d46e5d;
+  color: var(--warn);
   font-size: 6px;
 }
 
 .modeSwitch .modeActive {
-  background: #fff;
-  color: var(--brand-text);
-  box-shadow: 0 3px 12px rgb(20 40 32 / 7%);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--bg) 30%, transparent);
 }
 
 .identity {
@@ -301,8 +278,8 @@
   flex: 0 0 auto;
   place-items: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--brand-primary) 9%, #fff);
-  color: var(--brand-primary);
+  background: var(--elev);
+  color: var(--ink);
   font-size: 8px;
   font-weight: 800;
 }
@@ -319,8 +296,8 @@
   min-height: 100dvh;
   opacity: 1;
   transition:
-    opacity 220ms ease,
-    filter 220ms ease;
+    opacity 220ms var(--ease),
+    filter 220ms var(--ease);
 }
 
 .textCanvasUnderVoice {
@@ -331,7 +308,7 @@
 }
 
 .feed {
-  width: min(780px, 100%);
+  width: min(820px, 100%);
   box-sizing: border-box;
   margin: 0 auto;
   padding:
@@ -347,7 +324,7 @@
   place-items: center;
   align-content: center;
   gap: 18px;
-  color: color-mix(in srgb, var(--brand-text) 44%, transparent);
+  color: var(--muted);
   font-size: 11px;
 }
 
@@ -356,18 +333,13 @@
 }
 
 .orb,
-.messageOrb,
 .welcomeOrb {
   display: block;
   flex: 0 0 auto;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 32% 27%, rgb(255 255 255 / 92%), transparent 22%),
-    radial-gradient(
-      circle at 62% 64%,
-      color-mix(in srgb, var(--brand-accent) 78%, white),
-      var(--brand-primary) 76%
-    );
+    radial-gradient(circle at 32% 27%, color-mix(in srgb, var(--ink) 60%, transparent), transparent 22%),
+    radial-gradient(circle at 62% 64%, var(--accent), var(--elev) 76%);
 }
 
 .orb {
@@ -390,15 +362,13 @@
   height: 72px;
   margin-bottom: 30px;
   border-radius: 44% 56% 62% 38% / 58% 42% 58% 42%;
-  box-shadow:
-    0 0 0 16px color-mix(in srgb, var(--brand-primary) 3%, transparent),
-    0 26px 70px color-mix(in srgb, var(--brand-primary) 14%, transparent);
+  box-shadow: 0 26px 70px var(--accent-wash);
   animation: float 7s ease-in-out infinite;
 }
 
 .welcome > p {
   margin: 0 0 12px;
-  color: color-mix(in srgb, var(--brand-primary) 82%, transparent);
+  color: var(--muted);
   font-size: 8px;
   font-weight: 780;
   letter-spacing: 0.16em;
@@ -407,6 +377,7 @@
 .welcome h1 {
   max-width: 680px;
   margin: 0;
+  color: var(--ink);
   font-size: clamp(38px, 6vw, 62px);
   font-weight: 430;
   letter-spacing: -0.06em;
@@ -416,7 +387,7 @@
 .welcome > span {
   max-width: 520px;
   margin-top: 18px;
-  color: color-mix(in srgb, var(--brand-text) 54%, transparent);
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -431,35 +402,53 @@
 
 .welcome button {
   padding: 10px 14px;
-  border: 0;
+  border: 1px solid var(--hairline);
   border-radius: 999px;
-  background: rgb(255 255 255 / 62%);
-  color: color-mix(in srgb, var(--brand-text) 64%, transparent);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 56%);
+  background: var(--surface);
+  color: var(--muted);
   font: inherit;
   font-size: 9px;
 }
 
 .welcome button:hover {
-  background: #fff;
-  color: var(--brand-primary);
+  color: var(--ink);
+  border-color: var(--accent);
 }
+
+/* ------------------------------------------------------------- message row */
 
 .assistantMessage,
 .userMessage {
   display: flex;
   align-items: flex-start;
-  gap: 15px;
-  margin: 0 0 38px;
+  gap: 14px;
+  margin: 0 0 40px;
 }
 
 .userMessage {
   justify-content: flex-end;
 }
 
-.assistantMessage > div,
 .userMessage > div {
-  max-width: min(650px, 88%);
+  max-width: min(560px, 82%);
+}
+
+/* The assistant row is the query container the document layout below reads
+   from — its width is the width of the answer, per PLAN.md §3.4. */
+.assistantMessage {
+  container: assistant / inline-size;
+}
+
+.assistantMessage > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.messageAvatar {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  margin-top: 2px;
 }
 
 .messageContent {
@@ -471,54 +460,60 @@
   margin: 0;
 }
 
+/* The document look: generous, readable prose — not chat-bubble copy. */
 .assistantMessage .messageContent {
-  color: color-mix(in srgb, var(--brand-text) 88%, transparent);
-  font-size: 15px;
+  font-size: clamp(14px, 1.4vw + 0.7rem, 16px);
   font-weight: 430;
-  line-height: 1.78;
+  line-height: 1.7;
 }
 
-.messageContent h3 {
-  margin-top: 5px;
-  font-size: 17px;
-  font-weight: 720;
-  letter-spacing: -0.025em;
-  line-height: 1.3;
+/* A blockquote with an accent rail (PLAN.md Phase 7) — overrides
+   rich-text.module.css's neutral rail specifically inside an answer. */
+.assistantMessage .messageContent blockquote {
+  border-left-color: var(--accent);
+  background: var(--accent-wash);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  padding: 8px 14px;
 }
 
-.messageContent ul,
-.messageContent ol {
+/* Counter-styled ordered list, without ever putting display:flex/grid on
+   <li> — see the file banner. The marker is an absolutely positioned
+   ::before layered inside the (still block) <li>, so nothing about its
+   children is blockified. */
+.assistantMessage .messageContent ol {
+  list-style: none;
+  counter-reset: rt-ordinal;
+  padding-left: 0;
   display: grid;
-  gap: 6px;
-  padding-left: 21px;
+  gap: 8px;
 }
 
-.messageContent blockquote {
-  padding: 2px 0 2px 14px;
-  border-left: 2px solid color-mix(in srgb, var(--brand-primary) 34%, transparent);
-  color: color-mix(in srgb, var(--brand-text) 64%, transparent);
+.assistantMessage .messageContent ol > li {
+  position: relative;
+  padding-left: 1.9em;
+  counter-increment: rt-ordinal;
 }
 
-.messageContent pre {
-  max-width: 100%;
-  overflow: auto;
-  padding: 14px 15px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--brand-text) 91%, #101915);
-  color: #f2f7f4;
-  font:
-    11px/1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    monospace;
-  white-space: pre;
+.assistantMessage .messageContent ol > li::before {
+  content: counter(rt-ordinal) ".";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.assistantMessage .messageContent ul > li::marker {
+  color: var(--accent);
 }
 
 .userMessage > div {
   padding: 12px 16px;
-  border-radius: 20px 20px 6px 20px;
-  background: color-mix(in srgb, var(--brand-primary) 88%, #253b34);
-  color: #fff;
-  box-shadow: 0 12px 30px color-mix(in srgb, var(--brand-primary) 10%, transparent);
-  font-size: 11px;
+  border-radius: var(--r-md) var(--r-md) 6px var(--r-md);
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 12px 30px var(--accent-wash);
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -526,10 +521,12 @@
   gap: 8px;
 }
 
+/* --------------------------------------------------- figures / attachments */
+
 .richParts {
   display: grid;
   gap: 9px;
-  margin-top: 16px;
+  margin-top: 4px;
 }
 
 .attachmentPart {
@@ -537,8 +534,12 @@
   align-items: center;
   gap: 10px;
   padding: 11px 13px;
-  border-radius: 14px;
-  background: rgb(255 255 255 / 58%);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  /* Every figure/attachment scrolls in its own box so the host page never
+     scrolls sideways (PLAN.md §3.4). */
+  overflow-x: auto;
 }
 
 .attachmentPart > span {
@@ -547,9 +548,9 @@
   height: 28px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--brand-primary) 8%, transparent);
-  color: var(--brand-primary);
+  border-radius: var(--r-sm);
+  background: var(--elev);
+  color: var(--accent);
 }
 
 .attachmentPart > div {
@@ -557,27 +558,30 @@
 }
 
 .attachmentPart b {
+  color: var(--ink);
   font-size: 9px;
 }
 
 .attachmentPart small {
   margin-top: 2px;
-  color: color-mix(in srgb, var(--brand-text) 48%, transparent);
+  color: var(--muted);
   font-size: 8px;
 }
 
 .diagramPart {
   margin: 0;
   padding: 16px;
-  border-radius: 17px;
-  background: rgb(255 255 255 / 58%);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow-x: auto;
 }
 
 .diagramPart > div {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--brand-primary);
+  color: var(--accent);
   font-size: 9px;
 }
 
@@ -586,14 +590,14 @@
   width: 26px;
   height: 26px;
   place-items: center;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--brand-primary) 8%, transparent);
+  border-radius: var(--r-sm);
+  background: var(--elev);
   font-size: 13px;
 }
 
 .diagramPart figcaption {
   margin-top: 8px;
-  color: color-mix(in srgb, var(--brand-text) 56%, transparent);
+  color: var(--muted);
   font-size: 9px;
   line-height: 1.5;
 }
@@ -601,69 +605,15 @@
 .diagramPart figcaption small {
   display: block;
   margin-top: 3px;
-  color: color-mix(in srgb, var(--brand-text) 43%, transparent);
+  color: var(--muted);
 }
 
-.messageOrb {
-  width: 22px;
-  height: 22px;
-  margin-top: 3px;
-  border-radius: 42% 58% 48% 52% / 58% 44% 56% 42%;
-  animation: float 6s ease-in-out infinite;
-}
+/* ---------------------------------------------------- avatar / thinking */
 
-.sources {
-  margin-top: 17px;
-}
-
-.sources summary {
-  display: inline-flex;
+.thinkingRow {
+  display: flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 11px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--brand-primary) 5%, #fff);
-  color: var(--brand-primary);
-  cursor: pointer;
-  font-size: 9px;
-  font-weight: 720;
-  list-style-position: inside;
-}
-
-.sources > div {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.sources article {
-  padding: 15px 16px;
-  border-radius: 16px;
-  background: rgb(255 255 255 / 65%);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 55%);
-}
-
-.sources article b,
-.sources article small {
-  display: block;
-}
-
-.sources article b {
-  font-size: 10px;
-  font-weight: 720;
-}
-
-.sources article small {
-  margin-top: 3px;
-  color: color-mix(in srgb, var(--brand-text) 44%, transparent);
-  font-size: 8px;
-}
-
-.sources article p {
-  margin: 9px 0 0;
-  color: color-mix(in srgb, var(--brand-text) 65%, transparent);
-  font-size: 10px;
-  line-height: 1.6;
+  gap: 14px;
 }
 
 .thinkingDots {
@@ -677,7 +627,7 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--brand-primary);
+  background: var(--accent);
   animation: pulse 1.15s ease-in-out infinite;
 }
 
@@ -688,6 +638,178 @@
 .thinkingDots i:nth-child(3) {
   animation-delay: 0.32s;
 }
+
+/* A stream that dies mid-answer must not look like a finished one. */
+.streamNotice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 2px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--hairline));
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--warn) 12%, var(--surface));
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.streamNotice::before {
+  content: "!";
+  display: grid;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--warn);
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+/* ------------------------------------------------------------------ sources
+   One `<details>`, one set of source cards, at every container width —
+   never duplicated markup, so a `[n]` citation has exactly one element to
+   jump to regardless of breakpoint (a duplicate `id` would silently break
+   that). Compact/regular rely on the browser's native `<details>` default:
+   closed until tapped, so it reads as a plain "N sources" count (PLAN.md
+   §3.4, "sources collapse to a count"). Wide overrides that native default —
+   forcing the content permanently open and hiding the toggle — so the exact
+   same element instead reads as a source rail beside the answer. */
+
+.answerLayout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+.sources {
+  margin-top: 6px;
+}
+
+.sources summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 720;
+  list-style: none;
+}
+
+.sources summary::-webkit-details-marker {
+  display: none;
+}
+
+.sources summary:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.sources[open] summary {
+  color: var(--ink);
+}
+
+.sources > div {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sourceCard {
+  padding: 13px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.sourceCard b,
+.sourceCard small {
+  display: block;
+}
+
+.sourceCard b {
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.sourceCard b span {
+  color: var(--accent);
+}
+
+.sourceCard small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.sourceCard p {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+/* --------------------------------------------- named container breakpoints
+   PLAN.md §3.4: compact <420px, regular 420–720px, wide >720px, keyed off
+   the assistant message row rather than the viewport. */
+
+@container assistant (min-width: 421px) {
+  .sourceCard p {
+    font-size: 10.5px;
+  }
+}
+
+@container assistant (min-width: 721px) {
+  .answerLayout {
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
+    align-items: start;
+  }
+
+  .sources {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    align-self: start;
+    position: sticky;
+    top: 12px;
+  }
+
+  /* Force the content open and remove the toggle affordance — this is the
+     same <details> element as compact/regular, just permanently expanded
+     into a rail rather than click-to-reveal. */
+  .sources summary {
+    display: none;
+  }
+
+  .sources > div {
+    display: grid !important;
+    margin-top: 0;
+  }
+}
+
+@container assistant (max-width: 420px) {
+  .sources summary {
+    padding: 0 9px;
+    font-size: 8px;
+  }
+
+  .assistantMessage .messageContent {
+    font-size: 13.5px;
+  }
+
+  .richParts {
+    gap: 7px;
+  }
+}
+
+/* ---------------------------------------------------------------- composer */
 
 .composerArea {
   position: fixed;
@@ -703,8 +825,8 @@
     max(22px, env(safe-area-inset-left));
   background: linear-gradient(
     transparent,
-    color-mix(in srgb, var(--canvas) 94%, transparent) 30%,
-    var(--canvas) 100%
+    color-mix(in srgb, var(--bg) 94%, transparent) 30%,
+    var(--bg) 100%
   );
 }
 
@@ -721,15 +843,15 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: color-mix(in srgb, var(--brand-text) 42%, transparent);
+  color: var(--muted);
   font: inherit;
   font-size: 8px;
   font-weight: 690;
 }
 
 .learningModes button[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--brand-primary) 7%, #fff);
-  color: var(--brand-primary);
+  background: var(--accent-wash);
+  color: var(--accent);
 }
 
 .learningModes button:disabled {
@@ -746,11 +868,10 @@
   gap: 7px;
   margin: 0 auto;
   padding: 9px 9px 9px 18px;
+  border: 1px solid var(--hairline);
   border-radius: 25px;
-  background: rgb(255 255 255 / 86%);
-  box-shadow:
-    0 20px 65px rgb(20 40 32 / 12%),
-    inset 0 0 0 1px rgb(255 255 255 / 70%);
+  background: var(--surface);
+  box-shadow: 0 20px 65px color-mix(in srgb, var(--bg) 40%, transparent);
   backdrop-filter: blur(24px);
 }
 
@@ -763,7 +884,7 @@
   overflow-y: hidden;
   resize: none;
   background: transparent;
-  color: var(--brand-text);
+  color: var(--ink);
   font: inherit;
   font-size: 12px;
   line-height: 1.5;
@@ -771,7 +892,7 @@
 }
 
 .composer textarea::placeholder {
-  color: color-mix(in srgb, var(--brand-text) 35%, transparent);
+  color: var(--muted);
 }
 
 .micButton,
@@ -786,29 +907,29 @@
 }
 
 .micButton {
-  background: color-mix(in srgb, #d9735f 10%, transparent);
-  color: #d46451;
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
   font-size: 8px;
 }
 
 .micButton:hover {
-  background: color-mix(in srgb, #d9735f 18%, transparent);
+  background: color-mix(in srgb, var(--warn) 20%, transparent);
 }
 
 .sendButton {
-  background: var(--brand-primary);
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-ink);
   font-size: 16px;
 }
 
 .sendButton:disabled {
   cursor: not-allowed;
-  opacity: 0.25;
+  opacity: 0.3;
 }
 
 .composerArea > p:not(.error) {
   margin: 8px 0 0;
-  color: color-mix(in srgb, var(--brand-text) 39%, transparent);
+  color: var(--muted);
   font-size: 8px;
   text-align: center;
 }
@@ -819,12 +940,15 @@
   box-sizing: border-box;
   margin: 0 auto 9px;
   padding: 10px 13px;
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--hairline));
   border-radius: 13px;
-  background: rgb(255 237 233 / 90%);
-  color: #873a2c;
+  background: color-mix(in srgb, var(--warn) 12%, var(--surface));
+  color: var(--ink);
   font-size: 9px;
   line-height: 1.5;
 }
+
+/* -------------------------------------------------------------- voice mode */
 
 .voiceNotice {
   position: fixed;
@@ -844,13 +968,8 @@
     calc(42px + env(safe-area-inset-bottom))
     max(24px, env(safe-area-inset-left));
   background:
-    radial-gradient(
-      circle at 50% 38%,
-      color-mix(in srgb, var(--brand-accent) 10%, transparent),
-      transparent 33%
-    ),
-    radial-gradient(circle at 18% 76%, rgb(174 208 204 / 10%), transparent 32%),
-    color-mix(in srgb, var(--brand-surface) 76%, #fff);
+    radial-gradient(circle at 50% 38%, var(--accent-wash), transparent 33%),
+    var(--bg);
   text-align: center;
 }
 
@@ -862,27 +981,17 @@
   pointer-events: none;
 }
 
-.voiceAtmosphere::before,
-.voiceAtmosphere::after {
+.voiceAtmosphere::before {
   position: absolute;
+  top: 15%;
+  left: -12%;
   width: 34vw;
   height: 34vw;
   border-radius: 50%;
-  content: "";
+  background: var(--accent);
   filter: blur(90px);
-  opacity: 0.12;
-}
-
-.voiceAtmosphere::before {
-  top: 15%;
-  left: -12%;
-  background: #92c7c3;
-}
-
-.voiceAtmosphere::after {
-  right: -10%;
-  bottom: 8%;
-  background: color-mix(in srgb, var(--brand-accent) 72%, #d1a7dc);
+  content: "";
+  opacity: 0.1;
 }
 
 .cloudStage {
@@ -903,52 +1012,15 @@
   height: 64%;
   border-radius: 48% 52% 58% 42% / 56% 46% 54% 44%;
   background:
-    radial-gradient(circle at 26% 27%, rgb(255 255 255 / 92%), transparent 18%),
-    radial-gradient(circle at 67% 22%, rgb(245 225 173 / 78%), transparent 28%),
-    radial-gradient(circle at 74% 68%, rgb(113 171 165 / 72%), transparent 32%),
-    radial-gradient(
-      circle at 44% 55%,
-      color-mix(in srgb, var(--brand-accent) 62%, #d8efe8),
-      var(--brand-primary) 82%
-    );
+    radial-gradient(circle at 26% 27%, color-mix(in srgb, var(--ink) 60%, transparent), transparent 18%),
+    radial-gradient(circle at 44% 55%, var(--accent), var(--elev) 82%);
   box-shadow:
-    inset 18px 16px 34px rgb(255 255 255 / 27%),
-    inset -24px -22px 45px rgb(15 47 38 / 22%),
-    0 28px 70px color-mix(in srgb, var(--brand-primary) 18%, transparent),
-    0 0 80px color-mix(in srgb, var(--brand-accent) 15%, transparent);
+    0 28px 70px var(--accent-wash),
+    0 0 80px var(--accent-wash);
   scale: calc(1 + (var(--voice-energy) * 0.2));
   transform: rotate(-3deg);
   transition: scale 70ms linear;
   animation: cloudBreathe 7s ease-in-out infinite;
-}
-
-.voiceOrb::before,
-.voiceOrb::after {
-  position: absolute;
-  border-radius: 50%;
-  content: "";
-}
-
-.voiceOrb::before {
-  width: 62%;
-  height: 72%;
-  top: -22%;
-  left: 3%;
-  background:
-    radial-gradient(circle at 36% 28%, rgb(255 255 255 / 80%), transparent 25%),
-    color-mix(in srgb, var(--brand-accent) 53%, #d7eee5);
-  box-shadow: inset -16px -16px 32px rgb(33 86 69 / 14%);
-}
-
-.voiceOrb::after {
-  width: 59%;
-  height: 68%;
-  top: -13%;
-  right: -5%;
-  background:
-    radial-gradient(circle at 34% 24%, rgb(255 250 222 / 72%), transparent 24%),
-    color-mix(in srgb, var(--brand-primary) 65%, #8fc2b7);
-  box-shadow: inset -20px -18px 35px rgb(16 53 42 / 20%);
 }
 
 .voiceOrb em {
@@ -956,7 +1028,7 @@
   z-index: -1;
   inset: -30%;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--brand-primary) 13%, transparent);
+  background: var(--accent-wash);
   filter: blur(38px);
   content: "";
 }
@@ -967,7 +1039,7 @@
   top: 48%;
   width: 4px;
   border-radius: 999px;
-  background: rgb(255 255 255 / 74%);
+  background: color-mix(in srgb, var(--ink) 74%, transparent);
   opacity: 0.74;
 }
 
@@ -1017,10 +1089,8 @@
 
 .voiceContinuous .voiceOrb {
   box-shadow:
-    inset 18px 16px 34px rgb(255 255 255 / 30%),
-    inset -24px -22px 45px rgb(15 47 38 / 20%),
-    0 32px 90px color-mix(in srgb, var(--brand-primary) 21%, transparent),
-    0 0 115px color-mix(in srgb, var(--brand-accent) 20%, transparent);
+    0 32px 90px var(--accent-wash),
+    0 0 115px var(--accent-wash);
 }
 
 .voiceStatus {
@@ -1032,7 +1102,7 @@
 
 .voiceStatus > p {
   margin: 0 0 9px;
-  color: color-mix(in srgb, var(--brand-primary) 82%, transparent);
+  color: var(--accent);
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.17em;
@@ -1040,6 +1110,7 @@
 
 .voiceStatus h1 {
   margin: 0;
+  color: var(--ink);
   font-size: clamp(29px, 4vw, 45px);
   font-weight: 440;
   letter-spacing: -0.05em;
@@ -1049,7 +1120,7 @@
 .voiceStatus > span {
   max-width: 550px;
   margin-top: 13px;
-  color: color-mix(in srgb, var(--brand-text) 51%, transparent);
+  color: var(--muted);
   font-size: 11px;
   line-height: 1.6;
 }
@@ -1061,14 +1132,15 @@
   overflow: auto;
   margin-top: 18px;
   padding: 12px 15px;
+  border: 1px solid var(--hairline);
   border-radius: 15px;
-  background: rgb(255 255 255 / 46%);
+  background: var(--surface);
   text-align: left;
 }
 
 .voiceTurn small {
   display: block;
-  color: var(--brand-primary);
+  color: var(--accent);
   font-size: 7px;
   font-weight: 800;
   letter-spacing: 0.09em;
@@ -1077,7 +1149,7 @@
 
 .voiceTurn p {
   margin: 3px 0 9px;
-  color: color-mix(in srgb, var(--brand-text) 68%, transparent);
+  color: var(--ink);
   font-size: 9px;
   line-height: 1.5;
 }
@@ -1098,16 +1170,17 @@
   padding: 9px 14px;
   border: 0;
   border-radius: 999px;
-  background: var(--brand-primary);
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-ink);
   font: inherit;
   font-size: 9px;
   font-weight: 730;
 }
 
 .retryVoice {
-  background: color-mix(in srgb, var(--brand-primary) 7%, #fff);
-  color: var(--brand-primary);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  color: var(--ink);
 }
 
 .voiceControls {
@@ -1127,7 +1200,7 @@
   gap: 7px;
   border: 0;
   background: transparent;
-  color: color-mix(in srgb, var(--brand-text) 61%, transparent);
+  color: var(--muted);
   font: inherit;
   font-size: 8px;
   font-weight: 690;
@@ -1141,15 +1214,15 @@
   height: 46px;
   place-items: center;
   border-radius: 50%;
-  background: rgb(255 255 255 / 72%);
-  box-shadow: 0 9px 26px rgb(20 40 32 / 7%);
-  color: var(--brand-primary);
+  background: var(--surface);
+  box-shadow: 0 9px 26px color-mix(in srgb, var(--bg) 30%, transparent);
+  color: var(--accent);
   font-size: 9px;
 }
 
 .voiceButton > span:first-child {
-  background: var(--brand-primary);
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 .voiceButton:disabled {
@@ -1158,20 +1231,19 @@
 }
 
 .voiceButtonRecording > span:first-child {
-  background: #d76e59;
-  box-shadow:
-    0 0 0 9px rgb(215 110 89 / 9%),
-    0 10px 30px rgb(20 40 32 / 9%);
+  background: var(--warn);
+  color: var(--bg);
+  box-shadow: 0 0 0 9px color-mix(in srgb, var(--warn) 16%, transparent);
 }
 
 .endVoice > span:first-child {
-  color: #c45e4d;
+  color: var(--warn);
 }
 
 .voiceDisclosure {
   max-width: 560px;
   margin-top: 17px;
-  color: color-mix(in srgb, var(--brand-text) 34%, transparent);
+  color: var(--muted);
   font-size: 7px;
   line-height: 1.5;
 }
@@ -1196,6 +1268,7 @@
   cursor: pointer;
 }
 
+/* Keyboard accessible, visible focus state everywhere in this subtree. */
 .workspace
   :is(
     button:focus-visible,
@@ -1204,12 +1277,9 @@
     textarea:focus-visible,
     summary:focus-visible
   ) {
-  outline: 2px solid color-mix(in srgb, var(--brand-primary) 72%, white);
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
-}
-
-.orbThinking {
-  animation: cloudThinking 1.5s ease-in-out infinite;
+  border-radius: var(--r-sm);
 }
 
 @keyframes float {
@@ -1303,11 +1373,6 @@
     display: none;
   }
 
-  .brandMark {
-    width: 34px;
-    height: 34px;
-  }
-
   .contextBar {
     justify-content: flex-start;
     overflow: hidden;
@@ -1336,7 +1401,6 @@
       calc(190px + env(safe-area-inset-bottom));
   }
 
-  .assistantMessage > div,
   .userMessage > div {
     max-width: 88%;
   }
@@ -1370,10 +1434,6 @@
   .cloudStage {
     width: min(58vw, 250px);
     height: min(58vw, 250px);
-  }
-
-  .voiceStatus {
-    margin-top: 2px;
   }
 
   .voiceStatus h1 {
@@ -1417,10 +1477,6 @@
 
   .welcome button {
     border-radius: 13px;
-  }
-
-  .assistantMessage .messageContent {
-    font-size: 14px;
   }
 
   .voiceNotice {
@@ -1471,14 +1527,15 @@
   }
 }
 
+/* Reduced motion means final state immediately — never a missing element
+   (PLAN.md §3.5). Every rule below only strips animation/transition; it
+   never adds `display:none` or `visibility:hidden`. */
 @media (prefers-reduced-motion: reduce) {
   .spectralEdge,
   .textCanvas,
   .voiceOrb,
   .orb,
-  .messageOrb,
   .welcomeOrb,
-  .orbThinking,
   .thinkingDots i,
   .voiceOrb i {
     animation: none;

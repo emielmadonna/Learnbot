@@ -1461,7 +1461,7 @@ button:focus-visible,textarea:focus-visible,[tabindex]:focus-visible,a:focus-vis
 .launcher:hover{transform:translateY(-3px) scale(1.025);box-shadow:0 22px 52px color-mix(in srgb,var(--widget-primary) 42%,transparent),inset 0 0 0 1px #ffffff8f}
 .launcher[data-unread=false]{font-size:0}
 .launcher.left{left:24px;right:auto}
-.surface{position:fixed;isolation:isolate;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto auto auto;overflow:hidden;background:color-mix(in srgb,var(--widget-surface) 97%,transparent);border:1px solid color-mix(in srgb,var(--widget-text) 10%,transparent);border-radius:26px;box-shadow:0 28px 90px color-mix(in srgb,var(--widget-text) 20%,transparent),0 2px 12px #0000000d;backdrop-filter:blur(26px) saturate(1.08)}
+.surface{container-type:inline-size;container-name:caiw;position:fixed;isolation:isolate;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto auto auto;overflow:hidden;background:color-mix(in srgb,var(--widget-surface) 97%,transparent);border:1px solid color-mix(in srgb,var(--widget-text) 10%,transparent);border-radius:26px;box-shadow:0 28px 90px color-mix(in srgb,var(--widget-text) 20%,transparent),0 2px 12px #0000000d;backdrop-filter:blur(26px) saturate(1.08)}
 .surface::before{position:absolute;z-index:4;inset:0;border:1px solid transparent;border-radius:inherit;background:linear-gradient(115deg,color-mix(in srgb,var(--widget-primary) 58%,#83ffe8),transparent 28% 70%,color-mix(in srgb,var(--widget-accent) 55%,#d7a8ff)) border-box;mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0);mask-composite:exclude;opacity:.34;pointer-events:none;content:"";transition:opacity .25s ease,filter .25s ease}
 .surface[data-modality=voice]::before{opacity:.92;filter:drop-shadow(0 0 9px color-mix(in srgb,var(--widget-primary) 36%,transparent));animation:spectralEdge 2.8s ease-in-out infinite}
 .surface[hidden],.launcher[hidden]{display:none}
@@ -1518,4 +1518,12 @@ button:focus-visible,textarea:focus-visible,[tabindex]:focus-visible,a:focus-vis
 @keyframes listenPulse{0%,100%{transform:scale(.82);opacity:.68}50%{transform:scale(1.08);opacity:1}}
 @media(max-width:767px){.surface[data-presentation=expanded],.surface[data-presentation=panel]{inset:auto 0 0;width:100vw;height:min(92dvh,760px);border:0;border-radius:28px 28px 0 0;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -20px 80px #0003}.surface[data-presentation=mobile-sheet]{inset:auto 0 0;height:min(92dvh,760px);border-radius:28px 28px 0 0;padding-top:0}.header{padding-top:14px}.launcher{right:18px;bottom:calc(18px + env(safe-area-inset-bottom))}.launcher.left{left:18px}.empty{font-size:20px}.context{margin-top:8px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+/* Container queries, not viewport media queries — the widget's own box is
+   what the host page constrains, not the browser window (matches the three
+   named widths the console's conversation surface uses: compact <420px,
+   regular 420-720px, wide >720px). The panel defaults to 400px (compact)
+   and only reaches wide once a visitor resizes or expands it. */
+@container caiw (max-width:419px){.identity{display:none}.heading strong{font-size:13px}.message{font-size:12.5px}.empty{font-size:18px;padding:24px 18px 20px}.context{font-size:9px}}
+@container caiw (min-width:420px) and (max-width:720px){.message{max-width:90%}}
+@container caiw (min-width:721px){.thread{padding-inline:30px}.message{max-width:72%}.message.assistant{max-width:100%}.empty{font-size:23px}}
 `;
