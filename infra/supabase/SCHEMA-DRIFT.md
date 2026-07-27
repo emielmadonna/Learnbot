@@ -269,8 +269,32 @@ provider-credential vault now has reviewable source.
 This removes the "repo is behind live" half of the drift. What remains is the
 ledger, which is a separate and worse problem — see above.
 
+## Phase 17 migrations — partially applied
+
+Attempted 2026-07-27 in order. **One of three landed.**
+
+| Migration | SHA-256 | State |
+|---|---|---|
+| `20260727100000_retire_platform_admin_client_detail` | `3b94755b…343d1b` | **applied** |
+| `20260727110000_malware_scan_checkpoint` | `18b77f3f2feb601c5b4dcbe977a265c532cf33928b1311012d1031ab84a0d995` | **not applied** |
+| `20260727120000_inert_source_scan_clearance` | `64dc082f63bdc9829baa1414a0e2bfba69b6c58820def1f1db0d0854e2a2f895` | **not applied** |
+
+The last two were stopped by the agent permission layer, which blocked writing
+them to the production database. That is a tooling boundary, not a problem with
+the migrations.
+
+The resulting state is coherent, not half-migrated: `security_record_scan_result`
+and `security_clear_inert_source` simply do not exist yet, so the scan gate stays
+exactly as shut as it was before. Nothing references them. Applying the remaining
+two in order is all that is left.
+
+**Consequence until they are applied: uploads still sit in quarantine forever and
+the Phase 10 pipeline still cannot run.**
+
 ## Outstanding
 
+- **Apply `20260727110000` then `20260727120000`**, in that order. Verify each
+  file's SHA-256 above against what is pasted before running it.
 - **Reconcile `supabase_migrations.schema_migrations`** (47 rows to verify and
   insert). Until then `supabase db push` is unsafe against this project.
 - Backups remain disabled (Free plan). The next hand-apply will again have no
@@ -281,8 +305,18 @@ ledger, which is a separate and worse problem — see above.
   `verify-structure.mjs` asserts. `platform_admin_client_detail` has zero callers.
   `20260727100000_retire_platform_admin_client_detail.sql` drops it.
 
-  That migration is **not yet applied** — deliberately. It is not urgent (the
-  function authorises itself via `platform_admin_is_authorized()` and returns
-  `access_denied` to everyone else, so it is dead code rather than exposure), and
-  applying it by hand would add yet another unrecorded change. It should go out with
-  the first run of the real release path.
+  **Applied by hand 2026-07-27** via the SQL editor, at the user's explicit
+  instruction. Verified before and after:
+
+  | | before | after |
+  |---|---|---|
+  | `public.platform_admin_client_detail` | 1 | **0** |
+  | `public.platform_admin_tenant_detail` | 1 | 1 |
+  | `admin_provision_auth_user` md5 | `d8160032e33feaaa61d1cccb29b05d5d` | unchanged |
+
+  Applied text SHA-256
+  `3b94755b7f0122d3d1dda08ef5b05d7cf2fc5db7f64225e93a3cd1f374343d1b`, hash-verified
+  in the editor immediately before running. Reversible: the full body is committed
+  as `20260724213043_platform_admin_client_detail.sql`.
+
+  As with every hand-apply on this project, the ledger does not record it.
