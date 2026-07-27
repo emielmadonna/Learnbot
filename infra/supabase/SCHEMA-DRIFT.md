@@ -329,40 +329,46 @@ scheduled backups nor PITR were available. Accepted deliberately, as before.
 and the Phase 10 pipeline runs.** Anything else still needs a real scanner, by
 design.
 
-## Ledger reconciliation — 47 of 50 rows inserted 2026-07-27
+## Ledger reconciliation — complete, 2026-07-27
 
 `infra/supabase/release/LEDGER_RECONCILE.sql` was run through the dashboard SQL
-editor, applied text SHA-256
-`2151add4b581b99f88cee72318657352c64cdeaee5700ba319078273a953b671`,
-hash-verified in the editor before running. *Success. No rows returned.*
+editor, in two passes on the same day.
+
+| Pass | Applied text SHA-256 | Rows | Ledger after |
+|---|---|---|---|
+| 1 — the prepared 47 | `2151add4b581b99f88cee72318657352c64cdeaee5700ba319078273a953b671` | 47 | 86 |
+| 2 — the file extended with the 3 Phase 17 versions | `3af5fa435e30a498eb1a163c3d8cd9152d88cdb19f326e74b8568c093ab741c3` | 3 | **89** |
+
+Pass 1's hash was verified inside the editor before running. Pass 2 was run by
+the user directly, from the committed file; the file is pure ASCII, so it needed
+no base64 round-trip and the clipboard content was hash-matched to the file on
+disk before handing it over.
+
+The second pass exists because the reconcile file was prepared when the repo held
+56 migrations and therefore predated `20260727100000`, `20260727110000` and
+`20260727120000` — all three applied to the database that day but never recorded.
+The file is idempotent, so the re-run inserted exactly those three and no-opped on
+the other 47.
 
 | | before | after |
 |---|---|---|
-| rows in `supabase_migrations.schema_migrations` | 39 | **86** |
-| repo migration versions present in the ledger | 9 of 59 | **56 of 59** |
+| rows in `supabase_migrations.schema_migrations` | 39 | **89** |
+| repo migration versions present in the ledger | 9 of 59 | **59 of 59** |
 
-Exactly the 39 + 47 = 86 the file predicted.
+39 + 47 + 3 = 89, and every repo migration version is now recorded.
 
-**Three rows are still missing**, and they are the three from this same day:
-`20260727100000`, `20260727110000`, `20260727120000`. The reconcile file was
-prepared when the repo held 56 migrations, so it predates them. All three are
-genuinely applied to the database (verified above); only the ledger entry is
-absent.
+**`supabase_migrations.schema_migrations` is once again a true record of what is
+applied to this project**, and the full-replay hazard this document was created
+to warn about is closed: `supabase db push` no longer sees `0001` as unapplied.
 
-`LEDGER_RECONCILE.sql` has since been **extended with those three versions**.
-It is idempotent, so re-running it inserts exactly those and no-ops on the other
-47. Expected afterwards: **89 rows, all 59 repo versions present.**
-
-That insert was attempted in the same session and was blocked by the agent
-permission layer — a tooling boundary, the same one that stopped `…110000` and
-`…120000` on the first attempt. Nothing was left half-written: the 47-row insert
-is a single committed statement, and the follow-up never ran.
+That does not make `supabase db push` a routine command here. The repo still holds
+no revision newer than the live database, so a push has nothing to do; and the
+2026-07-24 drift means the ledger's own `statements` arrays are NULL for the 50
+hand-recorded rows. Verify against real objects before trusting any tooling that
+reads the ledger.
 
 ## Outstanding
 
-- **Insert the last 3 ledger rows** by re-running the (now extended)
-  `infra/supabase/release/LEDGER_RECONCILE.sql`. Until then `supabase db push`
-  would still consider those three unapplied and try to replay them.
 - Backups remain disabled (Free plan). The next hand-apply will again have no
   rollback.
 - ~~`platform_admin_client_detail` / `platform_admin_tenant_detail` overlap.~~

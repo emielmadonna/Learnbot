@@ -47,18 +47,21 @@
 --
 -- Idempotent: `on conflict (version) do nothing`. Safe to re-run.
 --
--- RUN 2026-07-27 -- PARTIALLY COMPLETE
--- -----------------------------------
--- The 47 rows below were inserted through the dashboard SQL editor, taking the
--- ledger from 39 to 86 rows exactly as predicted. The applied text hashed
+-- RUN 2026-07-27 -- COMPLETE
+-- --------------------------
+-- Pass 1: the 47 prepared rows were inserted through the dashboard SQL editor,
+-- taking the ledger from 39 to 86 rows exactly as predicted. Applied text
 -- SHA-256 2151add4b581b99f88cee72318657352c64cdeaee5700ba319078273a953b671,
 -- verified in the editor before running.
 --
--- This file was then extended with the three 2026-07-27 Phase 17 versions,
--- which it predated -- they were applied to the database that same day but are
--- not yet in the ledger. Re-running this file inserts exactly those three and
--- no-ops on the other 47. Expected afterwards: 89 rows, all 59 repo versions
--- present.
+-- This file was then extended with the three 2026-07-27 Phase 17 versions, which
+-- it predated -- applied to the database that same day, never recorded.
+--
+-- Pass 2: re-run, inserting exactly those three and no-opping on the other 47.
+-- Ledger 86 -> 89. All 59 repo migration versions are now present.
+--
+-- Nothing is left to do here. The file is retained as the record of how the
+-- ledger was reconciled, and remains safe to re-run (it is a no-op now).
 
 insert into supabase_migrations.schema_migrations (version, name)
 select v, n from (values
