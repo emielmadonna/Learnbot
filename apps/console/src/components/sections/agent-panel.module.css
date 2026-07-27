@@ -216,6 +216,95 @@
   justify-content: flex-start;
 }
 
+/* --------------------------------------------------------- draft preview
+
+   New in Phase 4b. Colours resolve through the incoming Graphite token names
+   first (--ink/--muted/--accent/--surface/--bg/--r-md), falling back to the
+   neutrals already used throughout this file so nothing regresses before
+   that token file lands. */
+
+.previewResult {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--muted, color-mix(in srgb, var(--n-ink) 14%, var(--n-canvas)));
+  border-radius: var(--r-md, var(--radius-md));
+  background: var(--surface, color-mix(in srgb, var(--n-ink) 4%, var(--n-canvas)));
+}
+
+.previewTurn {
+  margin: 0;
+  color: var(--ink, var(--n-ink));
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+
+.previewRefusal {
+  margin: 0;
+  padding: var(--space-3);
+  border-left: 3px solid var(--accent, var(--brand-accent));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--brand-accent) 12%, var(--n-canvas));
+  color: var(--ink, var(--n-ink));
+  font-size: var(--text-md);
+  font-style: italic;
+  line-height: var(--leading-normal);
+}
+
+.previewSourceList {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0 0 0 var(--space-4);
+  color: var(--muted, color-mix(in srgb, var(--n-ink) 70%, var(--n-canvas)));
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+/* ------------------------------------------------------------------- history */
+
+.revisionList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.revisionRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--muted, color-mix(in srgb, var(--n-ink) 10%, var(--n-canvas)));
+  border-radius: var(--r-md, var(--radius-md));
+  background: var(--surface, color-mix(in srgb, var(--n-ink) 2%, var(--n-canvas)));
+}
+
+.revisionMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink, var(--n-ink));
+  font-size: var(--text-sm);
+}
+
+.revisionMeta strong {
+  color: var(--ink, var(--n-ink));
+  font-size: var(--text-md);
+}
+
+.revisionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 /* ------------------------------------------------------------ live preview
 
    EXCEPTION, and the only kind there is: everything under .preview* renders a

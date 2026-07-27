@@ -46,11 +46,30 @@ type Draft = {
   /** `true` is the durable `"all"` scope; the id list is kept for round-tripping. */
   scopeAll: boolean;
   courseIds: string[];
+  /** Generation. Model is one of a platform-allowed set, never free text. */
+  model: string;
+  temperature: number;
+  topP: number;
+  maxOutputTokens: number;
+  /** Long-form guidance, layered on top of personaInstructions. */
+  extendedInstructions: string;
+  voiceEnabled: boolean;
+  voiceSpeakingRate: number;
+  voiceBargeInEnabled: boolean;
+  /** Grounding. The refusal wording is a creator field; refusing is not. */
+  retrievalCount: number;
+  retrievalSimilarityFloor: number;
+  noResultsMessage: string;
+  escalationEnabled: boolean;
+  escalationTrigger: string;
+  escalationMessage: string;
 };
 
 type ServerState = {
   expectedVersion: number;
   toneOptions: readonly string[];
+  modelOptions: readonly string[];
+  escalationTriggerOptions: readonly string[];
   defaults: Record<string, unknown>;
   baseline: Draft;
   logoUrl: string | null;
@@ -60,13 +79,34 @@ type ServerState = {
   updatedAt: string | null;
 };
 
+type RevisionSummary = {
+  version: number;
+  status: "draft" | "published" | "retired";
+  assistantName: string;
+  welcomeMessage: string;
+  tone: string;
+  model: string;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type FieldKey =
   | "assistantName"
   | "iconGlyph"
   | "welcomeMessage"
   | "personaInstructions"
   | "voice"
-  | "courseScope";
+  | "courseScope"
+  | "extendedInstructions"
+  | "temperature"
+  | "topP"
+  | "maxOutputTokens"
+  | "voiceSpeakingRate"
+  | "retrievalCount"
+  | "retrievalSimilarityFloor"
+  | "noResultsMessage"
+  | "escalationMessage";
 
 type Errors = Partial<Record<FieldKey, string>>;
 
@@ -93,6 +133,43 @@ const TONE_HELP: Record<string, string> = {
   professional: "Formal, precise and businesslike.",
   socratic: "Leads with guiding questions before giving the answer.",
   concise: "As short as the question allows.",
+};
+
+/** Mirrors app_private.agent_allowed_models(). A creator picks from this set
+ * only — there is no field anywhere in this panel for an arbitrary model id. */
+const FALLBACK_MODELS = [
+  "gpt-5.6-luna",
+  "gpt-5.6-luna-mini",
+  "gpt-5.6-luna-pro",
+] as const;
+
+const MODEL_HELP: Record<string, string> = {
+  "gpt-5.6-luna": "The platform default. Balanced quality and latency.",
+  "gpt-5.6-luna-mini": "Faster and cheaper; best for short, direct answers.",
+  "gpt-5.6-luna-pro": "Slower and more capable; best for dense material.",
+};
+
+const FALLBACK_ESCALATION_TRIGGERS = [
+  "manual",
+  "always_available",
+  "after_no_results",
+  "after_repeated_question",
+] as const;
+
+const ESCALATION_TRIGGER_LABEL: Record<string, string> = {
+  manual: "Manual only",
+  always_available: "Always offered",
+  after_no_results: "After the assistant can't find an answer",
+  after_repeated_question: "After a question repeats without resolving",
+};
+
+const ESCALATION_TRIGGER_HELP: Record<string, string> = {
+  manual: "A student has to ask for a human; the assistant never offers it.",
+  always_available: "A path to a human is shown on every answer.",
+  after_no_results:
+    "Offered the moment retrieval comes back empty, alongside the refusal.",
+  after_repeated_question:
+    "Offered once a student asks essentially the same thing again.",
 };
 
 /** SVG is rejected by the asset route because it can carry script. */
@@ -123,6 +200,8 @@ const CODE_SENTENCES: Record<string, string> = {
   // there is nothing for them to correct.
   request_failed:
     "The assistant service is unavailable right now, so nothing was saved. This is not something you did — wait a moment and try again.",
+  revision_not_found:
+    "That version no longer exists in this workspace's history. Reload and try again.",
   storage_signing_failed:
     "Storage is unavailable right now, so the image was not uploaded.",
   tenant_not_found: "This workspace is no longer available.",
@@ -156,6 +235,15 @@ function hexOr(value: unknown, fallback: string): string {
 
 function nullableKey(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberOr(value: unknown, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function boolOr(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function codeOf(value: unknown): string | null {
@@ -215,6 +303,23 @@ function toDraft(
     courseIds: Array.isArray(scope)
       ? scope.filter((entry): entry is string => typeof entry === "string")
       : [],
+    model: text(merged.model, "gpt-5.6-luna"),
+    temperature: numberOr(merged.temperature, 0.4),
+    topP: numberOr(merged.topP, 1),
+    maxOutputTokens: numberOr(merged.maxOutputTokens, 800),
+    extendedInstructions: text(merged.extendedInstructions, ""),
+    voiceEnabled: boolOr(merged.voiceEnabled, true),
+    voiceSpeakingRate: numberOr(merged.voiceSpeakingRate, 1),
+    voiceBargeInEnabled: boolOr(merged.voiceBargeInEnabled, true),
+    retrievalCount: numberOr(merged.retrievalCount, 6),
+    retrievalSimilarityFloor: numberOr(merged.retrievalSimilarityFloor, 0.2),
+    noResultsMessage: text(
+      merged.noResultsMessage,
+      "I couldn't find this in the published learning yet. Try naming the course, lesson, or idea you want to understand.",
+    ),
+    escalationEnabled: boolOr(merged.escalationEnabled, false),
+    escalationTrigger: text(merged.escalationTrigger, "manual"),
+    escalationMessage: text(merged.escalationMessage, ""),
   };
 }
 
@@ -279,6 +384,63 @@ function validate(draft: Draft): Errors {
 
   if (!draft.scopeAll && draft.courseIds.length === 0) {
     errors.courseScope = "Choose at least one course, or answer across all of them.";
+  }
+
+  if (draft.extendedInstructions.trim().length > 8000) {
+    errors.extendedInstructions = "Use 8000 characters or fewer.";
+  }
+
+  if (
+    !Number.isFinite(draft.temperature) ||
+    draft.temperature < 0 ||
+    draft.temperature > 2
+  ) {
+    errors.temperature = "Use a value between 0 and 2.";
+  }
+  if (!Number.isFinite(draft.topP) || draft.topP <= 0 || draft.topP > 1) {
+    errors.topP = "Use a value greater than 0 and up to 1.";
+  }
+  if (
+    !Number.isInteger(draft.maxOutputTokens) ||
+    draft.maxOutputTokens < 64 ||
+    draft.maxOutputTokens > 4000
+  ) {
+    errors.maxOutputTokens = "Use a whole number between 64 and 4000.";
+  }
+  if (
+    !Number.isFinite(draft.voiceSpeakingRate) ||
+    draft.voiceSpeakingRate < 0.5 ||
+    draft.voiceSpeakingRate > 2
+  ) {
+    errors.voiceSpeakingRate = "Use a value between 0.5 and 2.";
+  }
+  if (
+    !Number.isInteger(draft.retrievalCount) ||
+    draft.retrievalCount < 1 ||
+    draft.retrievalCount > 20
+  ) {
+    errors.retrievalCount = "Use a whole number between 1 and 20.";
+  }
+  if (
+    !Number.isFinite(draft.retrievalSimilarityFloor) ||
+    draft.retrievalSimilarityFloor < 0 ||
+    draft.retrievalSimilarityFloor > 1
+  ) {
+    errors.retrievalSimilarityFloor = "Use a value between 0 and 1.";
+  }
+  const noResults = draft.noResultsMessage.trim();
+  if (noResults.length === 0) {
+    errors.noResultsMessage =
+      "Students see this whenever nothing is found, so it cannot be empty.";
+  } else if (noResults.length > 500) {
+    errors.noResultsMessage = `Use 500 characters or fewer (currently ${noResults.length}).`;
+  }
+  const escalationMessage = draft.escalationMessage.trim();
+  if (draft.escalationEnabled && escalationMessage.length === 0) {
+    errors.escalationMessage =
+      "Escalation is on, so students need to see what happens next.";
+  } else if (escalationMessage.length > 500) {
+    errors.escalationMessage = "Use 500 characters or fewer.";
   }
 
   return errors;
@@ -538,6 +700,332 @@ function LivePreview({
   );
 }
 
+/* ------------------------------------------------------------ draft preview */
+
+type PreviewResult = {
+  refused: boolean;
+  answer: string;
+  sources: {
+    courseTitle: string;
+    documentTitle: string;
+    lessonTitle: string | null;
+    excerpt: string;
+  }[];
+  model: string | null;
+};
+
+/**
+ * Runs one real turn against the DRAFT above, in an isolated session (PLAN
+ * Section 6.3). It never writes a conversation, never touches audit_ledger and
+ * is unaffected by Save/Publish — closing the panel without saving loses
+ * nothing here because nothing here was ever "in progress".
+ */
+function PreviewRunner({
+  draft,
+  disabled,
+}: {
+  draft: Draft;
+  disabled: boolean;
+}) {
+  const headingId = useId();
+  const [question, setQuestion] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<PreviewResult | null>(null);
+
+  const run = useCallback(async () => {
+    const trimmed = question.trim();
+    if (trimmed.length === 0) {
+      setError("Type a question to test the draft with.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const response = await fetch("/api/agent/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          question: trimmed,
+          assistantName: draft.assistantName,
+          tone: draft.tone,
+          personaInstructions: draft.personaInstructions,
+          extendedInstructions: draft.extendedInstructions,
+          retrievalCount: draft.retrievalCount,
+          retrievalSimilarityFloor: draft.retrievalSimilarityFloor,
+          noResultsMessage: draft.noResultsMessage,
+        }),
+      });
+      const body = await readJson(response);
+      if (!response.ok || !isRecord(body) || !isRecord(body.preview)) {
+        setError(sentenceFor(codeOf(body)));
+        return;
+      }
+      const preview = body.preview;
+      const sources = Array.isArray(preview.sources)
+        ? preview.sources.flatMap((entry) =>
+            isRecord(entry)
+              ? [
+                  {
+                    courseTitle:
+                      typeof entry.courseTitle === "string"
+                        ? entry.courseTitle
+                        : "",
+                    documentTitle:
+                      typeof entry.documentTitle === "string"
+                        ? entry.documentTitle
+                        : "",
+                    lessonTitle:
+                      typeof entry.lessonTitle === "string"
+                        ? entry.lessonTitle
+                        : null,
+                    excerpt:
+                      typeof entry.excerpt === "string" ? entry.excerpt : "",
+                  },
+                ]
+              : [],
+          )
+        : [];
+      setResult({
+        refused: preview.refused === true,
+        answer: typeof preview.answer === "string" ? preview.answer : "",
+        sources,
+        model: typeof preview.model === "string" ? preview.model : null,
+      });
+    } catch {
+      setError(
+        "The preview did not reach the server. Nothing was saved or sent to a student.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [draft, question]);
+
+  return (
+    <section className={styles.group} aria-labelledby={`${headingId}-preview`}>
+      <h3 className={styles.groupTitle} id={`${headingId}-preview`}>
+        Preview
+      </h3>
+      <p className={styles.groupNote}>
+        Runs one real, grounded turn against everything above, in an isolated
+        session. Nothing here is saved as a conversation, and nothing here is
+        ever shown to a student — publish first for that.
+      </p>
+      <TextField
+        disabled={disabled || busy}
+        label="Test question"
+        onChange={(event) => setQuestion(event.target.value)}
+        placeholder="Ask the draft assistant something a student might ask…"
+        value={question}
+      />
+      <div className={styles.closeRow}>
+        <Button
+          disabled={disabled || busy}
+          loading={busy}
+          loadingLabel="Running…"
+          onClick={() => void run()}
+        >
+          Run preview
+        </Button>
+      </div>
+      {error !== null ? (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      ) : null}
+      {result !== null ? (
+        <div className={styles.previewResult} role="status">
+          <p
+            className={
+              result.refused ? styles.previewRefusal : styles.previewTurn
+            }
+          >
+            {result.answer}
+          </p>
+          {!result.refused && result.sources.length > 0 ? (
+            <ul className={styles.previewSourceList}>
+              {result.sources.map((source, index) => (
+                <li key={`${source.courseTitle}-${index}`}>
+                  <strong>{source.courseTitle}</strong>
+                  {" — "}
+                  {source.lessonTitle ?? source.documentTitle}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/* ----------------------------------------------------------------- history */
+
+/**
+ * Every draft save and every publish already appends a new, immutable
+ * tenant_branding row rather than rewriting one — that row chain is this
+ * assistant's revision log, the same idea `course_revisions` gives course
+ * content. This lists it and lets a creator restore an old head, same shape
+ * as `learning_rollback_course`.
+ */
+function RevisionHistory({
+  busy,
+  expectedVersion,
+  onRestored,
+}: {
+  busy: boolean;
+  expectedVersion: number;
+  onRestored: (
+    nextExpectedVersion: number,
+    configuration: Record<string, unknown> | null,
+  ) => Promise<void>;
+}) {
+  const headingId = useId();
+  const [open, setOpen] = useState(false);
+  const [revisions, setRevisions] = useState<RevisionSummary[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/agent/revisions", {
+        cache: "no-store",
+        headers: { accept: "application/json" },
+      });
+      const body = await readJson(response);
+      if (!response.ok || !isRecord(body) || !Array.isArray(body.revisions)) {
+        setError(sentenceFor(codeOf(body)));
+        return;
+      }
+      setRevisions(body.revisions as RevisionSummary[]);
+    } catch {
+      setError("History did not reach the server. Nothing changed.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const restore = useCallback(
+    async (version: number, publish: boolean) => {
+      if (
+        !window.confirm(
+          publish
+            ? `Publish version ${version}? This replaces what every student sees right now.`
+            : `Restore version ${version} as a new draft? Nobody sees it until you publish.`,
+        )
+      ) {
+        return;
+      }
+      setRestoring(version);
+      setError(null);
+      try {
+        const response = await fetch("/api/agent/revisions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            targetVersion: version,
+            publish,
+            expectedVersion,
+          }),
+        });
+        const body = await readJson(response);
+        if (!response.ok || !isRecord(body)) {
+          setError(sentenceFor(codeOf(body)));
+          return;
+        }
+        const nextExpectedVersion =
+          typeof body.expectedVersion === "number"
+            ? body.expectedVersion
+            : expectedVersion;
+        const configuration = isRecord(body.configuration)
+          ? body.configuration
+          : null;
+        await onRestored(nextExpectedVersion, configuration);
+        await load();
+      } catch {
+        setError("The restore did not reach the server. Nothing changed.");
+      } finally {
+        setRestoring(null);
+      }
+    },
+    [expectedVersion, load, onRestored],
+  );
+
+  return (
+    <section className={styles.group} aria-labelledby={`${headingId}-history`}>
+      <h3 className={styles.groupTitle} id={`${headingId}-history`}>
+        History
+      </h3>
+      <p className={styles.groupNote}>
+        Every draft save and every publish is kept. Restoring an old version
+        never deletes anything — it appends a new one, exactly like saving
+        does.
+      </p>
+      <div className={styles.closeRow}>
+        <Button
+          disabled={busy || loading}
+          loading={loading}
+          loadingLabel="Loading…"
+          onClick={() => {
+            const next = !open;
+            setOpen(next);
+            if (next && revisions === null) void load();
+          }}
+        >
+          {open ? "Hide history" : "View history"}
+        </Button>
+      </div>
+      {error !== null ? (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      ) : null}
+      {open && revisions !== null ? (
+        revisions.length === 0 ? (
+          <p className={styles.groupNote}>No saved versions yet.</p>
+        ) : (
+          <ul className={styles.revisionList}>
+            {revisions.map((revision) => (
+              <li className={styles.revisionRow} key={revision.version}>
+                <span className={styles.revisionMeta}>
+                  <strong>v{revision.version}</strong>
+                  <span className={styles.courseStatus}>
+                    {revision.status}
+                  </span>
+                  <span>{new Date(revision.updatedAt).toLocaleString()}</span>
+                </span>
+                <span className={styles.revisionActions}>
+                  <Button
+                    disabled={busy || restoring !== null}
+                    loading={restoring === revision.version}
+                    onClick={() => void restore(revision.version, false)}
+                    size="sm"
+                  >
+                    Restore as draft
+                  </Button>
+                  <Button
+                    disabled={busy || restoring !== null}
+                    loading={restoring === revision.version}
+                    onClick={() => void restore(revision.version, true)}
+                    size="sm"
+                    variant="primary"
+                  >
+                    Publish this version
+                  </Button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )
+      ) : null}
+    </section>
+  );
+}
+
 /* -------------------------------------------------------------- the editor */
 
 function AgentConfigurator({
@@ -606,6 +1094,16 @@ function AgentConfigurator({
             (entry): entry is string => typeof entry === "string",
           )
         : [];
+      const models = Array.isArray(body.modelOptions)
+        ? body.modelOptions.filter(
+            (entry): entry is string => typeof entry === "string",
+          )
+        : [];
+      const escalationTriggers = Array.isArray(body.escalationTriggerOptions)
+        ? body.escalationTriggerOptions.filter(
+            (entry): entry is string => typeof entry === "string",
+          )
+        : [];
       const baseline = toDraft(head, defaults);
       // Signed reads are resolved from the head's own keys rather than from the
       // list response, so a superseded draft can never supply the preview image.
@@ -616,6 +1114,11 @@ function AgentConfigurator({
       const next: ServerState = {
         expectedVersion,
         toneOptions: tones.length > 0 ? tones : [...FALLBACK_TONES],
+        modelOptions: models.length > 0 ? models : [...FALLBACK_MODELS],
+        escalationTriggerOptions:
+          escalationTriggers.length > 0
+            ? escalationTriggers
+            : [...FALLBACK_ESCALATION_TRIGGERS],
         defaults,
         baseline,
         logoUrl,
@@ -809,6 +1312,26 @@ function AgentConfigurator({
         courseScope: draft.scopeAll ? "all" : draft.courseIds,
         logoStorageKey: draft.logoStorageKey,
         avatarStorageKey: draft.avatarStorageKey,
+        model: draft.model,
+        temperature: draft.temperature,
+        topP: draft.topP,
+        maxOutputTokens: draft.maxOutputTokens,
+        extendedInstructions:
+          draft.extendedInstructions.trim() === ""
+            ? null
+            : draft.extendedInstructions.trim(),
+        voiceEnabled: draft.voiceEnabled,
+        voiceSpeakingRate: draft.voiceSpeakingRate,
+        voiceBargeInEnabled: draft.voiceBargeInEnabled,
+        retrievalCount: draft.retrievalCount,
+        retrievalSimilarityFloor: draft.retrievalSimilarityFloor,
+        noResultsMessage: draft.noResultsMessage.trim(),
+        escalationEnabled: draft.escalationEnabled,
+        escalationTrigger: draft.escalationTrigger,
+        escalationMessage:
+          draft.escalationMessage.trim() === ""
+            ? null
+            : draft.escalationMessage.trim(),
         publish,
         expectedVersion: server.expectedVersion,
       };
@@ -980,6 +1503,16 @@ function AgentConfigurator({
     value: tone,
     label: tone.charAt(0).toUpperCase() + tone.slice(1),
   }));
+  const modelOptions = server.modelOptions.map((model) => ({
+    value: model,
+    label: model,
+  }));
+  const escalationTriggerOptions = server.escalationTriggerOptions.map(
+    (trigger) => ({
+      value: trigger,
+      label: ESCALATION_TRIGGER_LABEL[trigger] ?? trigger,
+    }),
+  );
   const liveLabel =
     server.liveVersion === null
       ? "Never published"
@@ -1197,6 +1730,74 @@ function AgentConfigurator({
               </div>
             </section>
 
+            <section
+              className={styles.group}
+              aria-labelledby={`${headingId}-generation`}
+            >
+              <h3 className={styles.groupTitle} id={`${headingId}-generation`}>
+                Generation
+              </h3>
+              <p className={styles.groupNote}>
+                The defaults are tuned for this assistant already — most
+                workspaces never need to touch these.
+              </p>
+              <SelectField
+                disabled={busy}
+                help={
+                  MODEL_HELP[draft.model] ??
+                  "Chosen from the platform-allowed set only."
+                }
+                label="Model"
+                onChange={(event) => update("model", event.target.value)}
+                options={modelOptions}
+                value={draft.model}
+              />
+              <div className={styles.pair}>
+                <TextField
+                  disabled={busy}
+                  error={errors.temperature}
+                  help="0 is the most literal and repeatable; 2 is the most varied."
+                  label="Temperature"
+                  max={2}
+                  min={0}
+                  onChange={(event) =>
+                    update("temperature", Number(event.target.value))
+                  }
+                  step={0.05}
+                  type="number"
+                  value={draft.temperature}
+                />
+                <TextField
+                  disabled={busy}
+                  error={errors.topP}
+                  help="Narrows how many candidate words the model considers. Leave at 1 unless you know you want less."
+                  label="Top-p"
+                  max={1}
+                  min={0.01}
+                  onChange={(event) =>
+                    update("topP", Number(event.target.value))
+                  }
+                  step={0.01}
+                  type="number"
+                  value={draft.topP}
+                />
+                <TextField
+                  disabled={busy}
+                  error={errors.maxOutputTokens}
+                  help="Upper bound on how long a single answer can run."
+                  label="Max output tokens"
+                  max={4000}
+                  min={64}
+                  onChange={(event) =>
+                    update("maxOutputTokens", Number(event.target.value))
+                  }
+                  step={1}
+                  type="number"
+                  value={draft.maxOutputTokens}
+                />
+              </div>
+            </section>
+
             <section className={styles.group} aria-labelledby={`${headingId}-voice`}>
               <h3 className={styles.groupTitle} id={`${headingId}-voice`}>
                 How it speaks
@@ -1224,6 +1825,18 @@ function AgentConfigurator({
                 rows={5}
                 value={draft.personaInstructions}
               />
+              <TextAreaField
+                disabled={busy}
+                error={errors.extendedInstructions}
+                help={`Longer, free-form guidance for edge cases the fields above don't cover. Same rule as persona instructions: it layers on top of the platform's grounding and safety rules and can never replace them. ${draft.extendedInstructions.trim().length}/8000 characters.`}
+                label="Additional instructions"
+                maxLength={8000}
+                onChange={(event) =>
+                  update("extendedInstructions", event.target.value)
+                }
+                rows={6}
+                value={draft.extendedInstructions}
+              />
               <div className={styles.pair}>
                 <SelectField
                   disabled={busy}
@@ -1245,6 +1858,42 @@ function AgentConfigurator({
                   value={draft.voice}
                 />
               </div>
+              <Toggle
+                bordered
+                checked={draft.voiceEnabled}
+                description="Off: this assistant only ever appears as text, even if the host page offers a microphone."
+                disabled={busy}
+                label="Offer voice at all"
+                onChange={(checked) => update("voiceEnabled", checked)}
+              />
+              {draft.voiceEnabled ? (
+                <div className={styles.pair}>
+                  <TextField
+                    disabled={busy}
+                    error={errors.voiceSpeakingRate}
+                    help="1 is normal pace. Below 1 is slower, above 1 is faster."
+                    label="Speaking rate"
+                    max={2}
+                    min={0.5}
+                    onChange={(event) =>
+                      update("voiceSpeakingRate", Number(event.target.value))
+                    }
+                    step={0.05}
+                    type="number"
+                    value={draft.voiceSpeakingRate}
+                  />
+                  <Toggle
+                    bordered
+                    checked={draft.voiceBargeInEnabled}
+                    description="On: a student can start talking while the assistant is still speaking and it stops to listen."
+                    disabled={busy}
+                    label="Allow barge-in"
+                    onChange={(checked) =>
+                      update("voiceBargeInEnabled", checked)
+                    }
+                  />
+                </div>
+              ) : null}
             </section>
 
             <section className={styles.group} aria-labelledby={`${headingId}-scope`}>
@@ -1293,6 +1942,147 @@ function AgentConfigurator({
                 </fieldset>
               )}
             </section>
+
+            <section
+              className={styles.group}
+              aria-labelledby={`${headingId}-grounding`}
+            >
+              <h3 className={styles.groupTitle} id={`${headingId}-grounding`}>
+                Grounding
+              </h3>
+              <p className={styles.groupNote}>
+                How the assistant searches its own material before it
+                answers, and what a student sees when nothing turns up.
+                Refusing on an empty search is not optional here — only the
+                wording of that refusal is yours to set.
+              </p>
+              <div className={styles.pair}>
+                <TextField
+                  disabled={busy}
+                  error={errors.retrievalCount}
+                  help="How many passages are retrieved for each question."
+                  label="Passages retrieved"
+                  max={20}
+                  min={1}
+                  onChange={(event) =>
+                    update("retrievalCount", Number(event.target.value))
+                  }
+                  step={1}
+                  type="number"
+                  value={draft.retrievalCount}
+                />
+                <TextField
+                  disabled={busy}
+                  error={errors.retrievalSimilarityFloor}
+                  help="Passages scoring below this are treated as not found. Higher is stricter."
+                  label="Similarity floor"
+                  max={1}
+                  min={0}
+                  onChange={(event) =>
+                    update(
+                      "retrievalSimilarityFloor",
+                      Number(event.target.value),
+                    )
+                  }
+                  step={0.05}
+                  type="number"
+                  value={draft.retrievalSimilarityFloor}
+                />
+              </div>
+              <TextAreaField
+                disabled={busy}
+                error={errors.noResultsMessage}
+                help={`Shown whenever the search above comes back empty. ${draft.noResultsMessage.trim().length}/500 characters.`}
+                label="Nothing found message"
+                maxLength={500}
+                onChange={(event) =>
+                  update("noResultsMessage", event.target.value)
+                }
+                required
+                rows={2}
+                value={draft.noResultsMessage}
+              />
+            </section>
+
+            <section
+              className={styles.group}
+              aria-labelledby={`${headingId}-escalation`}
+            >
+              <h3 className={styles.groupTitle} id={`${headingId}-escalation`}>
+                Escalation
+              </h3>
+              <Toggle
+                bordered
+                checked={draft.escalationEnabled}
+                description="Off: a student who needs a human has no path to one from inside the assistant."
+                disabled={busy}
+                label="Offer a path to a human"
+                onChange={(checked) => update("escalationEnabled", checked)}
+              />
+              {draft.escalationEnabled ? (
+                <>
+                  <SelectField
+                    disabled={busy}
+                    help={
+                      ESCALATION_TRIGGER_HELP[draft.escalationTrigger] ??
+                      "When the option to escalate appears."
+                    }
+                    label="When it's offered"
+                    onChange={(event) =>
+                      update("escalationTrigger", event.target.value)
+                    }
+                    options={escalationTriggerOptions}
+                    value={draft.escalationTrigger}
+                  />
+                  <TextAreaField
+                    disabled={busy}
+                    error={errors.escalationMessage}
+                    help={`Exactly what a student reads when this is offered. ${draft.escalationMessage.trim().length}/500 characters.`}
+                    label="What the student sees"
+                    maxLength={500}
+                    onChange={(event) =>
+                      update("escalationMessage", event.target.value)
+                    }
+                    required
+                    rows={2}
+                    value={draft.escalationMessage}
+                  />
+                </>
+              ) : null}
+            </section>
+
+            <PreviewRunner disabled={busy} draft={draft} />
+
+            <RevisionHistory
+              busy={busy}
+              expectedVersion={server.expectedVersion}
+              onRestored={async (nextExpectedVersion, configuration) => {
+                setServer((current) =>
+                  current === null
+                    ? current
+                    : {
+                        ...current,
+                        expectedVersion: nextExpectedVersion,
+                        baseline: toDraft(configuration, current.defaults),
+                        liveVersion:
+                          configuration !== null && configuration.status === "published"
+                            ? nextExpectedVersion
+                            : current.liveVersion,
+                        draftVersion:
+                          configuration !== null && configuration.status === "draft"
+                            ? nextExpectedVersion
+                            : current.draftVersion,
+                      },
+                );
+                setDraft(
+                  configuration === null
+                    ? null
+                    : toDraft(configuration, server.defaults),
+                );
+                setStatus(`Restored version ${nextExpectedVersion}.`);
+                await refresh();
+              }}
+            />
 
             <p className={styles.boundary}>
               <strong>Nothing here is invented.</strong> Every field is read from

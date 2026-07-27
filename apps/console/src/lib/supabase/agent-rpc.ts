@@ -14,6 +14,16 @@ export type AgentTone = (typeof agentToneOptions)[number];
 /** Either every published course, or an explicit allow-list of course ids. */
 export type AgentCourseScope = "all" | string[];
 
+export const agentEscalationTriggerOptions = [
+  "manual",
+  "always_available",
+  "after_no_results",
+  "after_repeated_question",
+] as const;
+
+export type AgentEscalationTrigger =
+  (typeof agentEscalationTriggerOptions)[number];
+
 export type AgentConfigurationVersion = {
   brandingId: string;
   status: "draft" | "published" | "retired";
@@ -32,6 +42,23 @@ export type AgentConfigurationVersion = {
   logoStorageKey: string | null;
   avatarStorageKey: string | null;
   privacyCopy: string | null;
+  /** Platform-allowed model id. Never a free-text value. */
+  model: string;
+  temperature: number;
+  topP: number;
+  maxOutputTokens: number;
+  /** Long-form free-text guidance, layered on top of personaInstructions. */
+  extendedInstructions: string | null;
+  voiceEnabled: boolean;
+  voiceSpeakingRate: number;
+  voiceBargeInEnabled: boolean;
+  retrievalCount: number;
+  retrievalSimilarityFloor: number;
+  /** Wording only — whether an empty retrieval refuses is not configurable. */
+  noResultsMessage: string;
+  escalationEnabled: boolean;
+  escalationTrigger: AgentEscalationTrigger;
+  escalationMessage: string | null;
   publishedAt: string | null;
   updatedAt: string;
 };
@@ -45,6 +72,8 @@ export type AgentConfiguration = {
   draft: AgentConfigurationVersion | null;
   defaults: Record<string, unknown>;
   toneOptions: string[];
+  modelOptions: string[];
+  escalationTriggerOptions: string[];
   assetPrefix: string;
 };
 
@@ -62,6 +91,20 @@ export type AgentConfigurationInput = {
   courseScope: AgentCourseScope;
   logoStorageKey: string | null;
   avatarStorageKey: string | null;
+  model: string;
+  temperature: number;
+  topP: number;
+  maxOutputTokens: number;
+  extendedInstructions: string | null;
+  voiceEnabled: boolean;
+  voiceSpeakingRate: number;
+  voiceBargeInEnabled: boolean;
+  retrievalCount: number;
+  retrievalSimilarityFloor: number;
+  noResultsMessage: string;
+  escalationEnabled: boolean;
+  escalationTrigger: string;
+  escalationMessage: string | null;
   publish: boolean;
   expectedVersion: number;
 };
@@ -72,6 +115,31 @@ export type AgentConfigurationWrite = {
   tenantId: string;
   expectedVersion: number;
   configuration: AgentConfigurationVersion;
+};
+
+export type AgentConfigurationRevisionSummary = {
+  version: number;
+  status: "draft" | "published" | "retired";
+  assistantName: string;
+  welcomeMessage: string;
+  tone: string;
+  model: string;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AgentConfigurationRevisions = {
+  ok: true;
+  dataMode: "durable";
+  tenantId: string;
+  revisions: AgentConfigurationRevisionSummary[];
+};
+
+export type AgentConfigurationRollbackInput = {
+  targetVersion: number;
+  publish: boolean;
+  expectedVersion: number;
 };
 
 export class AgentRpcError extends Error {
@@ -105,12 +173,28 @@ export function parseAgentConfiguration(value: unknown): AgentConfiguration {
     typeof result.expectedVersion !== "number" ||
     typeof result.assetPrefix !== "string" ||
     !Array.isArray(result.toneOptions) ||
+    !Array.isArray(result.modelOptions) ||
+    !Array.isArray(result.escalationTriggerOptions) ||
     (result.published !== null && !isRecord(result.published)) ||
     (result.draft !== null && !isRecord(result.draft))
   ) {
     throw new AgentRpcError("invalid_response");
   }
   return result as unknown as AgentConfiguration;
+}
+
+export function parseAgentConfigurationRevisions(
+  value: unknown,
+): AgentConfigurationRevisions {
+  const result = requireAgentRpcSuccess(value);
+  if (
+    result.dataMode !== "durable" ||
+    typeof result.tenantId !== "string" ||
+    !Array.isArray(result.revisions)
+  ) {
+    throw new AgentRpcError("invalid_response");
+  }
+  return result as unknown as AgentConfigurationRevisions;
 }
 
 export function parseAgentConfigurationWrite(
@@ -196,10 +280,56 @@ export async function updateAgentConfiguration(
     requested_course_scope: input.courseScope,
     requested_logo_storage_key: input.logoStorageKey,
     requested_avatar_storage_key: input.avatarStorageKey,
+    requested_model: input.model,
+    requested_temperature: input.temperature,
+    requested_top_p: input.topP,
+    requested_max_output_tokens: input.maxOutputTokens,
+    requested_extended_instructions: input.extendedInstructions,
+    requested_voice_enabled: input.voiceEnabled,
+    requested_voice_speaking_rate: input.voiceSpeakingRate,
+    requested_voice_barge_in_enabled: input.voiceBargeInEnabled,
+    requested_retrieval_count: input.retrievalCount,
+    requested_retrieval_similarity_floor: input.retrievalSimilarityFloor,
+    requested_no_results_message: input.noResultsMessage,
+    requested_escalation_enabled: input.escalationEnabled,
+    requested_escalation_trigger: input.escalationTrigger,
+    requested_escalation_message: input.escalationMessage,
     requested_publish: input.publish,
     expected_version: input.expectedVersion,
     ...operation,
   });
+  if (response.error) {
+    throw new AgentRpcError("request_failed");
+  }
+  return parseAgentConfigurationWrite(response.data);
+}
+
+export async function listAgentConfigurationRevisions(
+  supabase: SupabaseClient,
+): Promise<AgentConfigurationRevisions> {
+  const response = await supabase.rpc(
+    "tenant_list_agent_configuration_revisions",
+  );
+  if (response.error) {
+    throw new AgentRpcError("request_failed");
+  }
+  return parseAgentConfigurationRevisions(response.data);
+}
+
+export async function rollbackAgentConfiguration(
+  supabase: SupabaseClient,
+  input: AgentConfigurationRollbackInput,
+  operation: ReturnType<typeof agentOperationFields>,
+): Promise<AgentConfigurationWrite> {
+  const response = await supabase.rpc(
+    "tenant_rollback_agent_configuration",
+    {
+      target_version: input.targetVersion,
+      requested_publish: input.publish,
+      expected_version: input.expectedVersion,
+      ...operation,
+    },
+  );
   if (response.error) {
     throw new AgentRpcError("request_failed");
   }

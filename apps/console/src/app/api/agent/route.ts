@@ -8,6 +8,7 @@ import {
 import {
   AgentRpcError,
   agentEditableVersion,
+  agentEscalationTriggerOptions,
   agentOperationFields,
   agentToneOptions,
   getAgentConfiguration,
@@ -23,6 +24,16 @@ const uuidPattern =
 const colorPattern = /^#[0-9A-Fa-f]{6}$/u;
 const voicePattern = /^[a-z0-9][a-z0-9._-]{0,60}$/u;
 const tones = new Set<string>(agentToneOptions);
+const escalationTriggers = new Set<string>(agentEscalationTriggerOptions);
+// Mirrors app_private.agent_allowed_models() in
+// infra/supabase/migrations/20260726097000_agent_control_surface.sql. This
+// is a redundant client-side guard only — the database CHECK constraint and
+// RPC validation are the actual boundary a caller cannot bypass.
+const agentModels = new Set<string>([
+  "gpt-5.6-luna",
+  "gpt-5.6-luna-mini",
+  "gpt-5.6-luna-pro",
+]);
 const conflictCodes = new Set([
   "idempotency_conflict",
   "tenant_selection_required",
@@ -71,6 +82,26 @@ function requiredColor(value: unknown) {
   return color.toUpperCase();
 }
 
+function requiredBoolean(value: unknown, fallback: boolean) {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== "boolean") throw new AgentRpcError("invalid_request");
+  return value;
+}
+
+function boundedNumber(value: unknown, min: number, max: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    throw new AgentRpcError("invalid_request");
+  }
+  return parsed;
+}
+
+function boundedInteger(value: unknown, min: number, max: number) {
+  const parsed = boundedNumber(value, min, max);
+  if (!Number.isInteger(parsed)) throw new AgentRpcError("invalid_request");
+  return parsed;
+}
+
 function assetKey(value: unknown, tenantId: string) {
   const key = optionalText(value, 1024);
   if (key === null) return null;
@@ -103,6 +134,24 @@ function parseInput(value: unknown, tenantId: string): AgentConfigurationInput {
   if (voice !== null && !voicePattern.test(voice)) {
     throw new AgentRpcError("invalid_request");
   }
+  const model =
+    typeof value.model === "string" ? value.model.trim().toLowerCase() : "";
+  // The model is chosen from a platform-allowed set only, never free text.
+  if (!agentModels.has(model)) throw new AgentRpcError("invalid_request");
+  const escalationTrigger =
+    typeof value.escalationTrigger === "string"
+      ? value.escalationTrigger.trim().toLowerCase()
+      : "manual";
+  if (!escalationTriggers.has(escalationTrigger)) {
+    throw new AgentRpcError("invalid_request");
+  }
+  const escalationEnabled = requiredBoolean(value.escalationEnabled, false);
+  const escalationMessage = optionalText(value.escalationMessage, 500);
+  // Escalation copy is meaningless without escalation switched on. Enforced
+  // here and again by the database CHECK constraint.
+  if (escalationEnabled && escalationMessage === null) {
+    throw new AgentRpcError("invalid_request");
+  }
   const expectedVersion = Number(value.expectedVersion);
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) {
     throw new AgentRpcError("invalid_request");
@@ -121,6 +170,29 @@ function parseInput(value: unknown, tenantId: string): AgentConfigurationInput {
     courseScope: courseScope(value.courseScope),
     logoStorageKey: assetKey(value.logoStorageKey, tenantId),
     avatarStorageKey: assetKey(value.avatarStorageKey, tenantId),
+    // Generation. Defaults are chosen so a creator never has to touch these.
+    model,
+    temperature: boundedNumber(value.temperature ?? 0.4, 0, 2),
+    topP: boundedNumber(value.topP ?? 1, 0.01, 1),
+    maxOutputTokens: boundedInteger(value.maxOutputTokens ?? 800, 64, 4000),
+    extendedInstructions: optionalText(value.extendedInstructions, 8000),
+    // Voice.
+    voiceEnabled: requiredBoolean(value.voiceEnabled, true),
+    voiceSpeakingRate: boundedNumber(value.voiceSpeakingRate ?? 1, 0.5, 2),
+    voiceBargeInEnabled: requiredBoolean(value.voiceBargeInEnabled, true),
+    // Grounding behaviour. The count and floor are configurable; the decision
+    // to refuse on empty retrieval is not — there is no field for it here.
+    retrievalCount: boundedInteger(value.retrievalCount ?? 6, 1, 20),
+    retrievalSimilarityFloor: boundedNumber(
+      value.retrievalSimilarityFloor ?? 0.2,
+      0,
+      1,
+    ),
+    noResultsMessage: requiredText(value.noResultsMessage, 1, 500),
+    // Escalation.
+    escalationEnabled,
+    escalationTrigger,
+    escalationMessage,
     publish: value.publish === true,
     expectedVersion,
   };

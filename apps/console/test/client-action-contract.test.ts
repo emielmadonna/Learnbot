@@ -12,7 +12,9 @@ import {
   agentEditableVersion,
   agentOperationFields,
   getAgentConfiguration,
+  listAgentConfigurationRevisions,
   parseAgentConfigurationWrite,
+  rollbackAgentConfiguration,
   updateAgentConfiguration,
   type AgentConfiguration,
 } from "../src/lib/supabase/agent-rpc";
@@ -58,21 +60,40 @@ function migration(name: string) {
 }
 
 const agentSql = migration("20260725120000_agent_configuration.sql");
+const agentControlSurfaceSql = migration(
+  "20260726097000_agent_control_surface.sql",
+);
 const analyticsSql = migration("20260725121000_learning_analytics.sql");
 const authoringSql = migration("20260725122000_course_editing.sql");
 const sectionsSql = migration("20260725123000_tenant_section_control.sql");
-const allSql = [agentSql, analyticsSql, authoringSql, sectionsSql].join("\n");
+const allSql = [
+  agentSql,
+  agentControlSurfaceSql,
+  analyticsSql,
+  authoringSql,
+  sectionsSql,
+].join("\n");
+// tenant_update_agent_configuration is redefined (dropped and recreated) by
+// 20260726097000_agent_control_surface.sql, so the parameter list a live
+// database actually exposes is whichever `create or replace` came LAST across
+// the concatenated migrations — never the first.
+const agentSqlWithControlSurface = [agentSql, agentControlSurfaceSql].join(
+  "\n",
+);
 
 /**
  * Parameter names declared by a `public.<name>(...)` RPC in the applied
  * migration SQL. The migrations on disk are the source of truth for what the
  * live database exposes, so comparing against them catches a wrapper that
  * sends a parameter PostgREST cannot bind — a failure that otherwise only
- * appears as an opaque runtime error against the real project.
+ * appears as an opaque runtime error against the real project. Postgres
+ * applies migrations in order and `create or replace function` supersedes an
+ * earlier definition, so the LAST occurrence of the marker is the one that is
+ * actually live, not the first.
  */
 function sqlParameterNames(sql: string, functionName: string): string[] {
   const marker = `create or replace function public.${functionName}(`;
-  const start = sql.indexOf(marker);
+  const start = sql.lastIndexOf(marker);
   assert.ok(start >= 0, `migration does not define public.${functionName}`);
   const open = start + marker.length;
   let depth = 1;
@@ -156,6 +177,20 @@ function agentVersion(version: number, status: "draft" | "published") {
     logoStorageKey: `t/branding/u/a${version}/logo.png`,
     avatarStorageKey: null,
     privacyCopy: null,
+    model: "gpt-5.6-luna",
+    temperature: 0.4,
+    topP: 1,
+    maxOutputTokens: 800,
+    extendedInstructions: null,
+    voiceEnabled: true,
+    voiceSpeakingRate: 1,
+    voiceBargeInEnabled: true,
+    retrievalCount: 6,
+    retrievalSimilarityFloor: 0.2,
+    noResultsMessage: "I couldn't find this in the published learning yet.",
+    escalationEnabled: false,
+    escalationTrigger: "manual",
+    escalationMessage: null,
     publishedAt: null,
     updatedAt: "2026-07-25T00:00:00Z",
   };
@@ -175,6 +210,20 @@ const agentInput = {
   courseScope: "all" as const,
   logoStorageKey: null,
   avatarStorageKey: null,
+  model: "gpt-5.6-luna",
+  temperature: 0.4,
+  topP: 1,
+  maxOutputTokens: 800,
+  extendedInstructions: null,
+  voiceEnabled: true,
+  voiceSpeakingRate: 1,
+  voiceBargeInEnabled: true,
+  retrievalCount: 6,
+  retrievalSimilarityFloor: 0.2,
+  noResultsMessage: "I couldn't find this in the published learning yet.",
+  escalationEnabled: false,
+  escalationTrigger: "manual",
+  escalationMessage: null,
   publish: false,
   expectedVersion: 3,
 };
@@ -208,7 +257,10 @@ test("agent configuration write binds exactly the RPC's declared parameters", as
   assert.equal(calls[0]?.name, "tenant_update_agent_configuration");
   assert.deepEqual(
     Object.keys(calls[0]?.params ?? {}).sort(),
-    sqlParameterNames(agentSql, "tenant_update_agent_configuration").sort(),
+    sqlParameterNames(
+      agentSqlWithControlSurface,
+      "tenant_update_agent_configuration",
+    ).sort(),
   );
 });
 
@@ -225,6 +277,8 @@ test("agent configuration read takes no parameters, matching the RPC", async () 
         draft: null,
         defaults: {},
         toneOptions: ["neutral"],
+        modelOptions: ["gpt-5.6-luna"],
+        escalationTriggerOptions: ["manual"],
         assetPrefix: `${tenantId}/branding/`,
       },
       calls,
@@ -233,9 +287,98 @@ test("agent configuration read takes no parameters, matching the RPC", async () 
   assert.equal(calls[0]?.name, "tenant_get_agent_configuration");
   assert.deepEqual(Object.keys(calls[0]?.params ?? {}), []);
   assert.deepEqual(
-    sqlParameterNames(agentSql, "tenant_get_agent_configuration"),
+    sqlParameterNames(
+      agentSqlWithControlSurface,
+      "tenant_get_agent_configuration",
+    ),
     [],
   );
+});
+
+test("agent configuration revision list takes no parameters, matching the RPC", async () => {
+  const calls: Call[] = [];
+  await listAgentConfigurationRevisions(
+    recordingClient(
+      {
+        ok: true,
+        dataMode: "durable",
+        tenantId,
+        revisions: [],
+      },
+      calls,
+    ),
+  );
+  assert.equal(calls[0]?.name, "tenant_list_agent_configuration_revisions");
+  assert.deepEqual(Object.keys(calls[0]?.params ?? {}), []);
+  assert.deepEqual(
+    sqlParameterNames(
+      agentControlSurfaceSql,
+      "tenant_list_agent_configuration_revisions",
+    ),
+    [],
+  );
+});
+
+test("agent configuration rollback binds exactly the RPC's declared parameters", async () => {
+  const calls: Call[] = [];
+  await rollbackAgentConfiguration(
+    recordingClient(
+      {
+        ok: true,
+        dataMode: "durable",
+        tenantId,
+        expectedVersion: 6,
+        configuration: agentVersion(6, "draft"),
+      },
+      calls,
+    ),
+    { targetVersion: 3, publish: false, expectedVersion: 5 },
+    agentOperationFields("agent-configuration-rollback"),
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.name, "tenant_rollback_agent_configuration");
+  assert.deepEqual(
+    Object.keys(calls[0]?.params ?? {}).sort(),
+    sqlParameterNames(
+      agentControlSurfaceSql,
+      "tenant_rollback_agent_configuration",
+    ).sort(),
+  );
+});
+
+// The base platform instruction must never be a column or RPC parameter a
+// creator can write. This is the regression test for PLAN.md Section 6.2:
+// grep the migration text itself, not just the TypeScript wrapper, since the
+// wrapper can only ever send what the RPC accepts.
+test("the agent control surface migration exposes no base-prompt or system-prompt field", () => {
+  const forbidden = [
+    /\bsystem_prompt\b/iu,
+    /\bbase_instruction/iu,
+    /\bbase_prompt\b/iu,
+    /\bplatform_prompt\b/iu,
+    /\brequested_system\b/iu,
+    /\boverride_grounding\b/iu,
+  ];
+  for (const pattern of forbidden) {
+    assert.ok(
+      !pattern.test(agentControlSurfaceSql),
+      `agent control surface migration must not define ${pattern}`,
+    );
+  }
+  // Every creator-editable instruction field must stay a separate, named key
+  // rather than being folded into one opaque prompt string at rest.
+  for (const field of [
+    "'personaInstructions'",
+    "'extendedInstructions'",
+    "'noResultsMessage'",
+    "'escalationMessage'",
+  ]) {
+    assert.ok(
+      agentControlSurfaceSql.includes(field),
+      `agent_configuration_json is missing ${field}`,
+    );
+  }
 });
 
 test("a missing or refused agent RPC is not reported as an authentication failure", async () => {
