@@ -48,16 +48,6 @@ async function sha256Hex(bytes: Uint8Array) {
 
 export async function POST(request: Request) {
   try {
-    const operationToken = process.env[SCAN_OPERATION_TOKEN_ENV]?.trim() ?? "";
-    // An unconfigured gate is a closed gate, not an open one.
-    if (operationToken.length < 32) {
-      throw new LearningRpcError("scanner_not_configured");
-    }
-    const provider = resolveScanProvider();
-    if (!provider) {
-      throw new LearningRpcError("scanner_not_configured");
-    }
-
     const supabase = await authenticatedLearningClient(request, { mutation: true });
     const input = (await request.json()) as unknown;
     if (!isRecord(input)) throw new LearningRpcError("invalid_request");
@@ -79,6 +69,45 @@ export async function POST(request: Request) {
         { ok: true, verdict: "clean", checkpointStatus: "succeeded", cached: true },
         { headers: { "Cache-Control": "no-store" } },
       );
+    }
+
+    // Inert text clears itself. `security_clear_inert_source` re-reads the
+    // media type from the upload record and refuses anything not on its own
+    // allowlist, so this is a proportionate gate rather than a bypass: the
+    // caller cannot talk its way past it, and the clearance is recorded as
+    // `scanner: 'none', reason: 'inert_text'` for anyone auditing later.
+    //
+    // Trying this first is what keeps a plain .txt upload from requiring an
+    // operator to run a virus scanner. Anything the database declines here
+    // falls through to the real scanner below.
+    const inert = await supabase.rpc("security_clear_inert_source", {
+      target_job_id: jobId,
+    });
+    if (!inert.error && isRecord(inert.data) && inert.data.ok === true) {
+      return NextResponse.json(
+        {
+          ok: true,
+          verdict: "clean",
+          checkpointStatus: "succeeded",
+          scanner: "none",
+          reason: "inert_text",
+        },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    if (isRecord(inert.data) && inert.data.code === "upload_blocked") {
+      throw new LearningRpcError("access_denied");
+    }
+
+    // Not inert: a real scanner is required, and an unconfigured one is a
+    // closed gate rather than an open one.
+    const operationToken = process.env[SCAN_OPERATION_TOKEN_ENV]?.trim() ?? "";
+    if (operationToken.length < 32) {
+      throw new LearningRpcError("scanner_not_configured");
+    }
+    const provider = resolveScanProvider();
+    if (!provider) {
+      throw new LearningRpcError("scanner_not_configured");
     }
 
     const download = await supabase.storage.from("tenant-private").download(objectKey);

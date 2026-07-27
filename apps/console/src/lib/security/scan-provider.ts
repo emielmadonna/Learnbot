@@ -124,7 +124,7 @@ function clamavHttpProvider(endpoint: string): ScanProvider {
  * "refuse", never as "allow".
  */
 export function resolveScanProvider(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Readonly<Record<string, string | undefined>> = process.env,
 ): ScanProvider | null {
   const endpoint = env.LEARNINGBOT_MALWARE_SCANNER_URL?.trim();
   if (endpoint && /^https?:\/\//i.test(endpoint)) {
