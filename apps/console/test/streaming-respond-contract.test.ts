@@ -13,17 +13,36 @@ const route = readFileSync(
 function functionBody(name: string): string {
   const start = route.indexOf(`function ${name}(`);
   assert.notEqual(start, -1, `expected to find function ${name}`);
-  let depth = 0;
-  let index = route.indexOf("{", start);
-  const bodyStart = index;
+
+  // Walk the parameter list to its matching ')' before looking for the body.
+  // Taking the first '{' after the name is wrong the moment a parameter is
+  // itself an object type -- `function buildStreamingResponse(params: { ... })`
+  // -- because that brace opens the *type literal*, so the "body" came back as
+  // the parameter type and every assertion below silently searched the wrong
+  // text. That is exactly what happened here, and the tests failed with an
+  // unhelpful "expected -1 to be unequal to -1" rather than naming the cause.
+  let index = route.indexOf("(", start);
+  let parenDepth = 0;
   for (; index < route.length; index += 1) {
-    if (route[index] === "{") depth += 1;
-    else if (route[index] === "}") {
+    if (route[index] === "(") parenDepth += 1;
+    else if (route[index] === ")") {
+      parenDepth -= 1;
+      if (parenDepth === 0) break;
+    }
+  }
+
+  const bodyStart = route.indexOf("{", index);
+  assert.notEqual(bodyStart, -1, `expected a body for ${name}`);
+  let depth = 0;
+  let cursor = bodyStart;
+  for (; cursor < route.length; cursor += 1) {
+    if (route[cursor] === "{") depth += 1;
+    else if (route[cursor] === "}") {
       depth -= 1;
       if (depth === 0) break;
     }
   }
-  return route.slice(bodyStart, index + 1);
+  return route.slice(bodyStart, cursor + 1);
 }
 
 test("streaming is opt-in via Accept: text/event-stream and voice is force-excluded", () => {
