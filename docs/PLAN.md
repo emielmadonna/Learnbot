@@ -43,41 +43,75 @@ switched off, and the platform admin still sees their data.
 - **Signal capture.** Every turn writes `question_labels` and `question_signals`.
 - **Per-tenant flags.** `platform_admin_*` over `public.tenant_sections`.
 - **Brand contrast math.** `components/app-shell/brand.ts` — `relativeLuminance`,
-  `contrastRatio`, `readableOn`. Correct, tested, and only imported by `agent-panel.tsx`.
+  `contrastRatio`, `readableOn`. Correct and tested. Now consumed by
+  `conversation-client.tsx`, `avatar-character.tsx`, `color-field.tsx` and
+  `ui/contrast.ts`, not just the settings preview.
+- **Agent controls with versioning.** Generation settings, voice, layered instructions,
+  and draft → preview → publish → rollback over an append-only `tenant_branding` chain
+  (`tenant_list_agent_configuration_revisions`, `tenant_rollback_agent_configuration`).
+- **Per-learner signals readout.** `analytics_learner_signals` — who is escalating, who
+  is stuck, who is ready. The cohort view it sits beside was already real.
+- **Per-client chat branding.** The contrast math above reaches a student's screen.
+- **Character avatars.** `agent_avatar_sets` plus the generation path in
+  `api/agent/avatar/`.
+- **The embeddable widget.** `packages/widget-runtime`, container-queried per §3.4.
+- **Billing, margins, Stripe entitlement.** `tenant_subscriptions`,
+  `tenant_margin_policies`, `billing_apply_plan_entitlements`, metered usage reporting.
+- **Durable voice rate limiting.** Authoritative quota in SQL via
+  `learning_reserve_provider_call` / `provider_rate_counters`. The in-process `Map` that
+  remains in `voice/rate-limit.ts` is now only a same-instance burst guard and is
+  documented as such.
+- **`telemetry_outbox` drain.** `api/ops/telemetry-outbox/drain/` with a retention policy,
+  so the table is bounded.
 
 ### Hollow — the slot exists, nothing fills it
 
 - **Figures and attachments in chat.** `conversation-client.tsx:1966` renders a `diagram`
   part as a `◇` character and a caption; attachments as `↥` and a label. No image, no
   chart, no SVG. `public.attachments` has zero writers and nothing produces a diagram.
-- **Per-client chat branding.** The contrast math above is never called by the chat.
-  The conversation surface ignores `tenant_branding` entirely.
-- **Signals readout — per learner.** *(Corrected 2026-07-26: an earlier revision of this
-  document claimed signals were "read by nothing." That was wrong.
-  `api/analytics/question-intelligence/route.ts` and `insights-panel.tsx` already read
-  them at the **cohort** level — topics, intents, important questions, and threshold
-  signals like `topic_spike` / `post_lesson_stall` / `repeated_question_cluster`.)* What
-  was missing is the **per-learner** view the product actually sells: who is escalating,
-  who is stuck, who is ready for the next offer.
-- **Voice rate limiting.** An in-process `Map` — meaningless on serverless.
 - **Audit ledger.** Written by some paths, not by conversations, voice, uploads,
-  onboarding, or provisioning. No reader UI.
+  onboarding, or provisioning. No reader UI. *This is the unfinished half of Phase 12.*
+
+*(Per-client chat branding, the per-learner signals readout and durable voice rate
+limiting were listed here until 2026-07-27. All three have shipped and moved up to
+**Real**.)*
+
+### Built but not reachable
+
+- **Upload processing and knowledge cleaning.** Section 4 shipped in Phase 10:
+  `api/ingestion/extract`, `clean`, `review`, `publish`, plus `lib/ingestion/`, the
+  quarantine tables and `ingestion_cleaning_revisions`. **The gate is closed.** Files
+  still stop at `tenant-private/{tenant}/quarantine/` because nothing yet clears them for
+  processing — that clearance is Phase 17, the malware scan checkpoint, which is not
+  started. *Everything visual in chat remains downstream of this, so Phase 17 is the
+  keystone: one M phase standing in front of a finished XL one.*
 
 ### Absent — no code path at all
 
-- **Upload processing.** Files land in `tenant-private/{tenant}/quarantine/` and stop
-  there permanently. `upload_intents.status` never leaves `'quarantined'`.
-  **Everything visual in chat is downstream of this.**
-- **Knowledge cleaning.** Section 4. Does not exist in any form.
-- **Privacy, export, deletion, retention.** Zero tables, zero routes. An operator runs
-  SQL by hand.
-- **Invitation delivery.** No mailer. A human copies the code out of the UI.
-- **`telemetry_outbox` drain.** Writers, no readers, unbounded growth.
+- **Privacy, export, deletion, retention.** Zero tables, zero routes, despite
+  `docs/PRIVACY-DATA-LIFECYCLE-SPEC.md`. An operator runs SQL by hand. *(Verified again
+  2026-07-27: the only `retention_*` columns in the schema belong to the telemetry outbox,
+  not to data-subject rights.)* **This blocks onboarding a customer with real learner
+  data, not just polish.**
+- **Invitation delivery.** No mailer of any kind in the dependency tree. A human copies
+  the code out of the UI.
+- **Error tracking, monitoring, alerting.** No Sentry, no OpenTelemetry, nothing.
+  Production failures surface only when a person notices — which is exactly how the
+  2026-07-27 outage of the agent, insights and billing panels was found.
 
-### The one thing that can destroy a live tenant
+### The two things that can destroy a live tenant
 
-`infra/supabase/SCHEMA-DRIFT.md` — re-running committed migrations against the live
-project *downgrades* `admin_provision_auth_user`. Read it before touching migrations.
+1. **`supabase db push` against this project.** As of 2026-07-27 the migration ledger and
+   `infra/supabase/migrations/` share **zero** versions, so a push replays all 56
+   migrations from `0001` over live data. `infra/supabase/release/LEDGER_RECONCILE.sql`
+   fixes this and has **not been run**. Read `infra/supabase/SCHEMA-DRIFT.md` first.
+2. **No backups.** The project is on the Supabase Free plan: no scheduled backups, no
+   PITR. Nothing above is recoverable.
+
+*(Until 2026-07-27 this section named the `admin_provision_auth_user` downgrade. That
+specific hazard is resolved — the nine hand-applied migrations were recovered into
+`infra/supabase/migrations/`, so the repository now holds the current live definitions
+and a rebuild no longer reverts them.)*
 
 ---
 

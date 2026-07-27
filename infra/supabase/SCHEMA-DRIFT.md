@@ -275,6 +275,14 @@ ledger, which is a separate and worse problem — see above.
   insert). Until then `supabase db push` is unsafe against this project.
 - Backups remain disabled (Free plan). The next hand-apply will again have no
   rollback.
-- `platform_admin_client_detail` (recovered here) and
-  `platform_admin_tenant_detail` (`20260725123000`) still overlap in purpose and
-  should be reconciled rather than left to drift further apart.
+- ~~`platform_admin_client_detail` / `platform_admin_tenant_detail` overlap.~~
+  **Resolved in source 2026-07-27.** `platform_admin_tenant_detail` wins: it is the
+  only one called from application code, the only one under test, and the one
+  `verify-structure.mjs` asserts. `platform_admin_client_detail` has zero callers.
+  `20260727100000_retire_platform_admin_client_detail.sql` drops it.
+
+  That migration is **not yet applied** — deliberately. It is not urgent (the
+  function authorises itself via `platform_admin_is_authorized()` and returns
+  `access_denied` to everyone else, so it is dead code rather than exposure), and
+  applying it by hand would add yet another unrecorded change. It should go out with
+  the first run of the real release path.
