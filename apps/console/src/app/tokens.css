@@ -1,0 +1,138 @@
+/*
+ * Graphite design tokens.
+ *
+ * Single source of truth for color, radius, motion and type-family across
+ * the console. Values come from docs/PLAN.md Section 3 ("Design system —
+ * Graphite") verbatim. If you need a new color, add it here with a
+ * measured contrast ratio in a comment — never hardcode a hex value in a
+ * component or another stylesheet.
+ *
+ * THE TWO-GRAY RULE (docs/PLAN.md Section 3.2) — READ BEFORE EDITING
+ * --------------------------------------------------------------------
+ * If a user has to read it, it is `--ink` or `--muted`. There is no third
+ * text gray. `--hairline` is a NON-TEXT token: separators, disabled icon
+ * strokes, decorative dividers only. Do NOT use `--hairline` for body
+ * copy, captions, chart labels, or input placeholders — on light ground
+ * it measures 2.01:1, which fails WCAG AA for text by a wide margin. A
+ * prior version of this design used `--hairline` for exactly that, which
+ * is the mistake this rule exists to prevent. `scripts/check-contrast.mjs`
+ * enforces --ink and --muted at >=4.5:1 against every ground; it
+ * deliberately does not (and should not) validate --hairline as text,
+ * because --hairline must never be used as text in the first place.
+ *
+ * GROUNDS
+ * -------
+ * Dark is the default ground: the values in the base `:root` block below
+ * apply unconditionally. Light is the SAME token names with different
+ * values, layered on in two ways so it can be driven by either the OS or
+ * a per-tenant override:
+ *   1. `@media (prefers-color-scheme: light)` — respects the visitor's OS
+ *      preference.
+ *   2. `[data-ground="light"]` — lets a tenant/page force light ground
+ *      regardless of OS preference (e.g. a creator whose brand only reads
+ *      well on light). Set this attribute on a container element.
+ * There is never a separate stylesheet or a third set of token names for
+ * light ground — only a redefinition of the same custom properties.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---------------------------------------------------------- ground (dark) */
+  --bg: #1c1c1e;
+  --surface: #2c2c2e;
+  --elev: #3a3a3c;
+
+  /* ------------------------------------------- text (dark) — the two grays */
+  --ink: #ffffff; /* 11.35:1 worst case, vs --elev */
+  --muted: #aeaeb2; /*  5.13:1 worst case, vs --elev */
+
+  /* --------------------------------- decoration ONLY (dark) — NOT text, see
+     the two-gray rule above. */
+  --hairline: #6c6c70;
+
+  /* -------------------------------------------------------- status (dark) */
+  --good: #30d158; /* 5.61:1 worst case, vs --elev */
+  --warn: #ff8a80; /* 4.97:1 worst case, vs --elev */
+
+  /* --------------------------------------------------------- accent (dark)
+     Per-tenant override target — see docs/PLAN.md Section 3.3. Default is
+     Estie Starr's amber. A creator's own color is corrected for contrast
+     by `readableOn()` in `components/app-shell/brand.ts`, never rejected. */
+  --accent: #ff9f0a; /* 5.52:1 worst case, vs --elev */
+  --accent-wash: rgb(255 159 10 / 16%);
+  --accent-ink: var(--bg); /* ink placed ON --accent fill; 8.28:1 */
+
+  /* ------------------------------------------------------------------ radii */
+  --r-lg: 22px;
+  --r-md: 14px;
+  --r-sm: 9px;
+
+  /* --------------------------------------------------------------- motion
+     One curve, one motion sequence. See docs/PLAN.md Section 3.5. Respect
+     `prefers-reduced-motion` at the component level — reduced motion means
+     final state immediately, never a missing element. */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* -------------------------------------------------------------------- type
+     Apple system stack first: the assistant is embedded in a Circle course
+     page and should read as native on macOS/iOS, falling back gracefully
+     elsewhere. */
+  --font-ui:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Helvetica Neue", system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Mono", "Roboto Mono",
+    monospace;
+}
+
+/* ------------------------------------------------- light ground (OS-driven)
+   Same token names as :root above, different values. Never edit this
+   block without editing [data-ground="light"] below to match — this file
+   is the only source of light-ground values, kept in two places on
+   purpose so both an OS preference and a forced attribute can reach it. */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --bg: #f2f2f7;
+    --surface: #ffffff;
+    --elev: #f2f2f7;
+
+    --ink: #000000; /* 18.82:1 worst case, vs --bg */
+    --muted: #4a4a4f; /*  7.90:1 worst case, vs --bg */
+
+    --hairline: rgb(60 60 67 / 38%);
+
+    --good: #1d7a33;
+    --warn: #c02617;
+
+    --accent: #a85400; /* 4.78:1 worst case, vs --bg */
+    --accent-wash: rgb(168 84 0 / 12%);
+    --accent-ink: var(--surface); /* ink placed ON --accent fill; 5.34:1 */
+  }
+}
+
+/* --------------------------------------- light ground (forced, per-tenant)
+   Identical values to the media query above. Apply `data-ground="light"`
+   to a container to force light ground independent of the visitor's OS
+   preference — see docs/PLAN.md Section 3.1. */
+[data-ground="light"] {
+  color-scheme: light;
+
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --elev: #f2f2f7;
+
+  --ink: #000000;
+  --muted: #4a4a4f;
+
+  --hairline: rgb(60 60 67 / 38%);
+
+  --good: #1d7a33;
+  --warn: #c02617;
+
+  --accent: #a85400;
+  --accent-wash: rgb(168 84 0 / 12%);
+  --accent-ink: var(--surface);
+}
