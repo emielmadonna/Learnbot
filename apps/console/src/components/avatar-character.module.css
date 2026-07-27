@@ -1,0 +1,127 @@
+/*
+ * The generated character avatar (docs/PLAN.md Section 7.1).
+ *
+ * Transform and opacity only, per PLAN.md Section 7.1 — this runs inside
+ * someone else's page and must stay cheap. Colours come only from the
+ * Graphite tokens in app/tokens.css (--ink, --surface) — never a hardcoded
+ * hex, and text (the monogram fallback) is --ink only, per the two-gray rule
+ * (PLAN.md Section 3.2).
+ */
+
+.root {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  height: 100%;
+  line-height: 0;
+}
+
+.stage {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--r-lg, 22px);
+  background: var(--surface);
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: translateY(0) rotate(0deg) scale(1, 1);
+  transition:
+    opacity 280ms var(--ease, ease),
+    transform 280ms var(--ease, ease);
+}
+
+.layerActive {
+  opacity: 1;
+  z-index: 1;
+}
+
+.layerHidden {
+  opacity: 0;
+  z-index: 0;
+}
+
+.monogram,
+.monogramOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: var(--weight-strong, 600);
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+.monogramOverlay {
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* -------------------------------------------------------------- idle bob */
+@keyframes avatarIdleBob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-3%) rotate(-0.6deg);
+  }
+}
+
+.poseIdle .layerActive {
+  transform-origin: 50% 100%;
+  animation: avatarIdleBob 3.6s var(--ease, ease) infinite;
+}
+
+/* -------------------------------------------------------- listening tilt */
+.poseListening .layerActive {
+  transform-origin: 50% 100%;
+  transform: rotate(-6deg);
+}
+
+/* ---------------------------------------------- speaking squash-and-stretch */
+@keyframes avatarSpeakingBounce {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  30% {
+    transform: scale(0.97, 1.04);
+  }
+  60% {
+    transform: scale(1.03, 0.97);
+  }
+}
+
+.poseSpeaking .layerActive {
+  transform-origin: 50% 100%;
+  animation: avatarSpeakingBounce 900ms var(--ease, ease) infinite;
+}
+
+/* ---------------------------------------------------- reduced motion, always
+   wins. The character holds `idle` and does not move — still present, just
+   still — regardless of which `pose` class is on `.root` and regardless of
+   whether JavaScript has hydrated yet, because this targets the plain
+   `data-pose` attribute rendered on every layer at SSR time. */
+@media (prefers-reduced-motion: reduce) {
+  .layer {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+    opacity: 0 !important;
+  }
+  .layer[data-pose="idle"] {
+    opacity: 1 !important;
+  }
+}

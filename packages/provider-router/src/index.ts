@@ -10,3 +10,4 @@ export * from "./router.js";
 export * from "./fakes.js";
 export * from "./openai-responses.js";
 export * from "./openai-embeddings.js";
+export * from "./openai-image.js";

@@ -17,7 +17,10 @@ const allowedMediaTypes = new Map<string, string>([
   ["image/webp", "webp"],
 ]);
 const adminRoles = new Set(["tenant_owner", "tenant_admin"]);
-const assetKinds = new Set(["logo", "avatar"]);
+// "avatar-source" is the consent photo behind a generated character avatar
+// (PLAN.md Section 7.1) — distinct from "avatar", the plain static fallback
+// image (Section 7). Both upload through this one signed-URL path.
+const assetKinds = new Set(["logo", "avatar", "avatar-source"]);
 const maxAssetBytes = 2_097_152;
 const readTtlSeconds = 600;
 const safeCodes = new Set([

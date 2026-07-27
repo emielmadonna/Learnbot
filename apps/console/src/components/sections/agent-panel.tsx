@@ -10,6 +10,7 @@ import {
 } from "react";
 import ConversationClient from "../../app/app/conversation/conversation-client";
 import { UsageSignal } from "../../app/app/usage-signal";
+import { AvatarStudio } from "../avatar-studio";
 import { brandStyle } from "../app-shell/brand";
 import type { AgentConfig, PanelProps, ShellPayload } from "../app-shell/contract";
 import { asWorkspace, useDataVersion } from "../app-shell/shell-data";
@@ -1686,6 +1687,16 @@ function AgentConfigurator({
                 />
               </div>
             </section>
+
+            <AvatarStudio
+              assistantName={draft.assistantName}
+              disabled={busy}
+              monogram={
+                (draft.assistantName.trim().charAt(0) ||
+                  draft.iconGlyph.trim().charAt(0) ||
+                  "A").toUpperCase()
+              }
+            />
 
             <section className={styles.group} aria-labelledby={`${headingId}-colour`}>
               <h3 className={styles.groupTitle} id={`${headingId}-colour`}>
