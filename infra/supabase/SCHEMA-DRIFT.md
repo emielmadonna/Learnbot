@@ -385,6 +385,17 @@ reads the ledger.
   | `learning_create_upload_intent` | `2695588eec02cca629ea837ccd04851c` |
   | `learning_confirm_quarantine_upload` | `99ef8cbe971219ce7e232ca1b86a48b5` |
 
+- **Apply `20260727140000_error_events.sql`.** Written 2026-07-27, not yet
+  applied. Adds `public.error_groups`, `public.error_events`, the
+  operation-secret intake, the platform-admin readout and the digest claim.
+  Extends the operation capability list from 6 to **7** (`observability.error_intake`),
+  by the same `drop constraint if exists` / re-add as `20260727110000` — expect
+  the destructive-operations dialog again.
+
+  Independent of `20260727130000`: that one adds triggers and touches no
+  capability. Apply in version order by convention, but neither depends on the
+  other.
+
 - Backups remain disabled (Free plan). The next hand-apply will again have no
   rollback.
 - ~~`platform_admin_client_detail` / `platform_admin_tenant_detail` overlap.~~
