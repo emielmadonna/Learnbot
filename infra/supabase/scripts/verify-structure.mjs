@@ -7,6 +7,39 @@ const migrationNames = (await readdir(migrationsDirectory))
   .filter((name) => name.endsWith(".sql"))
   .sort();
 
+/*
+ * Two migrations may never share a version.
+ *
+ * `supabase_migrations.schema_migrations` is keyed on the version alone, so a
+ * duplicate does not collide loudly — one of the two is recorded and the other
+ * is silently treated as already applied. The repository then looks complete
+ * while production is missing a migration, which is precisely the divergence
+ * SCHEMA-DRIFT.md exists to document and prevent.
+ *
+ * This check was added after two concurrent authors independently stamped
+ * `20260731080000`. Nothing caught it: this script counted "117 ordered
+ * migrations" and passed, because it only ever validated names individually
+ * and never compared their versions to each other.
+ */
+const versionOwners = new Map();
+const duplicateVersions = [];
+for (const name of migrationNames) {
+  const version = name.split("_")[0];
+  const existing = versionOwners.get(version);
+  if (existing === undefined) {
+    versionOwners.set(version, name);
+    continue;
+  }
+  duplicateVersions.push(`${version}: ${existing} and ${name}`);
+}
+if (duplicateVersions.length > 0) {
+  console.error(
+    `Duplicate migration versions found. The ledger is keyed on version, so ` +
+      `only one of each pair would ever be recorded:\n  ${duplicateVersions.join("\n  ")}`,
+  );
+  process.exit(1);
+}
+
 const migrationTexts = await Promise.all(
   migrationNames.map((name) =>
     readFile(resolve(migrationsDirectory, name), "utf8"),
@@ -217,7 +250,12 @@ const onboardingTables = [
 ];
 const durableLearningTables = ["lesson_progress"];
 const usageTables = ["learning_usage_events"];
-const tenantControlTables = ["tenant_sections"];
+const tenantControlTables = [
+  "tenant_sections",
+  // Capability-level control (20260731081000): what a client may change for
+  // itself, as opposed to which sections exist at all.
+  "tenant_capability_grants",
+];
 const questionIntelligenceTables = ["question_labels", "question_signals"];
 const widgetTables = ["tenant_widget_keys", "conversation_surfaces"];
 const expectedTables = [
@@ -618,6 +656,12 @@ for (const required of [
   "app_private.platform_admin_tenant_sessions",
   "app_private.platform_admin_write_audit",
   "tenant_sections_deny_anon",
+  // Capability control (20260731081000). `widget` in the section catalogue is
+  // asserted too: without it the console's own PanelKey has no durable row,
+  // which is the gap that migration closes.
+  "app_private.tenant_capability_definitions",
+  "tenant_capability_grants_deny_anon",
+  "('widget'::text, true, 6)",
 ]) {
   if (!sql.includes(required)) {
     fail(`missing 2026-07-25 platform control: ${required}`);
@@ -796,6 +840,10 @@ const learningRpcFunctions = [
   "platform_admin_enter_tenant",
   "platform_admin_exit_tenant",
   "platform_admin_tenant_detail",
+  // Tenant capability control (20260731081000).
+  "tenant_get_capabilities",
+  "platform_admin_tenant_capabilities",
+  "platform_admin_set_tenant_capability",
   // Client provisioning (20260726090000).
   "platform_admin_create_tenant",
   "platform_admin_list_client_claims",

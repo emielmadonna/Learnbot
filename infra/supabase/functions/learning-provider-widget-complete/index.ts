@@ -25,6 +25,74 @@ function json(body: unknown, status = 200) {
   });
 }
 
+
+/*
+ * Metering for the anonymous widget surface.
+ *
+ * Widget provider calls have never reached `public.cost_ledger`. The reason was
+ * structural rather than deliberate: `/api/widget/ask` never learns the tenant
+ * id — that is an intentional boundary, so the anonymous route does not become
+ * the one place it leaks — and `learning_reserve_provider_call` needs a tenant.
+ *
+ * This function is where that stops being a problem. It resolves `tenantId`
+ * from the widget key itself (via `learning_widget_provider_runtime_credential`
+ * below), holds the operation token, and is the single seam BOTH widget
+ * provider calls pass through — the answer and the question classifier. So
+ * metering here covers both, adds no provider calls, and never moves the
+ * tenant id outward.
+ *
+ * Both RPCs already accept `target_tenant_id` + `operation_token` for exactly
+ * this path; they are granted to `anon` and this function calls them with the
+ * service role.
+ */
+type PriceBook = Record<
+  string,
+  { inputPerMillionTokens: number; outputPerMillionTokens: number }
+>;
+
+function priceBook(): PriceBook {
+  const raw = Deno.env.get("LEARNINGBOT_MODEL_PRICES")?.trim();
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as PriceBook)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function tokenCounts(usage: unknown) {
+  const record = usage && typeof usage === "object" && !Array.isArray(usage)
+    ? (usage as Record<string, unknown>)
+    : {};
+  const input = Number(record.input_tokens ?? record.prompt_tokens ?? 0);
+  const output = Number(record.output_tokens ?? record.completion_tokens ?? 0);
+  return {
+    input: Number.isFinite(input) && input > 0 ? Math.trunc(input) : 0,
+    output: Number.isFinite(output) && output > 0 ? Math.trunc(output) : 0,
+  };
+}
+
+/*
+ * Returns null when the model has no price. A ledger row is still written with
+ * the real token counts and `priced: false` — recording usage we cannot price
+ * is honest; inventing a number to make the row look complete is not, and this
+ * is a cost-plus product where a wrong figure is worse than an absent one.
+ */
+function estimateCostMicro(
+  model: string,
+  input: number,
+  output: number,
+): number | null {
+  const price = priceBook()[model];
+  if (!price) return null;
+  const micro = (input / 1_000_000) * price.inputPerMillionTokens +
+    (output / 1_000_000) * price.outputPerMillionTokens;
+  return Math.max(0, Math.round(micro));
+}
+
 function serviceClient() {
   const url = Deno.env.get("SUPABASE_URL") ?? "";
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
@@ -174,6 +242,37 @@ Deno.serve(async (request: Request) => {
     return json({ ok: false, code: "provider_unavailable" });
   }
 
+  /*
+   * Reserve before spending. A tenant over budget must stop costing money on
+   * the surface strangers can reach, which is the whole point of enforcement.
+   *
+   * `metering_unavailable` is treated as allow-and-continue, matching
+   * `reserveProviderCall` in the console: an outage in the meter must not take
+   * the assistant down. A structural refusal (`ok:false`) is a real decision
+   * and is honoured.
+   */
+  const capability = model === "gpt-5.6-luna"
+    ? "question.classification"
+    : "conversation.answer";
+  const reservation = await service.rpc("learning_reserve_provider_call", {
+    requested_capability: capability,
+    subject_key: actorRef,
+    target_tenant_id: context.tenantId,
+    operation_token: operationToken,
+  });
+  const decision =
+    reservation.data && typeof reservation.data === "object" &&
+      !Array.isArray(reservation.data)
+      ? (reservation.data as Record<string, unknown>)
+      : null;
+  if (!reservation.error && decision?.ok === true && decision.allowed !== true) {
+    return json({
+      ok: false,
+      code: "provider_budget_exhausted",
+      retryable: true,
+    });
+  }
+
   let credential =
     typeof context.credential === "string" ? context.credential.trim() : "";
   let credentialSource = "tenant_vault";
@@ -227,6 +326,45 @@ Deno.serve(async (request: Request) => {
         !Array.isArray(payload)
       ? (payload as Record<string, unknown>).usage
       : null;
+
+    // Never throws: the visitor already has an answer, and a metering failure
+    // must not take it away. Mirrors `recordProviderCost` in the console.
+    try {
+      const counts = tokenCounts(usage);
+      const costMicro = estimateCostMicro(model, counts.input, counts.output);
+      await service.rpc("learning_record_provider_cost", {
+        requested_capability: capability,
+        provider_key: "openai:openai-managed-widget-responses-v1",
+        model_key: model,
+        quantity: counts.input + counts.output,
+        unit: "tokens",
+        estimated_cost_micro: costMicro ?? 0,
+        trace_id: requestId,
+        idempotency_key: `widget-cost:${requestId}`.slice(0, 200),
+        request_id: requestId,
+        target_conversation_id: null,
+        provider_metadata_safe: {
+          credentialSource,
+          inputTokens: counts.input,
+          outputTokens: counts.output,
+          // `false` means the model was not in LEARNINGBOT_MODEL_PRICES, so the
+          // row carries real usage with an unpriced cost of 0 rather than a
+          // guess. Bill from usage, not from this column, when it is false.
+          priced: costMicro !== null,
+        },
+        target_tenant_id: context.tenantId,
+        operation_token: operationToken,
+      });
+    } catch (error) {
+      console.warn(
+        "widget.cost.ledger_write_failed",
+        JSON.stringify({
+          capability,
+          reason: error instanceof Error ? error.name : "unknown",
+        }),
+      );
+    }
+
     return json({
       ok: true,
       provider: "openai",
