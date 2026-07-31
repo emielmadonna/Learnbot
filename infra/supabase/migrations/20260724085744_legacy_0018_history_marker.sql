@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0018_learning_rpc_service_role_boundary.
+-- The executable migration is maintained as 0018_learning_rpc_service_role_boundary.sql.

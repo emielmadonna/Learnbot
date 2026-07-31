@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0020_grounded_lexical_retrieval.
+-- The executable migration is maintained as 0020_grounded_lexical_retrieval.sql.

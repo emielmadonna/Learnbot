@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0023_hybrid_semantic_retrieval.
+-- The executable migration is maintained as 0023_hybrid_semantic_retrieval.sql.

@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0009_durable_upload_intents.
+-- The executable migration is maintained as 0009_durable_upload_intents.sql.

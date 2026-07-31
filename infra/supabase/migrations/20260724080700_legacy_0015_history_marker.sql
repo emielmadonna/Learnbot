@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0015_onboarding_invitation_name_resolution.
+-- The executable migration is maintained as 0015_onboarding_invitation_name_resolution.sql.

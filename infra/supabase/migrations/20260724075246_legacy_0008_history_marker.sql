@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0008_identity_and_provisioning.
+-- The executable migration is maintained as 0008_identity_and_provisioning.sql.
