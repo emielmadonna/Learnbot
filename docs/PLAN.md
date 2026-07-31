@@ -99,6 +99,14 @@ limiting were listed here until 2026-07-27. All three have shipped and moved up 
   `infra/supabase/SCHEMA-DRIFT.md` for the applied hashes and the before/after
   verification.
 
+- **Widget visual disclosure and answer feedback.** `20260731060000` and
+  `20260731061000` were applied to the live database by hand on 2026-07-31 and
+  recorded in the migration ledger in the same session. The widget-scoped visual
+  reader, signed-in and anonymous feedback writers, feedback summary, and lesson
+  reception readout are present. The final live ledger contains all 113 of 113
+  repository migration versions; exact applied hashes and verification are in
+  `infra/supabase/SCHEMA-DRIFT.md`.
+
 ### Absent — no code path at all
 
 - **Privacy, export, deletion, retention.** Zero tables, zero routes, despite

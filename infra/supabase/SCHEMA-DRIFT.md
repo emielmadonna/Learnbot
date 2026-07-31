@@ -415,6 +415,47 @@ immediately. `LEDGER_RECONCILE.sql` was extended with both versions and re-run
 The repository and the ledger have not diverged. That is the whole point of this
 document, and it is the first time it has been true at the end of an apply.
 
+## Applied by hand 2026-07-31: widget visual media and answer feedback
+
+The live ledger was exported from the dashboard before applying anything. It
+contained 111 rows; comparison against all 113 repository versions identified
+exactly two missing versions. Object checks confirmed that both migrations were
+genuinely pending rather than previously hand-applied without a ledger entry:
+both new tables and all seven new functions were absent.
+
+Each file was applied separately through the dashboard SQL editor rather than
+the release runner, then recorded in `supabase_migrations.schema_migrations` in
+the same browser session:
+
+| Version | Name | SHA-256 actually run |
+|---|---|---|
+| 20260731060000 | `widget_visual_media_disclosure` | `ca4839e67b9d528effc71e8830b61c7053bedc14b13f2870fa44dce40bd06722` |
+| 20260731061000 | `answer_feedback_and_lesson_reception` | `1ee08da8013c43ee03b073b9d4c08f13ced503e658b4e0295b78a7969e9b95ca` |
+
+Both files are pure ASCII. Their base64 transport was verified byte-for-byte,
+and the decoded editor content was copied back and SHA-256 checked immediately
+before each run. Both destructive-operation warnings were accounted for: each
+file contains one `drop policy if exists`, followed immediately by the
+replacement deny policy.
+
+### Verified after
+
+| Check | Result |
+|---|---|
+| new tables | **2 of 2 present** |
+| new functions | **7 of 7 present** |
+| explicit indexes | **6 of 6 present** |
+| deny-direct policies | **2 of 2 present** |
+| tables with enabled and forced RLS | **2 of 2** |
+| `learning_provider_credential_state` | **1 present** |
+| `widget_get_visual_asset_for_read` | **1 present** |
+| ledger rows | 111 → **113** |
+| repository versions present in ledger | 111 of 113 → **113 of 113** |
+| `admin_provision_auth_user` md5 | `d8160032e33feaaa61d1cccb29b05d5d` before and after |
+
+The final exported ledger and the repository version list compare equal in both
+directions. There are no migrations awaiting hand-apply.
+
 ## Outstanding
 
 - Backups remain disabled (Free plan). The next hand-apply will again have no
