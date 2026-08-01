@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { readSupabasePublicConfig } from "../../../../lib/supabase/config";
-import { readBillingConfig, reportUsageRecord } from "../../../../lib/billing/stripe";
+import { readBillingConfig, reportMeterEvent } from "../../../../lib/billing/stripe";
 
 /**
  * Usage -> margin -> Stripe, on a schedule.
@@ -42,6 +42,7 @@ type ClaimedItem = {
   readonly modelKey: string | null;
   readonly costMicro: number;
   readonly occurredAt: string;
+  readonly stripeCustomerId: string;
   readonly stripeSubscriptionItemId: string;
   readonly marginMultiplier: number;
   readonly fixedMarkupMicro: number;
@@ -92,7 +93,7 @@ function claimedItems(value: unknown): ClaimedItem[] {
     if (!isRecord(candidate)) return [];
     const {
       tenantId, costEntryId, capability, providerKey, occurredAt,
-      stripeSubscriptionItemId,
+      stripeCustomerId, stripeSubscriptionItemId,
     } = candidate;
     if (
       typeof tenantId !== "string" ||
@@ -100,6 +101,7 @@ function claimedItems(value: unknown): ClaimedItem[] {
       typeof capability !== "string" ||
       typeof providerKey !== "string" ||
       typeof occurredAt !== "string" ||
+      typeof stripeCustomerId !== "string" ||
       typeof stripeSubscriptionItemId !== "string"
     ) {
       return [];
@@ -112,6 +114,7 @@ function claimedItems(value: unknown): ClaimedItem[] {
       modelKey: typeof candidate.modelKey === "string" ? candidate.modelKey : null,
       costMicro: Number(candidate.costMicro ?? 0),
       occurredAt,
+      stripeCustomerId,
       stripeSubscriptionItemId,
       marginMultiplier: Number(candidate.marginMultiplier ?? 1),
       fixedMarkupMicro: Number(candidate.fixedMarkupMicro ?? 0),
@@ -192,9 +195,10 @@ export async function POST(request: Request) {
         const occurredAtSeconds = Math.floor(
           new Date(item.occurredAt).getTime() / 1000,
         );
-        const usageRecord = await reportUsageRecord({
-          stripeSubscriptionItemId: item.stripeSubscriptionItemId,
-          quantityMinorUnits: item.billedMinorUnits,
+        const meterEvent = await reportMeterEvent({
+          stripeCustomerId: item.stripeCustomerId,
+          billedMicro: item.billedMicro,
+          identifier: item.costEntryId,
           occurredAtEpochSeconds: Number.isFinite(occurredAtSeconds)
             ? occurredAtSeconds
             : Math.floor(Date.now() / 1000),
@@ -204,7 +208,7 @@ export async function POST(request: Request) {
           target_tenant_id: item.tenantId,
           cost_entry_id: item.costEntryId,
           stripe_subscription_item_id: item.stripeSubscriptionItemId,
-          stripe_usage_record_id: usageRecord.usageRecordId,
+          stripe_usage_record_id: meterEvent.meterEventIdentifier,
           cost_micro: item.costMicro,
           billed_micro: item.billedMicro,
           billed_minor_units: item.billedMinorUnits,

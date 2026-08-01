@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0024_openai_embedding_provider.
+-- The executable migration is maintained as 0024_openai_embedding_provider.sql.

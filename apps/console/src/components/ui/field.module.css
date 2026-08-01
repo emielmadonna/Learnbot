@@ -73,8 +73,9 @@
 
 .control:focus-visible {
   border-color: var(--brand-primary);
-  outline: 3px solid var(--ui-focus);
-  outline-offset: 1px;
+  box-shadow: var(--focus-ring);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 }
 
 .control:disabled {
@@ -88,7 +89,10 @@
 }
 
 .control[aria-invalid="true"] {
-  border-color: var(--warn);
+  /* 2px border per the mockup's invalid-field swatch; padding pulls in by
+     1px on each side so the control's outer box size does not change. */
+  padding: 0 calc(var(--space-3) - 1px);
+  border: 2px solid var(--alert);
   background: var(--ui-danger-soft);
 }
 

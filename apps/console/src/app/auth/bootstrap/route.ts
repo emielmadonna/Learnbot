@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const input = validateTenantBootstrapInput({
       slug: String(form.get("slug") ?? ""),
       displayName: String(form.get("displayName") ?? ""),
-      assistantName: String(form.get("assistantName") ?? "Estie"),
+      assistantName: String(form.get("assistantName") ?? "Corso"),
       primaryColor: String(form.get("primaryColor") ?? "#635BFF"),
       accentColor: String(form.get("accentColor") ?? "#00A88F"),
       region: String(form.get("region") ?? ""),

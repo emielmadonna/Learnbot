@@ -21,9 +21,10 @@
   display: block;
   width: 100%;
   height: 100%;
-  overflow: hidden;
+  overflow: visible;
   border-radius: var(--r-lg, 22px);
-  background: var(--surface);
+  background: transparent;
+  transition: transform 220ms var(--ease, ease), filter 220ms var(--ease, ease);
 }
 
 .layer {
@@ -31,12 +32,24 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   opacity: 0;
   transform: translateY(0) rotate(0deg) scale(1, 1);
   transition:
     opacity 280ms var(--ease, ease),
     transform 280ms var(--ease, ease);
+}
+
+.interactive:hover .stage,
+.interactive:focus-visible .stage {
+  transform: translateY(-5%) rotate(2deg) scale(1.04);
+  filter: drop-shadow(0 8px 10px rgb(0 0 0 / 14%));
+}
+
+.interactive:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--r-lg, 22px);
 }
 
 .layerActive {
@@ -90,6 +103,16 @@
   transform: rotate(-6deg);
 }
 
+.poseThinking .layerActive {
+  transform-origin: 50% 100%;
+  transform: translateY(-2%) rotate(3deg);
+}
+
+.poseUnsure .layerActive {
+  transform-origin: 50% 100%;
+  transform: translateY(1%) rotate(-4deg);
+}
+
 /* ---------------------------------------------- speaking squash-and-stretch */
 @keyframes avatarSpeakingBounce {
   0%,
@@ -120,6 +143,10 @@
     animation: none !important;
     transform: none !important;
     opacity: 0 !important;
+  }
+  .interactive:hover .stage,
+  .interactive:focus-visible .stage {
+    transform: none;
   }
   .layer[data-pose="idle"] {
     opacity: 1 !important;

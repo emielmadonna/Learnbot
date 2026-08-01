@@ -35,6 +35,9 @@ const rateLimitFile = source(
   "../src/app/api/learning/voice/rate-limit.ts",
 );
 const voiceRuntime = source("../src/lib/voice-runtime.ts");
+const managedVoiceEdge = source(
+  "../../../infra/supabase/functions/learning-provider-voice/index.ts",
+);
 const transcribeRoute = source(
   "../src/app/api/learning/voice/transcribe/route.ts",
 );
@@ -97,13 +100,16 @@ test("rate limits stay per-tenant and per-subject and stay configurable, not har
   assert.doesNotMatch(sql, /max_calls_per_minute\s*:=\s*\d/);
 });
 
-test("voice routes still defer to the durable SQL reservation and their local map is unchanged", () => {
-  // The three voice routes' behaviour and error shapes are untouched: they
-  // still call enforceVoiceQuota, which still calls the durable RPC. This
-  // migration's fix lives entirely in the SQL that RPC reaches.
+test("voice routes defer to the managed Edge boundary and its durable SQL reservation", () => {
+  // Provider credentials, metering, and the durable rate-limit reservation
+  // now live behind the authenticated Edge boundary. Next only forwards the
+  // verified tenant request and cannot bypass the durable reservation.
   for (const route of [transcribeRoute, speakRoute, realtimeRoute]) {
-    assert.match(route, /await enforceVoiceQuota\(/);
+    assert.match(route, /invokeManagedVoice/);
   }
+  assert.match(managedVoiceEdge, /learning_reserve_provider_call/);
+  assert.match(managedVoiceEdge, /await reserve\(/);
+  assert.match(managedVoiceEdge, /learning_record_provider_cost/);
   assert.match(voiceRuntime, /reserveProviderCall/);
   assert.match(rateLimitFile, /Same-instance burst guard only/);
 });

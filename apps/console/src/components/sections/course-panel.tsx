@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import UploadLearning from "../../app/app/upload-learning";
 import type {
@@ -35,6 +41,16 @@ import {
   richTextBlockContent,
 } from "../ui/rich-text";
 import { percent } from "./learning-format";
+import {
+  normalizeCourseMediaContent,
+  normalizeImageUrl,
+  normalizeLinkUrl,
+  normalizeVideoSource,
+  type CourseMediaBlockType,
+} from "../../lib/content/media-block";
+import { LessonWorkspace } from "./lesson-workspace";
+import { SourceConnectors } from "./source-connectors";
+import { VisualKnowledgeManager } from "./visual-knowledge-manager";
 import styles from "./course-panel.module.css";
 import shared from "./sections.module.css";
 
@@ -61,6 +77,9 @@ const BLOCK_TYPES: readonly AuthoringBlockType[] = [
   "quote",
   "list",
   "divider",
+  "image",
+  "video",
+  "link",
 ];
 
 const BLOCK_TYPE_SET: ReadonlySet<string> = new Set(BLOCK_TYPES);
@@ -73,6 +92,9 @@ const BLOCK_TYPE_LABEL: Readonly<Record<AuthoringBlockType, string>> = {
   quote: "Quote",
   list: "List",
   divider: "Divider",
+  image: "Image",
+  video: "Video",
+  link: "Link",
 };
 
 const LIFECYCLE_OPTIONS = [
@@ -81,13 +103,72 @@ const LIFECYCLE_OPTIONS = [
   { value: "archived", label: "Archived" },
 ] as const;
 
+type CourseSurface =
+  | "learning"
+  | "library"
+  | "sources"
+  | "media";
+
+const COURSE_SURFACES: readonly {
+  readonly key: CourseSurface;
+  readonly label: string;
+}[] = [
+  { key: "learning", label: "Learning" },
+  { key: "sources", label: "Sources" },
+  { key: "media", label: "Media" },
+];
+
+function readCourseSurface(value: string | null): CourseSurface {
+  if (value === "library") return "library";
+  if (value === "knowledge" || value === "import" || value === "cleanup") {
+    return "sources";
+  }
+  if (value === "visuals") return "media";
+  return COURSE_SURFACES.some((surface) => surface.key === value)
+    ? (value as CourseSurface)
+    : "learning";
+}
+
+type KnowledgeCourseState = {
+  readonly courseId: string;
+  readonly title: string;
+  readonly status: string;
+  readonly versionNumber: number | null;
+  readonly versionStatus: string | null;
+  readonly projectedAt: string | null;
+  readonly documentCount: number;
+  readonly chunkCount: number;
+  readonly embeddedChunkCount: number;
+  readonly pendingEmbeddingCount: number;
+  readonly failedEmbeddingCount: number;
+  readonly publishedLessonCount: number;
+  readonly coveredLessonCount: number;
+  readonly answerable: boolean;
+  readonly state:
+    | "not_published"
+    | "never_projected"
+    | "inactive_projection"
+    | "empty"
+    | "stale"
+    | "ready";
+};
+
+type KnowledgeStateResponse = {
+  readonly courses: readonly KnowledgeCourseState[];
+  readonly embedding: {
+    readonly embeddedChunkCount: number;
+    readonly pendingChunkCount: number;
+    readonly failedChunkCount: number;
+  };
+};
+
 /**
  * Copy for every refusal the authoring route can return. `version_conflict` is
  * handled separately because it is not a failure of the request — it means the
  * course moved underneath this editor and the operator has to reload before any
  * further edit can be trusted.
  */
-const ERROR_COPY: Readonly<Record<string, string>> = {
+export const ERROR_COPY: Readonly<Record<string, string>> = {
   insufficient_role:
     "Your role cannot change this course. Nothing was changed.",
   not_found:
@@ -113,7 +194,19 @@ const ERROR_COPY: Readonly<Record<string, string>> = {
   revision_not_pending:
     "That revision was already approved or replaced by a newer one. Reload to see its current state.",
   unsupported_media_type:
-    "Only plain-text and markdown uploads go through this pipeline today.",
+    "This file type is not supported by the extraction pipeline.",
+  document_extraction_failed:
+    "The file cleared security scanning, but its text could not be extracted. It remains private and nothing was published.",
+  document_has_no_extractable_text:
+    "No selectable text was found in this file. For a scanned PDF, upload an OCR-processed copy or paste the transcript.",
+  document_page_limit_exceeded:
+    "That PDF has more than 500 pages. Split it into smaller course sources before importing.",
+  scanner_not_configured:
+    "PDF and Word extraction requires the production malware scanner. Text and Markdown can be cleared safely without it.",
+  unscannable_size:
+    "The security scanner cannot accept a file this large. Split it into smaller sources.",
+  scan_record_failed:
+    "The scanner returned a verdict, but the security checkpoint could not record it. Nothing was extracted.",
   course_not_found:
     "That course no longer exists in this workspace.",
   object_not_found:
@@ -124,7 +217,7 @@ const ERROR_COPY: Readonly<Record<string, string>> = {
 /* Transport                                                                 */
 /* ------------------------------------------------------------------------ */
 
-type AuthoringResponse<T> =
+export type AuthoringResponse<T> =
   | { readonly ok: true; readonly data: T }
   | { readonly ok: false; readonly code: string };
 
@@ -132,7 +225,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-async function postAuthoring<T>(
+export async function postAuthoring<T>(
   body: Record<string, unknown>,
 ): Promise<AuthoringResponse<T>> {
   try {
@@ -175,12 +268,12 @@ function operationKey(prefix: string) {
  * flight, the owning course `recordVersion` is threaded forward from the
  * previous response, and a 409 latches the whole editor read-only.
  */
-type RunMutation = (
+export type RunMutation = (
   key: string,
   body: Record<string, unknown>,
 ) => Promise<AuthoringResult | null>;
 
-type EditorApi = {
+export type EditorApi = {
   readonly courseId: string;
   readonly run: RunMutation;
   readonly busyKey: string | null;
@@ -188,7 +281,7 @@ type EditorApi = {
   readonly locked: boolean;
 };
 
-function cx(...values: readonly (string | false | undefined)[]) {
+export function cx(...values: readonly (string | false | undefined)[]) {
   return values.filter(Boolean).join(" ");
 }
 
@@ -204,10 +297,11 @@ function titleError(value: string) {
 /* Block content mapping                                                     */
 /* ------------------------------------------------------------------------ */
 
-type BlockDraft = {
+export type BlockDraft = {
   readonly type: AuthoringBlockType;
   readonly text: string;
   readonly variant: string;
+  readonly url: string;
 };
 
 type VariantField =
@@ -270,6 +364,9 @@ function variantField(type: AuthoringBlockType): VariantField {
         ],
       };
     case "divider":
+    case "image":
+    case "video":
+    case "link":
       return { kind: "none" };
     default:
       return { kind: "none" };
@@ -322,12 +419,30 @@ function draftToContent(draft: BlockDraft): Record<string, unknown> {
       };
     case "divider":
       return {};
+    case "image":
+      return {
+        url: draft.url,
+        altText: draft.text,
+        caption: draft.variant,
+      };
+    case "video":
+      return {
+        url: draft.url,
+        title: draft.text,
+        caption: draft.variant,
+      };
+    case "link":
+      return {
+        url: draft.url,
+        label: draft.text,
+        description: draft.variant,
+      };
     default:
       return { text };
   }
 }
 
-function asBlockType(value: string): AuthoringBlockType {
+export function asBlockType(value: string): AuthoringBlockType {
   return BLOCK_TYPE_SET.has(value)
     ? (value as AuthoringBlockType)
     : "rich_text";
@@ -344,6 +459,14 @@ function blockIsEditable(block: LearningBlock) {
   const type = asBlockType(block.type);
   if (type === "divider") return true;
   if (type === "list") return true;
+  if (type === "image" || type === "video" || type === "link") {
+    return (
+      normalizeCourseMediaContent(
+        type as CourseMediaBlockType,
+        block.content,
+      ) !== null
+    );
+  }
   return (
     typeof block.content.text === "string" ||
     Object.keys(block.content).length === 0
@@ -365,6 +488,7 @@ function blockDraftFrom(block: LearningBlock): BlockDraft {
         type,
         text: items.join("\n"),
         variant: typeof content.style === "string" ? content.style : "bullet",
+        url: "",
       };
     }
     case "heading":
@@ -373,12 +497,14 @@ function blockDraftFrom(block: LearningBlock): BlockDraft {
         text,
         variant:
           typeof content.level === "number" ? String(content.level) : "2",
+        url: "",
       };
     case "callout":
       return {
         type,
         text,
         variant: typeof content.tone === "string" ? content.tone : "note",
+        url: "",
       };
     case "code":
       return {
@@ -386,6 +512,7 @@ function blockDraftFrom(block: LearningBlock): BlockDraft {
         text,
         variant:
           typeof content.language === "string" ? content.language : "text",
+        url: "",
       };
     case "quote":
       return {
@@ -393,9 +520,36 @@ function blockDraftFrom(block: LearningBlock): BlockDraft {
         text,
         variant:
           typeof content.attribution === "string" ? content.attribution : "",
+        url: "",
       };
     case "divider":
-      return { type, text: "", variant: "" };
+      return { type, text: "", variant: "", url: "" };
+    case "image":
+      return {
+        type,
+        url: typeof content.url === "string" ? content.url : "",
+        text: typeof content.altText === "string" ? content.altText : "",
+        variant:
+          typeof content.caption === "string" ? content.caption : "",
+      };
+    case "video":
+      return {
+        type,
+        url: typeof content.url === "string" ? content.url : "",
+        text: typeof content.title === "string" ? content.title : "",
+        variant:
+          typeof content.caption === "string" ? content.caption : "",
+      };
+    case "link":
+      return {
+        type,
+        url: typeof content.url === "string" ? content.url : "",
+        text: typeof content.label === "string" ? content.label : "",
+        variant:
+          typeof content.description === "string"
+            ? content.description
+            : "",
+      };
     default: {
       /**
        * A block with no declared format predates this editor and is literal
@@ -408,9 +562,47 @@ function blockDraftFrom(block: LearningBlock): BlockDraft {
         type,
         text: format === "markdown" ? readRichTextMarkdown(content) : text,
         variant: format,
+        url: "",
       };
     }
   }
+}
+
+function mediaDraftError(draft: BlockDraft): string | undefined {
+  if (draft.type === "image") {
+    if (normalizeImageUrl(draft.url) === null) {
+      return "Use a public HTTPS image URL. Local, private-network, credentialed, and non-HTTPS URLs are blocked.";
+    }
+    if (draft.text.trim().length < 3 || draft.text.trim().length > 500) {
+      return "Image alt text must be 3–500 characters.";
+    }
+    if (draft.variant.trim().length > 1_000) {
+      return "Image captions can contain at most 1,000 characters.";
+    }
+  }
+  if (draft.type === "video") {
+    if (normalizeVideoSource(draft.url) === null) {
+      return "Use a public HTTPS YouTube, Vimeo, MP4, WebM, or Ogg URL.";
+    }
+    if (draft.text.trim().length < 1 || draft.text.trim().length > 160) {
+      return "Video titles must be 1–160 characters.";
+    }
+    if (draft.variant.trim().length > 1_000) {
+      return "Video captions can contain at most 1,000 characters.";
+    }
+  }
+  if (draft.type === "link") {
+    if (normalizeLinkUrl(draft.url) === null) {
+      return "Use a public HTTPS link. Local, private-network, credentialed, and non-HTTPS URLs are blocked.";
+    }
+    if (draft.text.trim().length < 1 || draft.text.trim().length > 160) {
+      return "Link labels must be 1–160 characters.";
+    }
+    if (draft.variant.trim().length > 1_000) {
+      return "Link descriptions can contain at most 1,000 characters.";
+    }
+  }
+  return undefined;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -491,7 +683,7 @@ function blockPreview(block: LearningBlock) {
  * Structural editing goes through `POST /api/authoring`.
  */
 export function CoursePanel({ payload, params, refresh }: PanelProps) {
-  const { openPanel } = usePanelRouter();
+  const { openPanel, panelHref } = usePanelRouter();
   const workspace = asWorkspace(payload);
   const courses = workspace?.courses ?? [];
   const role = workspace?.identity.role ?? payload.role;
@@ -506,18 +698,83 @@ export function CoursePanel({ payload, params, refresh }: PanelProps) {
   const canAuthor =
     workspace?.identity.canAuthor === true && AUTHORING_ROLES.has(role);
   const canEdit = canAuthor;
+  const surface = readCourseSurface(params.get("view"));
 
   const courseId = params.get("id");
-  const activeCourse = courseId
-    ? courses.find((course) => course.courseId === courseId)
-    : undefined;
+  const activeCourse =
+    courseId !== null
+      ? courses.find((course) => course.courseId === courseId)
+      : surface === "learning"
+        ? courses[0]
+        : undefined;
 
-  if (courseId !== null && activeCourse === undefined) {
-    return (
+  const navigateSurface = (next: CourseSurface) =>
+    openPanel("course", { view: next });
+  const scrollToSourceStep = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+  let content: ReactNode;
+
+  if (surface !== "learning" && !canAuthor) {
+    content = (
+      <EmptyState
+        description="A creator, workspace admin, or owner can manage source knowledge and publishing."
+        headline="This workspace role has read-only learning access"
+      />
+    );
+  } else if (surface === "sources") {
+    content = (
+      <div className={shared.stack}>
+        <div id="source-library">
+          <KnowledgeView
+            onImport={() => scrollToSourceStep("source-import")}
+            onOpenCourse={(id) =>
+              openPanel("course", { view: "learning", id })
+            }
+            onTest={() => openPanel("agent")}
+          />
+        </div>
+        <div id="source-import">
+          <ImportView
+            canConfigureCircle={
+              role === "tenant_owner" || role === "tenant_admin"
+            }
+            courses={courses}
+            onReview={() => scrollToSourceStep("source-review")}
+          />
+        </div>
+        <div id="source-review">
+          <CleanupView
+            courses={courses.map((course) => ({
+              courseId: course.courseId,
+              title: course.title,
+            }))}
+          />
+        </div>
+      </div>
+    );
+  } else if (surface === "media") {
+    content = (
+      <VisualKnowledgeManager
+        courses={courses.map((course) => ({
+          courseId: course.courseId,
+          title: course.title,
+        }))}
+      />
+    );
+  } else if (courseId !== null && activeCourse === undefined) {
+    content = (
       <div className={shared.stack}>
         <EmptyState
           action={
-            <Button onClick={() => openPanel("course")} variant="primary">
+            <Button
+              onClick={() => navigateSurface("learning")}
+              variant="primary"
+            >
               Back to all courses
             </Button>
           }
@@ -527,33 +784,424 @@ export function CoursePanel({ payload, params, refresh }: PanelProps) {
         />
       </div>
     );
-  }
-
-  if (activeCourse !== undefined) {
-    return (
+  } else if (activeCourse !== undefined) {
+    content = (
       <CourseView
         assistantName={payload.agent.assistantName}
         canEdit={canEdit}
         course={activeCourse}
-        initialLessonId={params.get("lessonId")}
         key={activeCourse.courseId}
-        onBack={() => openPanel("course")}
+        lessonHref={(lessonId) =>
+          panelHref("course", {
+            view: "learning",
+            id: activeCourse.courseId,
+            lessonId,
+          })
+        }
         onAskAssistant={(lessonId) =>
           openPanel("agent", { courseId: activeCourse.courseId, lessonId })
         }
+        onBack={() => navigateSurface("library")}
+        onSelectLesson={(lessonId) =>
+          openPanel(
+            "course",
+            { view: "learning", id: activeCourse.courseId, lessonId },
+            { replace: true },
+          )
+        }
         refresh={refresh}
         role={role}
+        selectedLessonId={params.get("lessonId")}
+      />
+    );
+  } else {
+    content = (
+      <CourseLibrary
+        canAuthor={canAuthor}
+        courses={courses}
+        onImport={() => navigateSurface("sources")}
+        onOpen={(id) => openPanel("course", { view: "learning", id })}
+        wantsCreate={params.get("intent") === "create"}
       />
     );
   }
 
   return (
-    <CourseLibrary
-      canAuthor={canAuthor}
-      courses={courses}
-      onOpen={(id) => openPanel("course", { id })}
-      wantsCreate={params.get("intent") === "create"}
-    />
+    <section className={styles.suite}>
+      <header className={styles.suiteHeader}>
+        <div className={styles.suiteBrand}>
+          <span className={styles.suiteMark} aria-hidden="true">
+            C
+          </span>
+          <span>
+            <b>Learning</b>
+            <small>Build what your assistant knows</small>
+          </span>
+        </div>
+        <nav aria-label="Learning sections" className={styles.suiteTabs}>
+          {COURSE_SURFACES.map((item) => (
+            <a
+              aria-current={surface === item.key ? "page" : undefined}
+              className={surface === item.key ? styles.suiteTabActive : undefined}
+              href={panelHref("course", { view: item.key })}
+              key={item.key}
+              onClick={(event) => {
+                if (
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return;
+                event.preventDefault();
+                navigateSurface(item.key);
+              }}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+      </header>
+      <div className={styles.suiteBody}>{content}</div>
+    </section>
+  );
+}
+
+function ImportView({
+  canConfigureCircle,
+  courses,
+  onReview,
+}: {
+  readonly canConfigureCircle: boolean;
+  readonly courses: readonly LearningCourse[];
+  readonly onReview: () => void;
+}) {
+  const options = courses.map((course) => ({
+    courseId: course.courseId,
+    title: course.title,
+  }));
+
+  return (
+    <div className={styles.surface}>
+      <div className={styles.surfaceHeading}>
+        <div>
+          <p className={styles.kicker}>Import source material</p>
+          <h2>Bring your knowledge in</h2>
+          <p>
+            Choose a course, upload a private source, and verify its real
+            processing state before anything becomes answerable.
+          </p>
+        </div>
+        <span className={styles.surfaceBadge}>Private by default</span>
+      </div>
+
+      <SourceConnectors
+        canConfigureCircle={canConfigureCircle}
+        courses={options}
+      />
+
+      <div className={styles.importGrid}>
+        <section className={styles.stepCard}>
+          <StepNumber number={1} />
+          <div>
+            <h3>Upload a private file</h3>
+            <p>
+              Add private source material. The uploader shows only formats
+              whose security checkpoint is ready.
+            </p>
+          </div>
+          <UploadLearning courses={options} />
+        </section>
+        <section className={styles.stepCard}>
+          <StepNumber number={2} />
+          <div>
+            <h3>Private quarantine</h3>
+            <p>
+              Uploaded files remain isolated while their storage and security
+              checkpoints are verified.
+            </p>
+          </div>
+          <UploadStateReportView />
+        </section>
+        <section className={styles.stepCard}>
+          <StepNumber number={3} />
+          <div>
+            <h3>Review and publish</h3>
+            <p>
+              Available sources are security-cleared, extracted, cleaned,
+              reviewed, and explicitly published. PDF and Word appear only
+              when the production malware scanner is configured.
+            </p>
+          </div>
+          <Button onClick={onReview} variant="primary">
+            Open cleanup review
+          </Button>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function CleanupView({
+  courses,
+}: {
+  readonly courses: readonly { courseId: string; title: string }[];
+}) {
+  return (
+    <div className={styles.surface}>
+      <div className={styles.surfaceHeading}>
+        <div>
+          <p className={styles.kicker}>Cleanup agent</p>
+          <h2>Turn raw sources into trusted knowledge</h2>
+          <p>
+            Extract text, inspect every cleanup decision, make edits, approve
+            the revision, then publish it when it is ready.
+          </p>
+        </div>
+        <span className={styles.surfaceBadge}>Approval required</span>
+      </div>
+      <IngestionReviewView courses={courses} />
+    </div>
+  );
+}
+
+function StepNumber({ number }: { readonly number: number }) {
+  return (
+    <span className={styles.stepNumber} aria-hidden="true">
+      {number}
+    </span>
+  );
+}
+
+function KnowledgeView({
+  onImport,
+  onOpenCourse,
+  onTest,
+}: {
+  readonly onImport: () => void;
+  readonly onOpenCourse: (courseId: string) => void;
+  readonly onTest: () => void;
+}) {
+  const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
+  const [data, setData] = useState<KnowledgeStateResponse | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const response = await fetch("/api/learning/knowledge", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        const payload = (await response.json().catch(() => null)) as unknown;
+        if (
+          !response.ok ||
+          !isRecord(payload) ||
+          !Array.isArray(payload.courses) ||
+          !isRecord(payload.embedding)
+        ) {
+          const code =
+            isRecord(payload) && typeof payload.code === "string"
+              ? payload.code
+              : "request_failed";
+          throw new Error(
+            ERROR_COPY[code] ?? "Knowledge coverage could not be read.",
+          );
+        }
+        if (!active) return;
+        setData(payload as unknown as KnowledgeStateResponse);
+        setState("ready");
+      } catch (error) {
+        if (!active) return;
+        setFailure(
+          error instanceof Error
+            ? error.message
+            : "Knowledge coverage could not be read.",
+        );
+        setState("failed");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const readyCount =
+    data?.courses.filter((course) => courseIsReady(course)).length ?? 0;
+  const answerableCount =
+    data?.courses.filter((course) => course.answerable).length ?? 0;
+  const totalCourses = data?.courses.length ?? 0;
+  const searchableChunkCount =
+    data?.courses.reduce((sum, course) => sum + course.chunkCount, 0) ?? 0;
+
+  return (
+    <div className={styles.surface}>
+      <div className={styles.surfaceHeading}>
+        <div>
+          <p className={styles.kicker}>Knowledge coverage</p>
+          <h2>What your assistant can answer from</h2>
+          <p>
+            This is the durable retrieval state for every published course,
+            not an estimate from draft content.
+          </p>
+        </div>
+        <div className={styles.libraryActions}>
+          <Button onClick={onTest}>Test what it knows</Button>
+          <Button onClick={onImport} variant="primary">
+            Add knowledge
+          </Button>
+        </div>
+      </div>
+
+      {state === "loading" ? (
+        <p className={shared.loading} role="status">
+          Reading durable knowledge coverage…
+        </p>
+      ) : null}
+      {state === "failed" ? (
+        <div className={styles.failure} role="alert">
+          <span className={styles.messageBody}>{failure}</span>
+        </div>
+      ) : null}
+      {state === "ready" && data !== null ? (
+        <div className={styles.knowledgeLayout}>
+          <aside className={styles.knowledgeRail}>
+            <p className={styles.railLabel}>Coverage</p>
+            <KnowledgeMetric
+              label="Courses ready"
+              value={`${readyCount}/${totalCourses}`}
+            />
+            <KnowledgeMetric
+              label="Answerable"
+              value={String(answerableCount)}
+            />
+            <KnowledgeMetric
+              label="Searchable chunks"
+              value={searchableChunkCount.toLocaleString()}
+            />
+            <KnowledgeMetric
+              label="Semantic embeddings"
+              value={data.embedding.embeddedChunkCount.toLocaleString()}
+            />
+            <KnowledgeMetric
+              label="Pending"
+              value={data.embedding.pendingChunkCount.toLocaleString()}
+            />
+          </aside>
+          <section className={styles.knowledgeMain}>
+            <div className={styles.coverageCard}>
+              <div>
+                <span className={styles.coverageValue}>
+                  {totalCourses === 0
+                    ? "—"
+                    : `${Math.round((readyCount / totalCourses) * 100)}%`}
+                </span>
+                <span>of courses have a current, active projection</span>
+              </div>
+              <span className={styles.coverageTrack}>
+                <i
+                  style={{
+                    width:
+                      totalCourses === 0
+                        ? "0%"
+                        : `${(readyCount / totalCourses) * 100}%`,
+                  }}
+                />
+              </span>
+            </div>
+            {data.courses.length === 0 ? (
+              <EmptyState
+                compact
+                description="Create and publish a course before projecting its knowledge."
+                headline="No course knowledge yet"
+              />
+            ) : (
+              <ul className={styles.knowledgeList}>
+                {data.courses.map((course) => (
+                  <li className={styles.knowledgeRow} key={course.courseId}>
+                    <span
+                      className={styles.stateDot}
+                      data-state={course.state}
+                    />
+                    <span className={styles.knowledgeText}>
+                      <b>{course.title}</b>
+                      <small>
+                        {knowledgeStateCopy(course)} ·{" "}
+                        {course.coveredLessonCount}/{course.publishedLessonCount}{" "}
+                        published lessons covered
+                      </small>
+                    </span>
+                    <span className={styles.knowledgeCounts}>
+                      <b>{course.chunkCount.toLocaleString()}</b>
+                      <small>searchable chunks</small>
+                    </span>
+                    <Button
+                      onClick={() => onOpenCourse(course.courseId)}
+                      size="sm"
+                    >
+                      Open course
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function KnowledgeMetric({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string;
+}) {
+  return (
+    <div className={styles.railMetric}>
+      <span>{label}</span>
+      <b>{value}</b>
+    </div>
+  );
+}
+
+function knowledgeStateCopy(course: KnowledgeCourseState) {
+  if (
+    course.answerable &&
+    (course.state === "never_projected" ||
+      course.state === "inactive_projection")
+  ) {
+    return "Ready from the active imported source";
+  }
+  const copy: Record<KnowledgeCourseState["state"], string> = {
+    not_published: "Course is not published",
+    never_projected: "Never projected",
+    inactive_projection: "Projection is inactive",
+    empty: "Projection contains no chunks",
+    stale: "Published content changed",
+    ready: "Ready and current",
+  };
+  const pending =
+    course.pendingEmbeddingCount > 0
+      ? ` · ${course.pendingEmbeddingCount} embeddings pending`
+      : "";
+  const failed =
+    course.failedEmbeddingCount > 0
+      ? ` · ${course.failedEmbeddingCount} failed`
+      : "";
+  return `${copy[course.state]}${pending}${failed}`;
+}
+
+function courseIsReady(course: KnowledgeCourseState) {
+  return (
+    course.state === "ready" ||
+    (course.answerable &&
+      (course.state === "never_projected" ||
+        course.state === "inactive_projection"))
   );
 }
 
@@ -564,23 +1212,30 @@ export function CoursePanel({ payload, params, refresh }: PanelProps) {
 function CourseLibrary({
   canAuthor,
   courses,
+  onImport,
   onOpen,
   wantsCreate,
 }: {
   readonly canAuthor: boolean;
   readonly courses: readonly LearningCourse[];
+  readonly onImport: () => void;
   readonly onOpen: (courseId: string) => void;
   readonly wantsCreate: boolean;
 }) {
   return (
-    <div className={shared.stack}>
+    <div className={`${shared.stack} ${styles.library}`}>
       <section className={shared.stackTight}>
         <div className={shared.sectionHead}>
           <div>
-            <p className={shared.eyebrow}>Library</p>
-            <h3 className={shared.title}>Courses</h3>
+            <p className={styles.kicker}>Course library</p>
+            <h2 className={styles.libraryTitle}>Your learning</h2>
           </div>
-          <span className={shared.meta}>{courses.length} available</span>
+          <div className={styles.libraryActions}>
+            <span className={shared.meta}>{courses.length} available</span>
+            {canAuthor ? (
+              <Button onClick={onImport}>Import source</Button>
+            ) : null}
+          </div>
         </div>
 
         {courses.length === 0 ? (
@@ -706,30 +1361,6 @@ function CourseLibrary({
             </div>
           </form>
 
-          <div className={shared.form}>
-            <div>
-              <p className={shared.eyebrow}>Secure import</p>
-              <h4 className={shared.subtitle}>Upload an existing source</h4>
-              <p className={shared.lede}>
-                The file is signed directly into this tenant’s private
-                quarantine. It cannot become learning until the security and
-                extraction pipeline clears it.
-              </p>
-            </div>
-            <UploadLearning
-              courses={courses.map((course) => ({
-                courseId: course.courseId,
-                title: course.title,
-              }))}
-            />
-            <UploadStateReportView />
-            <IngestionReviewView
-              courses={courses.map((course) => ({
-                courseId: course.courseId,
-                title: course.title,
-              }))}
-            />
-          </div>
         </section>
       ) : null}
     </div>
@@ -744,28 +1375,37 @@ function CourseView({
   assistantName,
   canEdit,
   course,
-  initialLessonId,
+  lessonHref,
   onAskAssistant,
   onBack,
+  onSelectLesson,
   refresh,
   role,
+  selectedLessonId,
 }: {
   readonly assistantName: string;
   readonly canEdit: boolean;
   readonly course: LearningCourse;
-  readonly initialLessonId: string | null;
+  /** Builds a real, shareable URL for a lesson — see `usePanelRouter`. */
+  readonly lessonHref: (lessonId: string) => string;
   readonly onAskAssistant: (lessonId: string) => void;
   readonly onBack: () => void;
+  /** Writes the lesson choice into the URL — see `usePanelRouter` in the shell. */
+  readonly onSelectLesson: (lessonId: string) => void;
   readonly refresh: () => Promise<void>;
   readonly role: string;
+  /** The `lessonId` query param, live. Null until a lesson has ever been chosen. */
+  readonly selectedLessonId: string | null;
 }) {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const [showRevisions, setShowRevisions] = useState(false);
+  const [showManage, setShowManage] = useState(false);
+  const [showPublish, setShowPublish] = useState(false);
   const [openLessons, setOpenLessons] = useState<readonly string[]>(
-    initialLessonId === null ? [] : [initialLessonId],
+    selectedLessonId === null ? [] : [selectedLessonId],
   );
 
   /**
@@ -913,165 +1553,210 @@ function CourseView({
   const gap = publicationGap(course.modules, removed);
 
   return (
-    <div className={shared.stack}>
-      <div>
+    <div className={styles.learningDetail}>
+      <div className={styles.courseTop}>
         <button className={shared.textAction} onClick={onBack} type="button">
           <span aria-hidden="true">←</span> All courses
         </button>
-      </div>
-
-      <section className={shared.stackTight}>
-        <div className={shared.sectionHead}>
-          <div>
-            <p className={shared.eyebrow}>{course.status}</p>
-            <h3 className={shared.title}>{course.title}</h3>
-          </div>
-          <span className={shared.meta}>
-            {Math.round(percent(course.progress.percentComplete))}%
+        <div className={styles.courseTopTitle}>
+          <span className={styles.courseStatus}>{course.status}</span>
+          <h2>{course.title}</h2>
+        </div>
+        <div className={styles.courseTopActions}>
+          <span className={styles.versionStamp}>
+            {notice !== null && busyKey === null ? notice : ""}
+            {busyKey !== null ? "Saving…" : ""}
+            {notice === null && busyKey === null
+              ? `Version ${knownVersion}`
+              : ""}
           </span>
-        </div>
-        <p className={shared.lede}>{course.description}</p>
-        <div className={shared.progressTrack}>
-          <span
-            style={{ width: `${percent(course.progress.percentComplete)}%` }}
-          />
-        </div>
-        <p className={shared.meta}>
-          {course.progress.lessonsCompleted} of {course.progress.lessonsTotal}{" "}
-          lessons complete
-        </p>
-      </section>
-
-      <div className={styles.editorRoot}>
-        {conflict ? (
-          <div className={styles.conflict} role="alert">
-            <span className={styles.messageBody}>
-              <strong>This course changed somewhere else.</strong>
-              Your edit was refused so it could not overwrite the newer version.
-              Reload the course, check what changed, then make the edit again.
-            </span>
+          {canEdit ? (
             <Button
-              onClick={() => {
-                setConflict(false);
-                setFailure(null);
-                setNotice(null);
-                void refresh();
-              }}
+              aria-expanded={showManage}
+              onClick={() => setShowManage((value) => !value)}
+              size="sm"
+            >
+              Manage outline
+            </Button>
+          ) : null}
+          {canEdit ? (
+            <Button
+              aria-expanded={showPublish}
+              onClick={() => setShowPublish((value) => !value)}
               size="sm"
               variant="primary"
             >
-              Reload course
+              Publish
             </Button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
+      </div>
 
-        {failure !== null ? (
-          <div className={styles.failure} role="alert">
-            <span className={styles.messageBody}>{failure}</span>
-            <Button onClick={() => setFailure(null)} size="sm" variant="ghost">
-              Dismiss
-            </Button>
-          </div>
-        ) : null}
+      {course.description !== null && course.description.trim().length > 0 ? (
+        <p className={styles.courseDescription}>{course.description}</p>
+      ) : null}
 
-        {!canEdit ? (
-          <p className={styles.readOnly}>
-            <span className={styles.messageBody}>
-              {role === "teacher"
-                ? "Your teacher role can read this outline but cannot change it. Ask a creator, admin or owner to edit the course."
-                : "This outline is read-only for your role."}
-            </span>
-          </p>
-        ) : null}
+      {conflict ? (
+        <div className={styles.conflict} role="alert">
+          <span className={styles.messageBody}>
+            <strong>This course changed somewhere else.</strong>
+            Your edit was refused so it could not overwrite the newer version.
+            Reload the course, check what changed, then make the edit again.
+          </span>
+          <Button
+            onClick={() => {
+              setConflict(false);
+              setFailure(null);
+              setNotice(null);
+              void refresh();
+            }}
+            size="sm"
+            variant="primary"
+          >
+            Reload course
+          </Button>
+        </div>
+      ) : null}
 
-        {canEdit ? (
-          <>
+      {failure !== null ? (
+        <div className={styles.failure} role="alert">
+          <span className={styles.messageBody}>{failure}</span>
+          <Button onClick={() => setFailure(null)} size="sm" variant="ghost">
+            Dismiss
+          </Button>
+        </div>
+      ) : null}
+
+      {!canEdit ? (
+        <p className={styles.readOnly}>
+          <span className={styles.messageBody}>
+            {role === "teacher"
+              ? "Your teacher role can read this outline but cannot change it. Ask a creator, admin or owner to edit the course."
+              : "This outline is read-only for your role."}
+          </span>
+        </p>
+      ) : null}
+
+      {canEdit && showPublish ? (
+        <div className={styles.publishTray}>
+          <PublishPanel course={course} gap={gap} />
+        </div>
+      ) : null}
+
+      {canEdit && showManage ? (
+        <PanelFrame
+          description="Course title and description, and every module and lesson — rename, reorder, change publish state, add or delete. The lesson document itself is edited from the workspace behind this panel."
+          eyebrow="Course structure"
+          onClose={() => setShowManage(false)}
+          side="right"
+          title="Manage outline"
+          width="32rem"
+        >
+          <div className={shared.stack}>
             <CourseDetailsForm api={api} course={course} />
 
-            <div className={styles.toolbar}>
-              <Button
-                aria-expanded={showRevisions}
-                onClick={() => setShowRevisions((value) => !value)}
-                size="sm"
-              >
-                {showRevisions ? "Hide revision history" : "Revision history"}
-              </Button>
-              {gap.total > 0 ? (
-                <a className={styles.pendingLink} href="#publish-course">
-                  {gapPhrase(gap)} not visible to learners
-                </a>
-              ) : null}
-              <span className={styles.toolbarSpacer} />
-              <span className={styles.versionStamp}>
-                Version {knownVersion}
-                {notice !== null && busyKey === null ? ` · ${notice}` : ""}
-                {busyKey !== null ? " · Saving…" : ""}
-              </span>
+            <div className={styles.statusCard}>
+              <p className={styles.railLabel}>Learner progress</p>
+              <div className={styles.progressValue}>
+                {Math.round(percent(course.progress.percentComplete))}%
+              </div>
+              <p>
+                {course.progress.lessonsCompleted} of{" "}
+                {course.progress.lessonsTotal} lessons complete
+              </p>
+              <div className={shared.progressTrack}>
+                <span
+                  style={{
+                    width: `${percent(course.progress.percentComplete)}%`,
+                  }}
+                />
+              </div>
             </div>
 
-            {showRevisions ? (
-              <RevisionHistoryView
-                api={api}
-                onClose={() => setShowRevisions(false)}
+            {modules.length === 0 ? (
+              <EmptyState
+                compact
+                description="Add the first module to start building the outline."
+                headline="This course has no modules"
               />
-            ) : null}
-          </>
-        ) : null}
+            ) : (
+              <ol className={styles.outline}>
+                {modules.map((module, index) => (
+                  <ModuleCard
+                    api={api}
+                    assistantName={assistantName}
+                    canEdit={canEdit}
+                    index={index}
+                    key={module.moduleId}
+                    module={module}
+                    onAskAssistant={onAskAssistant}
+                    onMove={(delta) =>
+                      void moveChild(
+                        "course",
+                        course.courseId,
+                        moduleIds,
+                        index,
+                        delta,
+                      )
+                    }
+                    onMoveLesson={(orderedIds, lessonIndex, delta) =>
+                      void moveChild(
+                        "module",
+                        module.moduleId,
+                        orderedIds,
+                        lessonIndex,
+                        delta,
+                      )
+                    }
+                    onRemoved={noteRemoved}
+                    onToggleLesson={toggleLesson}
+                    openLessons={openLessons}
+                    pendingOrder={caughtUp ? undefined : pendingOrder}
+                    removed={removed}
+                    total={modules.length}
+                  />
+                ))}
+              </ol>
+            )}
 
-        {modules.length === 0 ? (
-          <EmptyState
-            compact
-            description={
-              canEdit
-                ? "Add the first module to start building the outline."
-                : "Nothing has been authored in this course yet."
-            }
-            headline="This course has no modules"
-          />
-        ) : (
-          <ol className={styles.outline}>
-            {modules.map((module, index) => (
-              <ModuleCard
-                api={api}
-                assistantName={assistantName}
-                canEdit={canEdit}
-                index={index}
-                key={module.moduleId}
-                module={module}
-                onAskAssistant={onAskAssistant}
-                onMove={(delta) =>
-                  void moveChild(
-                    "course",
-                    course.courseId,
-                    moduleIds,
-                    index,
-                    delta,
-                  )
-                }
-                onMoveLesson={(orderedIds, lessonIndex, delta) =>
-                  void moveChild(
-                    "module",
-                    module.moduleId,
-                    orderedIds,
-                    lessonIndex,
-                    delta,
-                  )
-                }
-                onRemoved={noteRemoved}
-                onToggleLesson={toggleLesson}
-                openLessons={openLessons}
-                pendingOrder={caughtUp ? undefined : pendingOrder}
-                removed={removed}
-                total={modules.length}
-              />
-            ))}
-          </ol>
-        )}
+            <AddModuleForm api={api} />
+          </div>
+        </PanelFrame>
+      ) : null}
 
-        {canEdit ? <AddModuleForm api={api} /> : null}
+      {showRevisions ? (
+        <RevisionHistoryView
+          api={api}
+          onClose={() => setShowRevisions(false)}
+        />
+      ) : null}
 
-        {canEdit ? <PublishPanel course={course} gap={gap} /> : null}
-      </div>
+      {modules.length === 0 ? (
+        <EmptyState
+          compact
+          description={
+            canEdit
+              ? "Add the first module to start building the outline."
+              : "Nothing has been authored in this course yet."
+          }
+          headline="This course has no modules"
+        />
+      ) : (
+        <LessonWorkspace
+          api={api}
+          assistantName={assistantName}
+          canEdit={canEdit}
+          lessonHref={lessonHref}
+          modules={modules}
+          onAskAssistant={onAskAssistant}
+          onOpenFullHistory={() => setShowRevisions(true)}
+          onOpenManage={() => setShowManage(true)}
+          onRemovedBlock={noteRemoved}
+          onSelectLesson={onSelectLesson}
+          removed={removed}
+          selectedLessonId={selectedLessonId}
+        />
+      )}
     </div>
   );
 }
@@ -1371,7 +2056,7 @@ function ModuleCard({
   }
 
   return (
-    <li className={styles.moduleCard}>
+    <li className={styles.moduleCard} id={`module-${module.moduleId}`}>
       <div className={styles.moduleHead}>
         {renaming ? (
           <InlineRename
@@ -1618,7 +2303,7 @@ function LessonRow({
   }
 
   return (
-    <li className={styles.lessonRow}>
+    <li className={styles.lessonRow} id={`lesson-${lesson.lessonId}`}>
       <div className={styles.lessonHead}>
         {renaming ? (
           <InlineRename
@@ -1859,22 +2544,43 @@ function AddLessonForm({
 /* Blocks                                                                    */
 /* ------------------------------------------------------------------------ */
 
-function BlockRow({
+export function BlockRow({
   api,
   block,
   canEdit,
   onRemoved,
+  onEditingChange,
 }: {
   readonly api: EditorApi;
   readonly block: LearningBlock;
   readonly canEdit: boolean;
   readonly onRemoved: (id: string) => void;
+  /**
+   * Fired whenever this row starts or stops editing, with the `<li>` DOM node
+   * that hosts its live editor while `editing` is true. The lesson document
+   * view uses this to locate the active block's own formatting toolbar (see
+   * `lesson-workspace.tsx`) so a document-level toolbar can drive it without
+   * this component exposing any imperative API of its own.
+   */
+  readonly onEditingChange?: (
+    editing: boolean,
+    node: HTMLLIElement | null,
+  ) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<BlockDraft>(() => blockDraftFrom(block));
   const editable = blockIsEditable(block);
   const savingKey = `block-update-${block.contentBlockId}`;
   const busy = api.busyKey === savingKey;
+  const rowRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    onEditingChange?.(editing, editing ? rowRef.current : null);
+    // onEditingChange is expected to be a stable callback (or the caller's own
+    // concern if not); re-running this on every render would fire it far more
+    // often than the transition it reports.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
 
   async function save() {
     const result = await api.run(savingKey, {
@@ -1895,7 +2601,7 @@ function BlockRow({
   }
 
   return (
-    <li className={styles.blockCard}>
+    <li className={styles.blockCard} ref={rowRef}>
       <div className={styles.blockHead}>
         <span className={styles.pill}>
           {BLOCK_TYPE_LABEL[asBlockType(block.type)] ?? block.type}
@@ -1960,21 +2666,45 @@ function BlockRow({
   );
 }
 
-function AddBlockForm({
+export function AddBlockForm({
   api,
   lessonId,
+  requestedOpen,
 }: {
   readonly api: EditorApi;
   readonly lessonId: string;
+  /**
+   * Lets a caller outside this form open it pre-set to a specific block type —
+   * the lesson document's toolbar uses this to wire its image and video
+   * buttons to this same create flow rather than building a second one.
+   * `token` must change every time the request should re-fire, since choosing
+   * the same type twice in a row would otherwise look like a no-op change.
+   */
+  readonly requestedOpen?: { type: AuthoringBlockType; token: number } | null;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<BlockDraft>({
     type: "rich_text",
     text: "",
     variant: defaultVariant("rich_text"),
+    url: "",
   });
   const key = `block-create-${lessonId}`;
   const busy = api.busyKey === key;
+
+  useEffect(() => {
+    if (requestedOpen === undefined || requestedOpen === null) return;
+    setOpen(true);
+    setDraft({
+      type: requestedOpen.type,
+      text: "",
+      variant: defaultVariant(requestedOpen.type),
+      url: "",
+    });
+    // Only the token identifies a new request; re-running this because the
+    // draft it just set changed would fight the user's own edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedOpen?.token]);
 
   if (!open) {
     return (
@@ -1998,6 +2728,7 @@ function AddBlockForm({
         type: "rich_text",
         text: "",
         variant: defaultVariant("rich_text"),
+        url: "",
       });
       setOpen(false);
     }
@@ -2034,6 +2765,7 @@ function BlockFields({
   readonly saveLabel: string;
 }) {
   const variant = variantField(draft.type);
+  const validationError = mediaDraftError(draft);
 
   return (
     <div className={styles.inlineForm}>
@@ -2046,6 +2778,10 @@ function BlockFields({
               type: next,
               text: next === "divider" ? "" : draft.text,
               variant: defaultVariant(next),
+              url:
+                next === "image" || next === "video" || next === "link"
+                  ? ""
+                  : draft.url,
             });
           }}
           options={BLOCK_TYPES.map((type) => ({
@@ -2079,6 +2815,132 @@ function BlockFields({
 
       {draft.type === "divider" ? (
         <p className={shared.meta}>A divider has no text of its own.</p>
+      ) : draft.type === "image" ? (
+        <>
+          <TextField
+            autoCapitalize="none"
+            autoComplete="url"
+            error={
+              draft.url.length > 0 && normalizeImageUrl(draft.url) === null
+                ? "Enter a public HTTPS image URL."
+                : undefined
+            }
+            help="HTTPS only. Requests to localhost and private networks are rejected."
+            label="Image URL"
+            maxLength={2048}
+            onChange={(event) =>
+              onChange({ ...draft, url: event.target.value })
+            }
+            placeholder="https://cdn.example.com/lesson-image.webp"
+            required
+            spellCheck={false}
+            type="url"
+            value={draft.url}
+          />
+          <TextAreaField
+            help="Describe the meaningful content for learners using a screen reader."
+            label="Alt text"
+            maxLength={500}
+            onChange={(event) =>
+              onChange({ ...draft, text: event.target.value })
+            }
+            required
+            rows={3}
+            value={draft.text}
+          />
+          <TextAreaField
+            help="Optional text shown beneath the image."
+            label="Caption"
+            maxLength={1000}
+            onChange={(event) =>
+              onChange({ ...draft, variant: event.target.value })
+            }
+            rows={2}
+            value={draft.variant}
+          />
+        </>
+      ) : draft.type === "video" ? (
+        <>
+          <TextField
+            autoCapitalize="none"
+            autoComplete="url"
+            error={
+              draft.url.length > 0 && normalizeVideoSource(draft.url) === null
+                ? "Enter a public YouTube, Vimeo, MP4, WebM, or Ogg HTTPS URL."
+                : undefined
+            }
+            help="YouTube and Vimeo are normalized to their dedicated embed origins. Direct files must end in .mp4, .webm, or .ogg."
+            label="Video URL"
+            maxLength={2048}
+            onChange={(event) =>
+              onChange({ ...draft, url: event.target.value })
+            }
+            required
+            spellCheck={false}
+            type="url"
+            value={draft.url}
+          />
+          <TextField
+            label="Video title"
+            maxLength={160}
+            onChange={(event) =>
+              onChange({ ...draft, text: event.target.value })
+            }
+            required
+            value={draft.text}
+          />
+          <TextAreaField
+            help="Optional context shown beneath the player."
+            label="Caption"
+            maxLength={1000}
+            onChange={(event) =>
+              onChange({ ...draft, variant: event.target.value })
+            }
+            rows={2}
+            value={draft.variant}
+          />
+        </>
+      ) : draft.type === "link" ? (
+        <>
+          <TextField
+            autoCapitalize="none"
+            autoComplete="url"
+            error={
+              draft.url.length > 0 && normalizeLinkUrl(draft.url) === null
+                ? "Enter a public HTTPS destination."
+                : undefined
+            }
+            help="Links open in a separate tab without access to the Corso window."
+            label="Destination URL"
+            maxLength={2048}
+            onChange={(event) =>
+              onChange({ ...draft, url: event.target.value })
+            }
+            required
+            spellCheck={false}
+            type="url"
+            value={draft.url}
+          />
+          <TextField
+            label="Link label"
+            maxLength={160}
+            onChange={(event) =>
+              onChange({ ...draft, text: event.target.value })
+            }
+            required
+            value={draft.text}
+          />
+          <TextAreaField
+            help="Optional context shown with the link."
+            label="Description"
+            maxLength={1000}
+            onChange={(event) =>
+              onChange({ ...draft, variant: event.target.value })
+            }
+            rows={2}
+            value={draft.variant}
+          />
+        </>
       ) : draft.type === "rich_text" && draft.variant === "markdown" ? (
         // The real editor: toolbar, keyboard shortcuts and a live preview of
         // exactly what the learner will see.
@@ -2105,9 +2967,15 @@ function BlockFields({
         />
       )}
 
+      {validationError === undefined ? null : (
+        <div className={styles.failure} role="alert">
+          {validationError}
+        </div>
+      )}
+
       <div className={styles.formActions}>
         <Button
-          disabled={locked && !busy}
+          disabled={(locked && !busy) || validationError !== undefined}
           loading={busy}
           loadingLabel="Saving…"
           onClick={() => void onSave()}
@@ -2534,10 +3402,11 @@ function UploadStateReportView() {
           {!report.ingestionObserved ? (
             <p className={styles.notice}>
               <span className={styles.messageBody}>
-                <strong>No file here has become learning content.</strong>
-                No ingestion worker is running for this workspace, so uploaded
-                files stay in private quarantine. They are safely stored, they
-                are not searchable, and the assistant cannot answer from them.
+                <strong>No file here has become learning content yet.</strong>
+                Open Cleanup to scan, extract, review, and publish an upload.
+                Text and Markdown use recorded inert-file clearance; PDF and
+                Word require the configured malware scanner. Until publishing
+                succeeds, every file remains private and unsearchable.
               </span>
             </p>
           ) : null}
@@ -2594,10 +3463,13 @@ function UploadStateReportView() {
 
 type QuarantineItem = {
   readonly intentId: string;
+  readonly courseId: string | null;
   readonly filename: string;
   readonly mediaType: string;
   readonly ingestionJobId: string | null;
   readonly ingestionStatus: string | null;
+  readonly latestRevisionStatus: string | null;
+  readonly publishedToActiveKnowledge: boolean;
 };
 
 type ReviewQueueItem = {
@@ -2637,6 +3509,14 @@ type RevisionDetail = {
     readonly diff: readonly DiffSegment[];
     readonly status: string;
   } | null;
+};
+
+type IngestionPublishResponse = {
+  readonly knowledge?: {
+    readonly activated?: boolean;
+    readonly retrievable?: boolean;
+    readonly activationBlockedReason?: string | null;
+  };
 };
 
 const STEP_LABEL: Readonly<Record<string, string>> = {
@@ -2743,6 +3623,9 @@ function IngestionReviewView({
   const [detailState, setDetailState] = useState<"loading" | "ready" | "failed">("ready");
   const [editedText, setEditedText] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [replaceAuthoredCourseIds, setReplaceAuthoredCourseIds] = useState<
+    readonly string[]
+  >([]);
   // learning_ingestion_review_queue only ever returns *pending* revisions,
   // so a course drops out of it the instant its last revision is approved —
   // exactly the moment publishing becomes relevant. This tracks every
@@ -2796,6 +3679,15 @@ function IngestionReviewView({
     async (jobId: string) => {
       setBusyJobId(jobId);
       setNotice(null);
+      const scanned = await postIngestion(`/api/ingestion/scan`, { jobId });
+      if (!scanned.ok) {
+        setNotice(
+          ERROR_COPY[scanned.code] ??
+            "Security scanning did not clear this file. It remains in private quarantine.",
+        );
+        setBusyJobId(null);
+        return;
+      }
       const extracted = await postIngestion(`/api/ingestion/extract`, { jobId });
       if (!extracted.ok) {
         setNotice(
@@ -2842,24 +3734,74 @@ function IngestionReviewView({
   );
 
   const publish = useCallback(
-    async (courseId: string) => {
+    async (courseId: string, replaceAuthoredKnowledge: boolean) => {
       setBusyJobId(courseId);
-      const result = await postIngestion(`/api/ingestion/publish`, { courseId });
+      const result = await postIngestion<IngestionPublishResponse>(
+        `/api/ingestion/publish`,
+        { courseId, replaceAuthoredKnowledge },
+      );
       setBusyJobId(null);
       if (!result.ok) {
         setNotice(ERROR_COPY[result.code] ?? "Publishing failed. Nothing changed for students.");
         return;
       }
-      setNotice("Published. Approved uploads for this course are now retrievable.");
+      const knowledge = result.data.knowledge;
+      if (knowledge?.activated === false || knowledge?.retrievable === false) {
+        setNotice(
+          "The approved upload was published as an inactive version so it could not replace the authored course silently. Turn on replacement below and publish again to make the upload answerable.",
+        );
+      } else {
+        setNotice(
+          "Published. Approved uploads for this course are now retrievable.",
+        );
+        setApprovedCourseIds((previous) =>
+          previous.filter((value) => value !== courseId),
+        );
+        setReplaceAuthoredCourseIds((previous) =>
+          previous.filter((value) => value !== courseId),
+        );
+      }
       refresh();
     },
     [refresh],
   );
 
+  const reviewReadyJobIds = new Set(queueItems.map((item) => item.jobId));
+  const terminalIngestionStates = new Set([
+    "succeeded",
+    "completed",
+    "cancelled",
+    "dead_letter",
+  ]);
+  const reviewedRevisionStates = new Set([
+    "pending_review",
+    "approved",
+    "edited_approved",
+  ]);
   const pendingQuarantine = quarantineItems.filter(
-    (item) => item.mediaType === "text/plain" || item.mediaType === "text/markdown",
+    (item) =>
+      (item.mediaType === "text/plain" ||
+        item.mediaType === "text/markdown" ||
+        item.mediaType === "application/pdf" ||
+        item.mediaType ===
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document") &&
+      item.ingestionJobId !== null &&
+      !reviewReadyJobIds.has(item.ingestionJobId) &&
+      !terminalIngestionStates.has(item.ingestionStatus ?? "") &&
+      !reviewedRevisionStates.has(item.latestRevisionStatus ?? ""),
   );
-  const courseIdsWithApprovals = approvedCourseIds;
+  const durableApprovedCourseIds = quarantineItems
+    .filter(
+      (item) =>
+        item.courseId !== null &&
+        (item.latestRevisionStatus === "approved" ||
+          item.latestRevisionStatus === "edited_approved") &&
+        !item.publishedToActiveKnowledge,
+    )
+    .map((item) => item.courseId as string);
+  const courseIdsWithApprovals = Array.from(
+    new Set([...approvedCourseIds, ...durableApprovedCourseIds]),
+  );
 
   return (
     <div className={styles.editorRoot}>
@@ -2896,7 +3838,7 @@ function IngestionReviewView({
             {pendingQuarantine.length === 0 ? (
               <EmptyState
                 compact
-                description="Text and markdown uploads appear here once quarantined."
+                description="Supported source uploads appear here once quarantined."
                 headline="Nothing waiting"
               />
             ) : (
@@ -2913,7 +3855,7 @@ function IngestionReviewView({
                       onClick={() => void processUpload(item.ingestionJobId!)}
                       size="sm"
                     >
-                      Extract &amp; clean
+                      Scan, extract &amp; clean
                     </Button>
                   </li>
                 ))}
@@ -3037,16 +3979,41 @@ function IngestionReviewView({
                     <span className={styles.recordText}>
                       <b>{courses.find((c) => c.courseId === courseId)?.title ?? courseId}</b>
                       <small>
-                        Approved this session.{" "}
+                        Approved and waiting to become active.{" "}
                         {queueItems.filter((item) => item.courseId === courseId).length > 0
                           ? `${queueItems.filter((item) => item.courseId === courseId).length} more revision(s) still awaiting review.`
                           : "Nothing else awaiting review for this course."}
                       </small>
+                      <label className={styles.replace}>
+                        <input
+                          checked={replaceAuthoredCourseIds.includes(courseId)}
+                          onChange={(event) =>
+                            setReplaceAuthoredCourseIds((previous) =>
+                              event.target.checked
+                                ? Array.from(new Set([...previous, courseId]))
+                                : previous.filter((value) => value !== courseId),
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        <span>
+                          <b>Replace the active authored knowledge version</b>
+                          <small>
+                            Leave this off to publish safely without replacing
+                            the course the assistant currently answers from.
+                          </small>
+                        </span>
+                      </label>
                     </span>
                     <Button
                       disabled={busyJobId !== null}
                       loading={busyJobId === courseId}
-                      onClick={() => void publish(courseId)}
+                      onClick={() =>
+                        void publish(
+                          courseId,
+                          replaceAuthoredCourseIds.includes(courseId),
+                        )
+                      }
                       variant="primary"
                     >
                       Publish approved uploads

@@ -11,7 +11,6 @@ import {
   consumeVoiceQuota,
   resetVoiceQuotaForTests,
 } from "../src/app/api/learning/voice/rate-limit";
-import { DEFAULT_VOICE, SUPPORTED_VOICES } from "../src/lib/voice-runtime";
 
 const client = readFileSync(
   new URL(
@@ -41,14 +40,37 @@ const realtimeRoute = readFileSync(
   ),
   "utf8",
 );
+const managedVoiceRoute = readFileSync(
+  new URL("../src/lib/supabase/managed-voice.ts", import.meta.url),
+  "utf8",
+);
+const managedVoiceProvider = readFileSync(
+  new URL(
+    "../../../infra/supabase/functions/learning-provider-voice/index.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const supabaseConfig = readFileSync(
+  new URL("../../../infra/supabase/config.toml", import.meta.url),
+  "utf8",
+);
+const voiceRuntime = readFileSync(
+  new URL("../src/lib/voice-runtime.ts", import.meta.url),
+  "utf8",
+);
 
 test("production voice uses bounded ephemeral WebM transcription", () => {
-  assert.match(transcriptionRoute, /"gpt-4o-mini-transcribe"/);
-  assert.match(transcriptionRoute, /rawAudioStored: false/);
+  assert.match(managedVoiceProvider, /"gpt-4o-mini-transcribe"/);
+  assert.match(managedVoiceProvider, /rawAudioStored: false/);
   assert.match(transcriptionRoute, /voiceTenantContext\(request, true\)/);
-  assert.match(transcriptionRoute, /context\.membershipId/);
+  assert.match(transcriptionRoute, /!context\.membershipId/);
   assert.match(transcriptionRoute, /validDeclaredDuration/);
-  assert.doesNotMatch(transcriptionRoute, /\.from\(|storage\.|writeFile|appendFile/);
+  assert.match(managedVoiceProvider, /MAX_AUDIO_BYTES = 10 \* 1024 \* 1024/);
+  assert.doesNotMatch(
+    managedVoiceProvider,
+    /storage\.|writeFile|appendFile/,
+  );
 });
 
 test("voice transcript follows the durable grounded response path", () => {
@@ -64,7 +86,7 @@ test("voice transcript follows the durable grounded response path", () => {
 test("speech reads a tenant-authorized saved answer with disclosed synthetic voice", () => {
   assert.match(speechRoute, /"learning_get_conversations"/);
   assert.match(speechRoute, /candidate\.actorType === "assistant"/);
-  assert.match(speechRoute, /"gpt-4o-mini-tts"/);
+  assert.match(managedVoiceProvider, /"gpt-4o-mini-tts"/);
   assert.match(speechRoute, /voice: voiceProfile\.voice/);
   assert.match(speechRoute, /"X-AI-Generated-Voice": "true"/);
   assert.match(
@@ -164,21 +186,79 @@ test("voice speaks the tenant's configured voice, never a hardcoded one", () => 
     assert.match(route, /resolveTenantVoice\(/);
     assert.doesNotMatch(route, /"marin"/);
   }
-  assert.equal(DEFAULT_VOICE, "marin");
-  assert.ok((SUPPORTED_VOICES as readonly string[]).includes("cedar"));
+  assert.match(voiceRuntime, /DEFAULT_VOICE = "marin"/);
+  assert.match(voiceRuntime, /SUPPORTED_VOICES[\s\S]*"cedar"/);
 });
 
 test("voice quota is decided durably, not by a per-process map", () => {
-  // The process map reset on every serverless cold start, so it bounded
-  // nothing. SQL is now authoritative for all three voice routes.
+  // The provider boundary itself reserves quota, so a caller cannot bypass it
+  // by invoking the JWT-protected function directly.
   for (const route of [transcriptionRoute, speechRoute, realtimeRoute]) {
-    assert.match(route, /await enforceVoiceQuota\(/);
     assert.doesNotMatch(route, /consumeVoiceQuota\(/);
+    assert.match(route, /invokeManagedVoice\(/);
   }
+  assert.match(managedVoiceProvider, /learning_reserve_provider_call/);
+  assert.match(managedVoiceProvider, /voice\.transcribe/);
+  assert.match(managedVoiceProvider, /voice\.speak/);
+  assert.match(managedVoiceProvider, /voice\.realtime/);
 });
 
 test("every voice provider call is metered", () => {
-  assert.match(transcriptionRoute, /meterVoiceUsage\([\s\S]*"audio_seconds"/);
-  assert.match(speechRoute, /meterVoiceUsage\([\s\S]*"characters"/);
-  assert.match(realtimeRoute, /meterVoiceUsage\([\s\S]*"realtime_sessions"/);
+  assert.match(managedVoiceProvider, /learning_record_provider_cost/);
+  assert.match(
+    managedVoiceProvider,
+    /action: "transcribe"[\s\S]*unit: "audio_seconds"/,
+  );
+  assert.match(
+    managedVoiceProvider,
+    /action: "speak"[\s\S]*unit: "characters"/,
+  );
+  assert.match(
+    managedVoiceProvider,
+    /action: "realtime"[\s\S]*unit: "realtime_sessions"/,
+  );
+});
+
+test("managed voice never requires or exposes a provider key in Next", () => {
+  for (const route of [
+    transcriptionRoute,
+    speechRoute,
+    realtimeRoute,
+    managedVoiceRoute,
+  ]) {
+    assert.doesNotMatch(route, /OPENAI_API_KEY/);
+    assert.doesNotMatch(route, /api\.openai\.com/);
+  }
+  assert.match(managedVoiceRoute, /functions\/v1\/learning-provider-voice/);
+  assert.match(managedVoiceProvider, /learning_provider_runtime_credential/);
+  assert.match(managedVoiceProvider, /Deno\.env\.get\("OPENAI_API_KEY"\)/);
+  assert.match(
+    supabaseConfig,
+    /\[functions\.learning-provider-voice\]\s+verify_jwt = true/u,
+  );
+});
+
+test("managed voice revalidates identity, tenant, and managed access", () => {
+  assert.match(managedVoiceProvider, /authClient\.auth\.getUser/);
+  assert.match(managedVoiceProvider, /auth_current_access_state/);
+  assert.match(managedVoiceProvider, /must_change_password/);
+  assert.match(managedVoiceProvider, /auth_current_tenant_context/);
+  assert.match(managedVoiceProvider, /context\.tenant_id !== tenantId/);
+  assert.match(managedVoiceProvider, /MAX_JSON_BYTES = 64 \* 1024/);
+  assert.match(managedVoiceProvider, /MAX_SDP_BYTES = 32 \* 1024/);
+});
+
+test("GA realtime WebRTC uses plain unified-interface multipart fields", () => {
+  assert.match(
+    managedVoiceProvider,
+    /providerBody\.set\("sdp", sdp\)/,
+  );
+  assert.match(
+    managedVoiceProvider,
+    /providerBody\.set\("session", JSON\.stringify\(session\)\)/,
+  );
+  assert.doesNotMatch(
+    managedVoiceProvider,
+    /providerBody\.set\(\s*"sdp",\s*new Blob/u,
+  );
 });

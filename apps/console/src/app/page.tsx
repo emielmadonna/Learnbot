@@ -1,287 +1,322 @@
 import Link from "next/link";
+import { CorsoIcon } from "../components/corso/corso-icon";
+import { CorsoMark } from "../components/corso/corso-mark";
 import "./landing.css";
 
-function LearningBotMark() {
+function CourseStill() {
   return (
-    <span className="lbMark" aria-hidden="true">
-      <i />
-      <i />
-      <i />
-    </span>
-  );
-}
-
-function CourseDemo() {
-  return (
-    <div className="lbDemoFrame">
-      <div className="lbCommunityBar">
-        <div className="lbCommunityName">
-          Freelance Pricing Lab <span>· Community</span>
-        </div>
-        <div className="lbCommunityTabs" aria-hidden="true">
-          <span>Feed</span>
-          <span data-active="true">Course</span>
-          <span>Members</span>
-        </div>
+    <div className="corsoStill" id="widget">
+      <div className="corsoCommunityBar">
+        <b>Freelance Pricing Lab</b>
+        <span>Feed</span>
+        <span data-active>Course</span>
+        <span>Members</span>
       </div>
-      <div className="lbThread">
-        <p className="lbThreadMeta">Module 3 · Pricing without flinching</p>
-        <p className="lbThreadPost">
-          How do I raise my rate with a client who&apos;s paid the old price
-          for a year? I don&apos;t want to sound defensive.
-        </p>
-        <div className="lbReply">
-          <span className="lbReplyAvatar" aria-hidden="true">
-            <LearningBotMark />
+      <div className="corsoLesson">
+        <p>Module 3</p>
+        <h3>Pricing without flinching</h3>
+        <div className="corsoLines" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+          <i />
+        </div>
+        <div className="corsoVideo">lesson video</div>
+      </div>
+      <aside className="corsoWidget">
+        <header>
+          <span>
+            <CorsoMark color="#fff" size={17} />
           </span>
-          <div className="lbReplyBody">
-            <p>
-              Lead with the value recap before you say the number. Lesson 3.2
-              has you name three outcomes you&apos;ve delivered, then state
-              the new rate once — no apology, no over-explaining.
-              <span className="lbCitationMark">1</span>
-            </p>
-            <ol>
-              <li>
-                <b>1</b>
-                <span>Recap: name three results from the last year.</span>
-              </li>
-              <li>
-                <b>2</b>
-                <span>State the new rate once. Don&apos;t soften it twice.</span>
-              </li>
-              <li>
-                <b>3</b>
-                <span>
-                  Give the start date. The template mirrors this order.
-                  <span className="lbCitationMark">2</span>
-                </span>
-              </li>
-            </ol>
-            <div className="lbGroundedRow">
-              <span className="lbGroundedLabel">Grounded in 2 course sources</span>
-              <span className="lbSourceCount">2 sources</span>
-            </div>
+          <div>
+            <b>Pricing Lab Assistant</b>
+            <small>Reads all 24 lessons</small>
+          </div>
+        </header>
+        <div className="corsoMessages">
+          <p data-person="student">
+            How do I raise my rate after a year?
+          </p>
+          <div data-person="assistant">
+            Lead with the value recap before the number. Name three results,
+            state the rate <b>once</b>, give a start date.
+            <span>
+              <CorsoIcon name="learning" size={13} />
+              Lesson 3.2 — The value recap
+              <i>›</i>
+            </span>
           </div>
         </div>
-        <div className="lbSources">
-          <span className="lbSourceItem">
-            <b>1</b> Lesson 3.2 — The value recap
-          </span>
-          <span className="lbSourceItem">
-            <b>2</b> Client email pack — Rate increase template
-          </span>
-        </div>
-      </div>
+      </aside>
     </div>
   );
 }
 
-function PlatformLanding() {
+const plans = [
+  {
+    name: "Creator",
+    description: "One course, one community.",
+    price: "$39",
+    note: "billed yearly · $49 monthly",
+    features: [
+      "1 workspace, unlimited lessons",
+      "1,000 questions / month",
+      "Full widget branding",
+      "Insights and revision history",
+    ],
+    excludedFeatures: ["Signals"],
+  },
+  {
+    name: "Studio",
+    description: "Several courses, and the signals behind them.",
+    price: "$99",
+    note: "billed yearly · $124 monthly",
+    featured: true,
+    features: [
+      "Up to 5 workspaces",
+      "5,000 questions / month",
+      "Signals and the students behind them",
+      "Choose your AI model",
+      "Circle and website installation",
+    ],
+    excludedFeatures: [] as string[],
+  },
+  {
+    name: "Platform",
+    description: "For agencies running assistants for clients.",
+    price: "Talk to us",
+    note: "from $600/month",
+    features: [
+      "Unlimited client workspaces",
+      "Admin console and client preview",
+      "Choose what each client sees",
+      "Bring your own provider key",
+      "Pooled volume across clients",
+    ],
+    excludedFeatures: [] as string[],
+  },
+];
+
+export default function HomePage() {
   return (
-    <main className="lbLanding">
-      <header className="lbNav">
-        <nav className="lbWrap lbNavInner" aria-label="Primary navigation">
-          <Link className="lbBrand" href="/" aria-label="LearningBot home">
-            <LearningBotMark />
-            <b>LearningBot</b>
+    <main className="corsoLanding" data-ground="light">
+      <header className="corsoNav">
+        <nav className="corsoWrap" aria-label="Primary navigation">
+          <Link className="corsoBrand" href="/" aria-label="Corso home">
+            <CorsoMark size={21} />
+            <b>Corso</b>
           </Link>
-          <div className="lbNavLinks">
-            <a href="#demo">See it work</a>
-            <a href="#how-it-works">How it works</a>
-            <a href="#foundation">Foundation</a>
+          <div className="corsoNavLinks">
+            <a href="#how">How it works</a>
+            <a href="#widget">The widget</a>
+            <a href="#insights">Insights</a>
+            <a href="#pricing">Pricing</a>
+            <a href="#security">Security</a>
           </div>
-          <div className="lbNavActions">
-            <Link className="lbSignIn" href="/auth/sign-in">
-              Sign in
-            </Link>
-            <Link className="lbBtn lbBtnPrimary lbBtnSmall" href="/auth/sign-in">
-              Get started
+          <div className="corsoNavActions">
+            <Link href="/auth/sign-in">Sign in</Link>
+            <Link className="corsoButton corsoPrimary corsoSmall" href="/auth/sign-in">
+              Open Corso
             </Link>
           </div>
         </nav>
       </header>
 
-      <section className="lbHero">
-        <div className="lbWrap lbHeroInner">
-          <p className="lbEyebrow">For course creators on Circle</p>
-          <h1 className="lbHeroTitle">
-            An assistant for your course that only knows your course.
-          </h1>
-          <p className="lbHeroSub">
-            Publish your lessons, and students can ask questions right where
-            they&apos;re already learning. Every answer is grounded in what
-            you actually taught — cited, or refused, never invented.
+      <section className="corsoHero">
+        <div className="corsoHeroInner">
+          <p className="corsoKicker">
+            A course assistant for Circle communities
           </p>
-          <div className="lbHeroActions">
-            <Link className="lbBtn lbBtnPrimary" href="/auth/sign-in">
-              Sign in <span aria-hidden="true">→</span>
+          <h1>
+            Your course,
+            <br />
+            answering.
+          </h1>
+          <p className="corsoHeroCopy">
+            Corso reads the lessons you publish and answers your students
+            inside your community — citing the exact lesson, or saying it
+            doesn&apos;t know. You get back a running record of what everyone
+            is stuck on.
+          </p>
+          <div className="corsoActions">
+            <Link className="corsoButton corsoPrimary" href="/auth/sign-in">
+              Open Corso
             </Link>
-            <a className="lbBtn lbBtnGhost" href="#demo">
-              See it answer a question
+            <a className="corsoButton corsoSecondary" href="#widget">
+              Watch it answer ›
             </a>
           </div>
-          <p className="lbHeroNote">
-            One private workspace per course. Nothing an assistant answers
-            with came from outside what you published.
+          <p className="corsoNote">
+            No card · one script tag · works with the course you already have
           </p>
         </div>
       </section>
 
-      <section className="lbDemo" id="demo">
-        <div className="lbWrap">
-          <div className="lbDemoIntro">
-            <h2>What a student sees, inside the course.</h2>
+      <div className="corsoWrap corsoStillWrap">
+        <CourseStill />
+      </div>
+
+      <section className="corsoSection" id="how">
+        <div className="corsoWrap">
+          <div className="corsoSectionHead">
+            <h2>Three things, in order</h2>
             <p>
-              A question in the course thread, answered from the lesson you
-              published — with the exact source named, the way it renders
-              for a real student.
+              There is no fourth thing, and none of it happens outside your
+              workspace.
             </p>
           </div>
-          <CourseDemo />
-        </div>
-      </section>
-
-      <section className="lbFeatures" id="how-it-works">
-        <div className="lbWrap">
-          <div className="lbFeatureGrid">
-            <article className="lbFeatureCard">
-              <span className="lbFeatureIcon" aria-hidden="true">
-                ◇
+          <div className="corsoSteps">
+            <article>
+              <span>
+                <CorsoIcon name="learning" size={21} />
               </span>
-              <h3>Grounded, or it says so</h3>
+              <h3>You publish your course</h3>
               <p>
-                When your course doesn&apos;t cover something, the assistant
-                refuses rather than guessing. Answers only ever draw from
-                lessons you&apos;ve published.
+                Write modules and lessons, or paste what you have. Publishing
+                makes it answerable the same second — no ingestion queue.
+                Every publish can be rolled back.
               </p>
             </article>
-            <article className="lbFeatureCard">
-              <span className="lbFeatureIcon" aria-hidden="true">
-                ¶
+            <article>
+              <span>
+                <CorsoIcon name="conversation" size={21} />
               </span>
-              <h3>Answers that read like answers</h3>
+              <h3>Students ask, in your community</h3>
               <p>
-                Headings, lists, bold and code render properly in every
-                reply — never a wall of raw markdown, and a learner&apos;s
-                own words are never reinterpreted as formatting.
+                One script tag puts it on your Circle site in your name, your
+                colour, your icon. It answers only from your lessons and names
+                the ones it used. When you never covered it, it says so.
               </p>
             </article>
-            <article className="lbFeatureCard">
-              <span className="lbFeatureIcon" aria-hidden="true">
-                ✎
+            <article>
+              <span>
+                <CorsoIcon name="results" size={21} />
               </span>
-              <h3>Write once, answer from it immediately</h3>
+              <h3>You find out what they&apos;re stuck on</h3>
               <p>
-                Author your course in modules and lessons, publish, and the
-                assistant can cite it the same moment — no separate
-                ingestion step to wait on.
-              </p>
-            </article>
-            <article className="lbFeatureCard">
-              <span className="lbFeatureIcon" aria-hidden="true">
-                ↻
-              </span>
-              <h3>Publish, roll back, publish again</h3>
-              <p>
-                Every course keeps its revision history. If a change goes
-                out wrong, roll the whole course back to what students saw
-                before.
+                Every question is labelled as it lands. Repeats, refusals and
+                unhelpful answers group into signals — the lesson to rewrite
+                this week, and the student worth replying to yourself.
               </p>
             </article>
           </div>
         </div>
       </section>
 
-      <section className="lbFoundation" id="foundation">
-        <div className="lbWrap lbFoundationInner">
-          <div className="lbFoundationCopy">
-            <h2>Built on real isolation, not a shared prompt.</h2>
+      <section className="corsoSignals" id="insights">
+        <div className="corsoWrap">
+          <div>
+            <p className="corsoMono">Signals</p>
+            <h2>The questions are the product.</h2>
             <p>
-              Every course creator gets a private workspace. Roles come from
-              the database on every request — never from a token a browser
-              could hold onto or forge.
+              A support bot deflects tickets. Corso tells you what to teach
+              next. Every refusal is a hole in your course; every repeated
+              question is a lesson that isn&apos;t landing.
+            </p>
+            <p>
+              And when one student asks eleven advanced questions in a week,
+              you&apos;ll know before they churn — or before they&apos;d have
+              said yes to your next offer.
             </p>
           </div>
-          <div className="lbFoundationList">
-            <div className="lbFoundationItem">
-              <span aria-hidden="true">◎</span>
-              <div>
-                <strong>One workspace per course</strong>
-                <p>
-                  Your students, your content, and your assistant&apos;s
-                  answers stay inside your workspace — never mixed with
-                  another creator&apos;s.
-                </p>
-              </div>
-            </div>
-            <div className="lbFoundationItem">
-              <span aria-hidden="true">◐</span>
-              <div>
-                <strong>Your color, kept readable</strong>
-                <p>
-                  Pick a brand color for your assistant. It&apos;s checked
-                  against WCAG contrast and corrected automatically — you
-                  never see an error about a hex value.
-                </p>
-              </div>
-            </div>
-            <div className="lbFoundationItem">
-              <span aria-hidden="true">✓</span>
-              <div>
-                <strong>Database-backed roles</strong>
-                <p>
-                  Every meaningful action runs through a database function
-                  under row-level security, not a role claimed by the
-                  client.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="lbFinalCta">
-        <div className="lbWrap">
-          <div className="lbFinalCtaInner">
-            <div className="lbFinalCtaCopy">
-              <h2>Your course, ready to answer for itself.</h2>
+          <div className="corsoSignalList">
+            <article data-tone="alert">
+              <h3>
+                17 people wanted a rate-increase template you never wrote
+              </h3>
               <p>
-                Sign in to set up your workspace, publish a course, and see
-                the assistant answer from it.
+                Refused every time rather than invented. Six of them left
+                instead of rephrasing.
               </p>
-            </div>
-            <div className="lbFinalActions">
-              <Link className="lbBtn lbBtnPrimary" href="/auth/sign-in">
-                Sign in <span aria-hidden="true">→</span>
-              </Link>
-              <a className="lbBtn lbBtnGhost" href="#demo">
-                Watch it answer again
-              </a>
-            </div>
+            </article>
+            <article data-tone="good">
+              <h3>Four students are asking past the end of your course</h3>
+              <p>
+                Retainers, hiring, when to stop doing the work. Your next
+                product, described by the people who&apos;d buy it.
+              </p>
+            </article>
           </div>
         </div>
       </section>
 
-      <footer className="lbFooter">
-        <div className="lbWrap lbFooterInner">
-          <Link className="lbBrand" href="/">
-            <LearningBotMark />
-            <b>LearningBot</b>
+      <section className="corsoPricing" id="pricing">
+        <div className="corsoWrap">
+          <div className="corsoSectionHead">
+            <h2>Pricing</h2>
+            <p>
+              One workspace per course. Questions counted monthly, never cut
+              off mid-answer.
+            </p>
+          </div>
+          <div className="corsoPlans">
+            {plans.map((plan) => (
+              <article data-featured={plan.featured || undefined} key={plan.name}>
+                {plan.featured ? <em>Most creators start here</em> : null}
+                <h3>{plan.name}</h3>
+                <p>{plan.description}</p>
+                <div className="corsoPrice">
+                  {plan.price}
+                  {plan.name === "Platform" ? null : <span>/month</span>}
+                </div>
+                <small>{plan.note}</small>
+                <Link
+                  className={
+                    plan.featured
+                      ? "corsoButton corsoPrimary"
+                      : "corsoButton corsoSecondary"
+                  }
+                  href="/auth/sign-in"
+                >
+                  {plan.name === "Platform" ? "Open platform" : "Sign in"}
+                </Link>
+                <ul>
+                  {plan.features.map((feature) => (
+                    <li key={feature}>✓ {feature}</li>
+                  ))}
+                  {plan.excludedFeatures.map((feature) => (
+                    <li data-excluded key={feature}>
+                      — {feature}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+          <p className="corsoPricingNote">
+            Every plan includes the full security model. Overage is $0.02 a
+            question — we never cut a student off mid-answer.
+          </p>
+        </div>
+      </section>
+
+      <section className="corsoFinal" id="security">
+        <h2>Let the course answer for itself.</h2>
+        <p>
+          Publish one lesson and ask it a question. That&apos;s the whole
+          evaluation.
+        </p>
+        <div className="corsoActions">
+          <Link className="corsoButton corsoPrimary" href="/auth/sign-in">
+            Open Corso
           </Link>
-          <div className="lbFooterLinks">
-            <a href="#demo">See it work</a>
-            <a href="#foundation">Foundation</a>
-            <Link href="/api/health">Service status</Link>
+          <a className="corsoButton corsoSecondary" href="#how">
+            See how it works
+          </a>
+        </div>
+      </section>
+
+      <footer className="corsoFooter">
+        <div className="corsoWrap">
+          <span>© {new Date().getFullYear()} Corso</span>
+          <div>
+            <span>Privacy</span>
+            <a href="#security">Security</a>
+            <Link href="/api/health">Status</Link>
             <Link href="/auth/sign-in">Sign in</Link>
           </div>
-          <p className="lbFooterLegal">© {new Date().getFullYear()} LearningBot</p>
         </div>
       </footer>
     </main>
   );
-}
-
-export default function HomePage() {
-  return <PlatformLanding />;
 }

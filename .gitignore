@@ -3,6 +3,8 @@ node_modules.slow/
 .pnpm-store/
 .next/
 .next-dev/
+.next-dev
+node_modules.cloud-codex-*/
 dist/
 build/
 coverage/
@@ -23,4 +25,5 @@ coverage/
 infra/supabase/release/*.approval.json
 infra/supabase/.release-evidence/
 infra/supabase/.temp/
+**/supabase/.temp/
 .vercel

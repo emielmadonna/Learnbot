@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { CorsoMark } from "../../../components/corso/corso-mark";
 import { readSupabasePublicConfig } from "../../../lib/supabase/config";
 import { createServerSupabaseClient } from "../../../lib/supabase/server";
 import { safeRelativePath } from "../../../lib/supabase/auth-boundary";
@@ -34,7 +35,24 @@ export default async function SignInPage({
     readSupabasePublicConfig();
     const supabase = await createServerSupabaseClient();
     const result = await supabase.auth.getUser();
-    authenticated = Boolean(result.data.user && !result.error);
+    const user = result.data.user;
+    // This predicate must stay identical to `requireVerifiedUser` in
+    // lib/supabase/auth-boundary.ts. It used to be the weaker
+    // `Boolean(user && !error)`, and that difference was a redirect loop:
+    // /auth/change-password calls `requireVerifiedUser`, which rejects a
+    // session whose email (or phone) was never confirmed and bounces to
+    // /auth/sign-in?next=/auth/change-password; this page then saw the same
+    // session as authenticated and redirected straight back. A user in that
+    // state — an invited account that never confirmed — got
+    // ERR_TOO_MANY_REDIRECTS instead of a sign-in form. Treating an unverified
+    // session as not-signed-in here renders the form, which is the only screen
+    // that can actually resolve the state.
+    authenticated = Boolean(
+      user &&
+        !result.error &&
+        !user.is_anonymous &&
+        (user.email_confirmed_at || user.phone_confirmed_at),
+    );
   } catch {
     configured = false;
   }
@@ -44,78 +62,36 @@ export default async function SignInPage({
   }
 
   return (
-    <main className={styles.shell}>
-      <div className={styles.frame}>
-        <nav className={styles.floatingNav} aria-label="Secure access">
-          <Link className={styles.brand} href="/">
-            <span className={styles.brandMark}>L</span>
-            <span>
-              <b>LearningBot</b>
-              <small>Enterprise learning</small>
-            </span>
-          </Link>
-          <span className={styles.secureLabel}>Administrator-managed access</span>
-        </nav>
-        <div className={styles.authLayout}>
-          <section className={styles.authIntro}>
-            <p className={styles.eyebrow}>One place to learn</p>
-            <h1 className={styles.displayTitle}>
-              Knowledge that moves with your work.
-            </h1>
-            <p>
-              Ask, listen, practice, and keep making progress in one private
-              learning workspace grounded in your organization’s knowledge.
-            </p>
-            <div className={styles.trustLine}>
-              <span aria-hidden="true">✓</span>
-              Your workspace and learning sources appear after secure sign-in.
-            </div>
-          </section>
-          <section className={styles.card}>
-            <div className={styles.progress} aria-label="First sign-in progress">
-              <span data-active="true">
-                <b>1</b> Sign in
-              </span>
-              <i />
-              <span>
-                <b>2</b> Secure
-              </span>
-              <i />
-              <span>
-                <b>3</b> Enter
-              </span>
-            </div>
-            <p className={styles.eyebrow}>Secure access</p>
-            <h2 className={styles.title}>Welcome back.</h2>
-            <p className={styles.lede}>
-              Sign in with the work email and password provided by your
-              administrator. LearningBot does not offer public account creation.
-            </p>
-            {!configured ? (
-              <p className={styles.error} role="alert">
-                Production authentication is not configured. Set the Supabase
-                project URL and publishable key; fixture identities are never
-                used here.
-              </p>
-            ) : null}
-            {messages[errorCode] ? (
-              <p className={styles.error} role="alert">
-                {messages[errorCode]}
-              </p>
-            ) : null}
-            {messages[status] ? (
-              <p className={styles.notice} role="status">
-                {messages[status]}
-              </p>
-            ) : null}
-            <SignInForm configured={configured} nextPath={nextPath} />
-            <p className={styles.finePrint}>
-              Need access, forgot your password, or received an expired temporary
-              password? Your organization’s LearningBot administrator can help.
-            </p>
-          </section>
-        </div>
-      </div>
+    <main className={styles.authShell} data-ground="light">
+      <section className={styles.authPanel}>
+        <Link className={styles.authMark} href="/" aria-label="Corso home">
+          <CorsoMark size={34} />
+        </Link>
+        <h1 className={styles.authTitle}>Sign in to Corso</h1>
+        <p className={styles.authLede}>
+          Use the address your workspace was created with.
+        </p>
+        {!configured ? (
+          <p className={styles.error} role="alert">
+            Secure sign-in is not configured for this environment.
+          </p>
+        ) : null}
+        {messages[errorCode] ? (
+          <p className={styles.error} role="alert">
+            {messages[errorCode]}
+          </p>
+        ) : null}
+        {messages[status] ? (
+          <p className={styles.notice} role="status">
+            {messages[status]}
+          </p>
+        ) : null}
+        <SignInForm configured={configured} nextPath={nextPath} />
+        <p className={styles.authFootnote}>
+          Invited by a course creator? Open the invitation link — signing in
+          won’t find your workspace yet.
+        </p>
+      </section>
     </main>
   );
 }

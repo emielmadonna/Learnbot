@@ -56,6 +56,13 @@ export async function GET(request: Request) {
           welcomeCopy: branding.welcomeCopy,
           launcherLabel: branding.launcherLabel,
           launcherPosition: branding.launcherPosition,
+          launcherShape: bootstrap.widget.launcherShape,
+          greetingBubbleEnabled:
+            bootstrap.widget.greetingBubbleEnabled,
+          greetingBubbleDelaySeconds:
+            bootstrap.widget.greetingBubbleDelaySeconds,
+          showPoweredBy: bootstrap.widget.showPoweredBy,
+          appearanceMode: bootstrap.widget.appearanceMode,
           voiceEnabled: branding.voiceEnabled,
           // Brand assets live in the public `widget-public` bucket under the
           // widget key, so the URL discloses no tenant identifier and needs no

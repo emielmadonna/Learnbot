@@ -10,7 +10,7 @@ export default async function ConversationPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const parameters = await searchParams;
-  const next = new URLSearchParams({ panel: "agent" });
+  const next = new URLSearchParams({ panel: "agent", view: "talk" });
   for (const key of ["mode", "courseId", "lessonId"]) {
     const value = parameters[key];
     if (typeof value === "string" && value) next.set(key, value);

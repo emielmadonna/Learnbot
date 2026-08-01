@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0025_hybrid_rpc_execution_boundary.
+-- The executable migration is maintained as 0025_hybrid_rpc_execution_boundary.sql.

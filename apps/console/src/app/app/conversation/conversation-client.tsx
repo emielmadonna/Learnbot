@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -15,6 +16,7 @@ import type { AgentConfig } from "../../../components/app-shell/contract";
 import {
   AvatarCharacter,
   type AvatarPose,
+  type AvatarPoseUrls,
 } from "../../../components/avatar-character";
 import { PlainText, RichText } from "../../../components/ui/rich-text";
 import { recordUsageEvent } from "../usage-signal";
@@ -36,6 +38,18 @@ type SourceEvidence = {
   excerpt: string;
   courseTitle: string | null;
   lessonTitle: string | null;
+  visual: {
+    visualAssetId: string;
+    title: string;
+    altText: string;
+    mediaType:
+      | "image/jpeg"
+      | "image/png"
+      | "image/svg+xml"
+      | "image/webp"
+      | "video/mp4";
+    url: string;
+  } | null;
 };
 
 type ConversationMessage = {
@@ -262,8 +276,119 @@ function AssistantAnswer({ message }: { message: ConversationMessage }) {
   );
 }
 
+/**
+ * "Was that helpful?" under a finished answer.
+ *
+ * Deliberately local state plus one POST, with no optimistic rollback: a
+ * rating that fails to save shows as unsaved rather than silently pretending,
+ * because the whole value of this control is that the number it feeds is
+ * trustworthy. Re-rating is allowed and UPDATES server-side, so the tenant's
+ * score counts people rather than clicks.
+ *
+ * Only rendered for a message whose id came from the server. A locally
+ * generated fallback id (see the `crypto.randomUUID()` path in the non-stream
+ * branch) names no durable row, so rating it would always 404.
+ */
+/**
+ * `prefers-reduced-motion`, readable from JS.
+ *
+ * The stylesheet already stops every CSS animation on this surface for a
+ * reduced-motion reader, but the assistant orb's vapour is driven by SMIL
+ * `<animate>` elements inside an SVG filter, and SMIL is not affected by CSS
+ * at all — `animation: none` cannot reach it. Without this gate the noise
+ * field kept flowing for exactly the people who asked for it not to.
+ *
+ * Defaults to TRUE, i.e. no motion, until the browser confirms otherwise. The
+ * cost is that everyone else's vapour starts a frame late; the alternative is
+ * a burst of motion in the face of someone who asked for none, which is the
+ * failure that actually matters.
+ */
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(true);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      setReduced(false);
+      return;
+    }
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => setReduced(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
+  return reduced;
+}
+
+/**
+ * A persisted message id. The streaming placeholder is `assistant-<uuid>`,
+ * which deliberately does NOT match — see `reconcilePersistedMessageId`.
+ */
+const PERSISTED_MESSAGE_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+function AnswerFeedback({ messageId }: { messageId: string }) {
+  const [rating, setRating] = useState<"helpful" | "not_helpful" | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  async function rate(next: "helpful" | "not_helpful") {
+    const previous = rating;
+    setRating(next);
+    setFailed(false);
+    try {
+      const response = await fetch("/api/learning/feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messageId, rating: next }),
+      });
+      if (!response.ok) throw new Error("rating_rejected");
+    } catch {
+      setRating(previous);
+      setFailed(true);
+    }
+  }
+
+  return (
+    <div className={styles.answerFeedback}>
+      <span>{rating === null ? "Did that help?" : "Thanks — noted."}</span>
+      <button
+        aria-pressed={rating === "helpful"}
+        className={styles.feedbackButton}
+        data-chosen={rating === "helpful" || undefined}
+        onClick={() => void rate("helpful")}
+        type="button"
+      >
+        Yes
+      </button>
+      <button
+        aria-pressed={rating === "not_helpful"}
+        className={styles.feedbackButton}
+        data-chosen={rating === "not_helpful" || undefined}
+        onClick={() => void rate("not_helpful")}
+        type="button"
+      >
+        Not really
+      </button>
+      {failed ? (
+        <small role="status">Not saved — try again.</small>
+      ) : null}
+    </div>
+  );
+}
+
 function normalizeSource(value: unknown, index: number): SourceEvidence | null {
   if (!isRecord(value)) return null;
+  const visualValue = isRecord(value.visual) ? value.visual : null;
+  const visualAssetId = stringValue(visualValue?.visualAssetId);
+  const visualUrl = stringValue(visualValue?.url);
+  const rawVisualMediaType = stringValue(visualValue?.mediaType);
+  const visualMediaType =
+    rawVisualMediaType === "image/jpeg" ||
+    rawVisualMediaType === "image/png" ||
+    rawVisualMediaType === "image/svg+xml" ||
+    rawVisualMediaType === "image/webp" ||
+    rawVisualMediaType === "video/mp4"
+      ? rawVisualMediaType
+      : "image/png";
   const excerpt =
     stringValue(value.excerpt) ??
     stringValue(value.content) ??
@@ -281,7 +406,40 @@ function normalizeSource(value: unknown, index: number): SourceEvidence | null {
     excerpt,
     courseTitle: stringValue(value.courseTitle),
     lessonTitle: stringValue(value.lessonTitle),
+    visual:
+      visualAssetId &&
+      visualUrl === `/api/learning/visuals/${visualAssetId}/content` &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+        visualAssetId,
+      )
+        ? {
+            visualAssetId,
+            title:
+              stringValue(visualValue?.title) ??
+              stringValue(value.title) ??
+              "Course visual",
+            altText:
+              stringValue(visualValue?.altText) ??
+              "Course visual",
+            mediaType: visualMediaType,
+            url: visualUrl,
+          }
+        : null,
   };
+}
+
+function uniqueVisualSources(sources: readonly SourceEvidence[]) {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    if (
+      source.visual === null ||
+      seen.has(source.visual.visualAssetId)
+    ) {
+      return false;
+    }
+    seen.add(source.visual.visualAssetId);
+    return true;
+  });
 }
 
 function normalizeMessage(
@@ -498,6 +656,8 @@ export default function ConversationClient({
   initialCourseId,
   initialLessonId,
   courses,
+  surface = "page",
+  suggestedQuestion = null,
 }: {
   assistantName: string;
   tenantName: string;
@@ -507,6 +667,8 @@ export default function ConversationClient({
   initialCourseId: string | null;
   initialLessonId: string | null;
   courses: CourseOption[];
+  surface?: "page" | "panel";
+  suggestedQuestion?: { id: string; text: string } | null;
 }) {
   const [mode, setMode] = useState<"text" | "voice">(initialMode);
   const [learningIntent, setLearningIntent] =
@@ -557,7 +719,15 @@ export default function ConversationClient({
   // both render exactly like an unbranded tenant.
   const [brandAccent, setBrandAccent] = useState<string | null>(null);
   const [brandGlyph, setBrandGlyph] = useState("");
+  const [avatarPoseUrls, setAvatarPoseUrls] = useState<AvatarPoseUrls>({});
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!suggestedQuestion) return;
+    setMode("text");
+    setDraft(suggestedQuestion.text);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [suggestedQuestion]);
   const feedEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -690,6 +860,41 @@ export default function ConversationClient({
     };
   }, []);
 
+  // A published set is the only avatar learners may see. The endpoint signs
+  // the tenant-private pose assets for this session; generation drafts and
+  // rejected versions never reach this surface.
+  useEffect(() => {
+    let active = true;
+    async function loadAvatar() {
+      try {
+        const response = await fetch("/api/learning/avatar", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!response.ok) return;
+        const payload = await readJson(response);
+        if (!active || !isRecord(payload) || !isRecord(payload.poseUrls)) return;
+        const next: AvatarPoseUrls = {};
+        for (const pose of [
+          "idle",
+          "listening",
+          "thinking",
+          "speaking",
+          "unsure",
+        ] as const) {
+          next[pose] = stringValue(payload.poseUrls[pose]);
+        }
+        setAvatarPoseUrls(next);
+      } catch {
+        // The monogram is a complete, deliberate fallback.
+      }
+    }
+    void loadAvatar();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useEffect(() => {
     let active = true;
     async function loadConversation() {
@@ -740,6 +945,77 @@ export default function ConversationClient({
       active = false;
     };
   }, [selectedCourseId, selectedLessonId]);
+
+  /**
+   * Replace a streamed answer's placeholder id with its persisted one.
+   *
+   * `learning_record_assistant_message` runs inside `after()` on the server —
+   * deliberately, and pinned by streaming-respond-contract.test.ts — so the row
+   * does not exist while the stream is open and no `done` event can carry its
+   * id. The client therefore renders `assistant-<uuid>`, which is not a real
+   * message id, and anything keyed on it (ratings) cannot work.
+   *
+   * Polling closes that gap without touching the after() contract.
+   *
+   * Matching is on CONTENT, never on "the newest assistant message". If
+   * `after()` has not finished yet the newest row is the PREVIOUS turn, and
+   * adopting its id would silently attach this answer's rating to an older
+   * one — a wrong write, which is worse than no write. Content-matching either
+   * finds this exact answer or gives up.
+   */
+  const reducedMotion = usePrefersReducedMotion();
+
+  const reconcilePersistedMessageId = useCallback(
+    async (placeholderId: string, answerText: string) => {
+      const target = answerText.trim();
+      if (target === "") return;
+      const parameters = new URLSearchParams();
+      if (selectedCourseId) parameters.set("courseId", selectedCourseId);
+      if (selectedLessonId) parameters.set("lessonId", selectedLessonId);
+      const suffix = parameters.size ? `?${parameters.toString()}` : "";
+
+      // Backs off across roughly three seconds. Giving up is a safe outcome:
+      // the answer stays on screen, only un-ratable until the next reload,
+      // which is exactly where this started.
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 300 * (attempt + 1));
+        });
+        try {
+          const response = await fetch(
+            `/api/learning/conversations${suffix}`,
+            { cache: "no-store", credentials: "same-origin" },
+          );
+          if (!response.ok) continue;
+          const normalized = normalizeConversation(await readJson(response));
+          const persisted = [...normalized.messages]
+            .reverse()
+            .find(
+              (message) =>
+                message.role === "assistant" &&
+                PERSISTED_MESSAGE_ID.test(message.messageId) &&
+                message.content.trim() === target,
+            );
+          if (!persisted) continue;
+          setMessages((current) =>
+            current.some(
+              (message) => message.messageId === persisted.messageId,
+            )
+              ? current
+              : current.map((message) =>
+                  message.messageId === placeholderId
+                    ? { ...message, messageId: persisted.messageId }
+                    : message,
+                ),
+          );
+          return;
+        } catch {
+          // A failed poll is not a failed answer. Try again, then stop.
+        }
+      }
+    },
+    [selectedCourseId, selectedLessonId],
+  );
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -997,6 +1273,11 @@ export default function ConversationClient({
             : message,
         ),
       );
+      // The answer is on screen but not yet ratable: its id is still the
+      // client-minted placeholder. Recording runs inside `after()` on the
+      // server, strictly after the response is sent, so the real id cannot
+      // arrive on the stream — poll briefly for it instead.
+      void reconcilePersistedMessageId(streamingId, assistantText);
       setLastAnswerRefused(refused);
       void recordUsageEvent("conversation.turn_completed", {
         conversationId: activeConversationId,
@@ -1904,8 +2185,8 @@ export default function ConversationClient({
       heading: "Opening your microphone…",
       description:
         realtimeAvailable
-          ? "Connecting a private WebRTC session with automatic turn detection. Raw audio is not stored by LearningBot."
-          : "Your browser will ask for permission. Raw audio is sent for transcription and is not stored by LearningBot.",
+          ? "Connecting a private WebRTC session with automatic turn detection. Raw audio is not stored by Corso."
+          : "Your browser will ask for permission. Raw audio is sent for transcription and is not stored by Corso.",
     },
     reconnecting: {
       eyebrow: "RECONNECTING",
@@ -2015,10 +2296,9 @@ export default function ConversationClient({
   // `thinking` while a request is out and no token has arrived yet,
   // `speaking` while tokens stream or voice audio plays, `listening` while
   // voice input is active, `unsure` when the last turn refused for lack of
-  // grounding, `idle` otherwise. No avatar images are wired into this
-  // workspace yet (Phase 9), so `poseUrls` is always empty and every pose
-  // renders the monogram fallback — the pose still drives the fallback's own
-  // idle/listening/thinking/speaking animation in avatar-character.module.css.
+  // grounding, `idle` otherwise. Published pose images are signed by the
+  // learner avatar endpoint; until one exists, the monogram remains the
+  // complete fallback.
   // Whether an assistant row is already in the feed for the in-flight turn
   // (it appears as soon as the `sources` SSE event arrives). Until then the
   // generic "thinking" placeholder below is what shows the avatar.
@@ -2044,7 +2324,12 @@ export default function ConversationClient({
             : "idle";
 
   return (
-    <div className={styles.workspace} data-mode={mode} style={brandVars}>
+    <div
+      className={styles.workspace}
+      data-mode={mode}
+      data-surface={surface}
+      style={brandVars}
+    >
       <div
         className={`${styles.spectralEdge} ${
           intelligenceActive ? styles.spectralEdgeActive : ""
@@ -2112,6 +2397,19 @@ export default function ConversationClient({
         </div>
 
         <div className={styles.navActions}>
+          {/* `resetConversationContext` has always existed and done exactly
+              this, but nothing called it directly — it only ever fired as a
+              side effect of changing the course or lesson. So a learner who
+              wanted a clean thread had no way to ask for one. */}
+          {messages.length > 0 ? (
+            <button
+              className={styles.startOver}
+              onClick={resetConversationContext}
+              type="button"
+            >
+              Start over
+            </button>
+          ) : null}
           <div className={styles.modeSwitch} aria-label="Conversation mode">
             <button
               className={mode === "text" ? styles.modeActive : ""}
@@ -2146,6 +2444,97 @@ export default function ConversationClient({
           >
             <div className={styles.voiceAtmosphere} aria-hidden="true" />
             <div className={styles.cloudStage} aria-hidden="true">
+              {/*
+                * Fractal-noise filters for the assistant orb.
+                *
+                * The gas inside the orb is a smooth white field displaced by
+                * `feTurbulence`. That is the only way to get CONTINUOUS vapour:
+                * layered radial gradients, however many and however blurred,
+                * stay a set of discrete round blobs — they read as cotton wool,
+                * not as smoke. Displacing one continuous field by fractal noise
+                * produces the wisps and filaments that make it look natural.
+                *
+                * The two filters run at different frequencies and drift in
+                * opposite directions, so the layers never move as one mass.
+                *
+                * IDs are global (CSS Modules does not scope SVG ids), hence the
+                * `corsoGas` prefix. Zero-sized and aria-hidden: this element is
+                * a filter definition, never a rendered graphic.
+                */}
+              <svg
+                aria-hidden="true"
+                focusable="false"
+                height="0"
+                style={{ position: "absolute" }}
+                width="0"
+              >
+                <filter
+                  height="220%"
+                  id="corsoGasA"
+                  width="220%"
+                  x="-60%"
+                  y="-60%"
+                >
+                  <feTurbulence
+                    baseFrequency="0.008 0.011"
+                    numOctaves="5"
+                    result="noise"
+                    seed="3"
+                    type="fractalNoise"
+                  >
+                    {reducedMotion ? null : (
+                      <animate
+                        attributeName="baseFrequency"
+                        dur="26s"
+                        repeatCount="indefinite"
+                        values="0.008 0.011;0.011 0.008;0.008 0.011"
+                      />
+                    )}
+                  </feTurbulence>
+                  <feDisplacementMap
+                    in="SourceGraphic"
+                    in2="noise"
+                    result="displaced"
+                    scale="190"
+                    xChannelSelector="R"
+                    yChannelSelector="G"
+                  />
+                  <feGaussianBlur in="displaced" stdDeviation="2" />
+                </filter>
+                <filter
+                  height="220%"
+                  id="corsoGasB"
+                  width="220%"
+                  x="-60%"
+                  y="-60%"
+                >
+                  <feTurbulence
+                    baseFrequency="0.009 0.007"
+                    numOctaves="4"
+                    result="noise"
+                    seed="19"
+                    type="fractalNoise"
+                  >
+                    {reducedMotion ? null : (
+                      <animate
+                        attributeName="baseFrequency"
+                        dur="19s"
+                        repeatCount="indefinite"
+                        values="0.009 0.007;0.007 0.009;0.009 0.007"
+                      />
+                    )}
+                  </feTurbulence>
+                  <feDisplacementMap
+                    in="SourceGraphic"
+                    in2="noise"
+                    result="displaced"
+                    scale="165"
+                    xChannelSelector="R"
+                    yChannelSelector="G"
+                  />
+                  <feGaussianBlur in="displaced" stdDeviation="1.8" />
+                </filter>
+              </svg>
               <span
                 className={`${styles.voiceOrb} ${styles[`voiceOrb_${voicePhase}`]}`}
                 style={
@@ -2154,9 +2543,6 @@ export default function ConversationClient({
                   } as CSSProperties
                 }
               >
-                <i />
-                <i />
-                <i />
                 <em />
               </span>
             </div>
@@ -2287,7 +2673,7 @@ export default function ConversationClient({
                         // Only the turn currently in flight reflects the live
                         // pose; a historical answer just sits idle.
                         pose={message.streaming ? avatarPose : "idle"}
-                        poseUrls={{}}
+                        poseUrls={avatarPoseUrls}
                       />
                     ) : null}
                     <div className={styles.answerLayout}>
@@ -2320,6 +2706,42 @@ export default function ConversationClient({
                             This answer stopped before it finished. Try
                             asking again.
                           </p>
+                        ) : null}
+                        {message.role === "assistant" &&
+                        message.sources.some((source) => source.visual) ? (
+                          <div
+                            className={styles.answerVisuals}
+                            aria-label="Course visuals used in this answer"
+                          >
+                            {uniqueVisualSources(message.sources).map((source) => {
+                              const visual = source.visual!;
+                              return (
+                                    <figure key={visual.visualAssetId}>
+                                      {/* The authenticated route resolves a
+                                          private stream; no object key or
+                                          storage URL reaches the browser. */}
+                                      {visual.mediaType === "video/mp4" ? (
+                                        <video
+                                          aria-label={visual.altText}
+                                          controls
+                                          playsInline
+                                          preload="metadata"
+                                          src={visual.url}
+                                        />
+                                      ) : (
+                                        <img
+                                          alt={visual.altText}
+                                          loading="lazy"
+                                          src={visual.url}
+                                        />
+                                      )}
+                                      <figcaption>
+                                        {visual.title}
+                                      </figcaption>
+                                    </figure>
+                              );
+                            })}
+                          </div>
                         ) : null}
                         {message.richParts.length ? (
                           <div className={styles.richParts}>
@@ -2397,6 +2819,22 @@ export default function ConversationClient({
                             </div>
                           </details>
                         ) : null}
+                        {/* Never on a half-arrived or truncated answer: rating
+                            those would measure the transport, not the answer.
+
+                            Also never before the message has its PERSISTED id.
+                            A streamed answer starts life as `assistant-<uuid>`,
+                            which /api/learning/feedback rejects as
+                            invalid_request — so this control used to render on
+                            every streamed answer and fail on every click.
+                            `reconcilePersistedMessageId` swaps the real id in a
+                            moment after the stream settles; it appears then. */}
+                        {message.role === "assistant" &&
+                        !message.streaming &&
+                        !message.streamError &&
+                        PERSISTED_MESSAGE_ID.test(message.messageId) ? (
+                          <AnswerFeedback messageId={message.messageId} />
+                        ) : null}
                       </div>
                   </article>
                 ))
@@ -2425,7 +2863,7 @@ export default function ConversationClient({
                     className={styles.messageAvatar ?? ""}
                     monogram={mark}
                     pose={mode === "voice" ? avatarPose : "thinking"}
-                    poseUrls={{}}
+                    poseUrls={avatarPoseUrls}
                   />
                   <div
                     className={styles.thinkingDots}

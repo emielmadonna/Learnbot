@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { isCorsoIconName } from "../corso/corso-icon";
 import type { AgentConfig } from "./contract";
 
 /**
@@ -11,10 +12,10 @@ import type { AgentConfig } from "./contract";
 
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/iu;
 
-const FALLBACK_PRIMARY = "#234f40";
-const FALLBACK_ACCENT = "#d2a85f";
-const FALLBACK_SURFACE = "#f5f4ef";
-const FALLBACK_TEXT = "#14231d";
+const FALLBACK_PRIMARY = "#4a637f";
+const FALLBACK_ACCENT = "#4a637f";
+const FALLBACK_SURFACE = "#ffffff";
+const FALLBACK_TEXT = "#1d1d1f";
 
 /** Dark counterpart used when a brand color is too light for white text. */
 const ON_LIGHT = "#101614";
@@ -95,5 +96,10 @@ export function brandStyle(agent: AgentConfig): CSSProperties {
 export function brandInitial(agent: AgentConfig, fallbackName: string) {
   const source = agent.assistantName.trim() || fallbackName.trim();
   const initial = Array.from(source)[0] ?? "";
-  return initial ? initial.toUpperCase() : agent.iconGlyph;
+  if (initial) return initial.toUpperCase();
+  // `iconGlyph` may hold a Corso icon NAME rather than a typed character. A
+  // name is meaningless as a text initial — it would render the literal word
+  // "conversation" — so only fall through to it when it really is a glyph.
+  // `BrandGlyph` draws the icon case properly wherever the mark is rendered.
+  return isCorsoIconName(agent.iconGlyph) ? "" : agent.iconGlyph;
 }

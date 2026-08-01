@@ -415,6 +415,47 @@ immediately. `LEDGER_RECONCILE.sql` was extended with both versions and re-run
 The repository and the ledger have not diverged. That is the whole point of this
 document, and it is the first time it has been true at the end of an apply.
 
+## Applied by hand 2026-07-31: widget visual media and answer feedback
+
+The live ledger was exported from the dashboard before applying anything. It
+contained 111 rows; comparison against all 113 repository versions identified
+exactly two missing versions. Object checks confirmed that both migrations were
+genuinely pending rather than previously hand-applied without a ledger entry:
+both new tables and all seven new functions were absent.
+
+Each file was applied separately through the dashboard SQL editor rather than
+the release runner, then recorded in `supabase_migrations.schema_migrations` in
+the same browser session:
+
+| Version | Name | SHA-256 actually run |
+|---|---|---|
+| 20260731060000 | `widget_visual_media_disclosure` | `ca4839e67b9d528effc71e8830b61c7053bedc14b13f2870fa44dce40bd06722` |
+| 20260731061000 | `answer_feedback_and_lesson_reception` | `1ee08da8013c43ee03b073b9d4c08f13ced503e658b4e0295b78a7969e9b95ca` |
+
+Both files are pure ASCII. Their base64 transport was verified byte-for-byte,
+and the decoded editor content was copied back and SHA-256 checked immediately
+before each run. Both destructive-operation warnings were accounted for: each
+file contains one `drop policy if exists`, followed immediately by the
+replacement deny policy.
+
+### Verified after
+
+| Check | Result |
+|---|---|
+| new tables | **2 of 2 present** |
+| new functions | **7 of 7 present** |
+| explicit indexes | **6 of 6 present** |
+| deny-direct policies | **2 of 2 present** |
+| tables with enabled and forced RLS | **2 of 2** |
+| `learning_provider_credential_state` | **1 present** |
+| `widget_get_visual_asset_for_read` | **1 present** |
+| ledger rows | 111 → **113** |
+| repository versions present in ledger | 111 of 113 → **113 of 113** |
+| `admin_provision_auth_user` md5 | `d8160032e33feaaa61d1cccb29b05d5d` before and after |
+
+The final exported ledger and the repository version list compare equal in both
+directions. There are no migrations awaiting hand-apply.
+
 ## Outstanding
 
 - Backups remain disabled (Free plan). The next hand-apply will again have no
@@ -440,3 +481,342 @@ document, and it is the first time it has been true at the end of an apply.
   as `20260724213043_platform_admin_client_detail.sql`.
 
   As with every hand-apply on this project, the ledger does not record it.
+
+## Applied by hand 2026-07-31: widget visual parts and imported-source publishing
+
+Both migrations below were **applied and recorded** on 2026-07-31, taking the
+live ledger to **115 of 115**. The protected `admin_provision_auth_user`
+fingerprint was unchanged across the apply, and `learning-admin-users` was
+deployed in the same session (now ACTIVE, version 7, JWT verification enabled,
+its source carrying `inviteLink`/`inviteLinkError`).
+
+This section was written *before* the apply, as the standard requires, and then
+sat stale for several hours afterwards: the apply was reported in conversation
+and never written back here, so the ledger went on claiming both were pending
+while they were live. That is the same class of divergence this whole document
+exists to prevent, arriving by a new route — not an unrecorded apply, but an
+unrecorded *update to the record*. Reporting an apply somewhere else is not
+recording it. Edit this file in the same session, every time.
+
+| Version | Name | SHA-256 | Bytes |
+|---|---|---|---|
+| 20260731070000 | `widget_answer_visual_parts` | `9a48b99e9b25e323...` | 9,149 |
+| 20260731071000 | `publish_imported_source_courses` | `f593cc317f40b2d5...` | 14,647 |
+
+Both are pure ASCII, deliberately: the Supabase SQL editor mangles non-ASCII on
+paste, and a corrupted character inside a `$$`-quoted body is a silent
+behaviour change rather than a syntax error. Route them through base64 anyway.
+
+What they changed (both now live):
+
+- **Widget answers can carry images.** Before this, `widget_ask` re-projects its matches
+  into a narrow object that drops `visualAssetId` / `mediaType` / `visualKind` /
+  `altText`, even though `app_private.visual_source_for_match` already enriches
+  every match with them. The answering server therefore cannot learn that a
+  cited chunk is a visual, `widget_get_visual_asset_for_read` never finds a
+  disclosure row, and the widget stays text-only. That is its behaviour today,
+  so nothing regresses; the feature simply stays dark.
+- **Connector-imported courses can now be published.** Before this,
+  `learning_publish_course` requires a `content_blocks` row joined to a live
+  `lessons` row; `learning_create_source_course` creates the destination with
+  neither, so publishing raises `check_violation: 'Course has no publishable
+  content'`. Every YouTube or external import builds its chunks correctly and
+  is then permanently unreachable, while the connector UI reports
+  "Answerable now".
+
+Neither migration alters existing data. `20260731070000` replaces one function;
+`20260731071000` replaces the publish gate and the connector sync readout.
+Rolling back means restoring the prior definitions, both of which are committed.
+
+## Awaiting hand-apply: widget question labels and ratable widget answers
+
+Committed 2026-07-31 and **not yet applied**. Recorded here before any apply,
+in the same session it was written.
+
+| Version | Name | SHA-256 | Bytes |
+|---|---|---|---|
+| 20260731080000 | `widget_question_labels_and_ratable_answers` | `a8b49f3d13e4e7b61e823802e12bddb37fb678cb28a6a3a75576dee31101be2b` | 15,114 |
+
+Pure ASCII, verified by byte scan (zero bytes above 0x7F). Route it through
+base64 anyway.
+
+Order matters only against `20260731070000`, which also replaces a widget
+function. There is no overlap: `20260731070000` replaces `public.widget_ask`,
+which this file does not touch at all.
+
+### What it does
+
+1. `public.widget_record_question_label(...)` — new. The anonymous twin of
+   `public.learning_record_question_label`, which cannot serve the widget
+   because it opens with `app_private.learning_rpc_context()` and there is no
+   session to read a tenant from. Gated by the same
+   `conversation.answer.record` operation token as `widget_record_answer`, and
+   granted to `anon` only. It names the question by the idempotency key
+   `widget_ask` already wrote it under, so no message UUID crosses the widget
+   boundary in either direction.
+2. `public.widget_record_answer` is **replaced** to add one key to its returned
+   object: `messageId`. Everything else in the body is unchanged from
+   20260726093000 — same token gate, same resolve, same validation, same
+   append. Restated in full because a plpgsql body cannot be patched in place.
+
+### Until it is applied
+
+- **Widget and hosted questions stay unlabelled**, which is their behaviour
+  today: nothing regresses. `widgetRecordQuestionLabel` reports
+  `request_failed` for the missing function, and the route logs
+  `[widget-question-classifier] label rejected by the database:
+  code=request_failed`, so the gap is visible in the log rather than silent.
+- **The widget shows no rating control.** `parseWidgetAnswerRecord` turns a
+  missing `messageId` into `null`, `/api/widget/ask` then omits `message.id`,
+  the embed adapter sets no `feedbackRef`, and the runtime renders nothing.
+  That is deliberate: the alternative is a button keyed on a client-minted id
+  that `/api/widget/feedback` refuses, which is exactly the bug the console's
+  authenticated surface shipped and had to fix.
+
+### Rollback
+
+Restoring `public.widget_record_answer` to its committed 20260726093000 body
+and `drop function public.widget_record_question_label(...)`. No existing row
+is read or rewritten by either statement; the only writes at runtime are
+`question_labels` upserts, which are keyed `(tenant_id, message_id)` and
+already idempotent.
+
+## Awaiting hand-apply: tenant capability control and the widget section key
+
+Committed 2026-07-31 and **not yet applied**. Recorded here before any apply,
+in the same session it was written.
+
+| Version | Name | SHA-256 | Bytes |
+|---|---|---|---|
+| 20260731081000 | `tenant_capability_control` | `519f399e34ee5864bdcee65199d10942d775d55eb3c1c12c5eb6e6fb6bc2676d` | 15,850 |
+
+Pure ASCII, verified with `grep '[^ -~]'` returning nothing. Route it through
+base64 anyway.
+
+Note the version: this was first written as `20260731080000` and renamed after
+a collision with `20260731080000_widget_question_labels_and_ratable_answers`,
+authored concurrently. `supabase_migrations.schema_migrations` is keyed on the
+version alone, so a duplicate is recorded once and the second file is silently
+treated as applied. `verify-structure.mjs` now refuses duplicate versions.
+
+### What it does
+
+1. `public.tenant_capability_grants` plus
+   `public.platform_admin_set_tenant_capability`,
+   `public.platform_admin_tenant_capabilities` and
+   `public.tenant_get_capabilities`. This is a new table and three new
+   functions; it replaces nothing.
+2. `widget` joins `app_private.tenant_section_definitions()` at position 6,
+   and `public.tenant_sections`' unnamed inline `check (section_key in (...))`
+   is dropped and re-added by name with seven keys. **This is the one
+   destructive-looking step**: the drop is done in a `DO` block that matches
+   on `pg_get_constraintdef(...) like '%section_key%'` rather than on a guessed
+   constraint name, because 20260725123000 declared it inline and the generated
+   name is an implementation detail.
+3. `app_private.billing_core_sections()` is replaced to include `'widget'`.
+   Without this, the next `billing_apply_plan_entitlements` run would switch
+   the widget section OFF for every tenant, because that function darkens every
+   catalogue key that is not entitled.
+
+### Until it is applied
+
+- **Capability rows in the platform panel stay disabled.** The panel reads
+  capabilities through its own request, separate from
+  `platform_admin_tenant_capabilities`' absence taking down anything else, and
+  renders the honest "Not readable" state. Nothing else on the client detail
+  degrades.
+- **The widget section shows as "Not in catalogue"** in the same panel rather
+  than as a toggle reading `off`, which would be a plausible-looking lie about
+  a section the client can still reach. `resolveSections` is unaffected: with
+  no `widget` row in the catalogue the tenant loop never touches it, so the
+  role gate (`canAdminister`) continues to decide it exactly as today.
+
+### Rollback
+
+Rolling back means restoring `app_private.tenant_section_definitions()` and
+`app_private.billing_core_sections()` to their committed prior bodies
+(20260725123000 and 20260726100000), re-adding the six-key check constraint,
+and dropping `public.tenant_capability_grants` with its three functions. No
+existing row is rewritten by this migration; the only writes are two seeding
+INSERTs, both `on conflict do nothing`.
+
+### Not covered
+
+Enforcement. A withheld capability is recorded and audited, and
+`tenant_get_capabilities` exposes it to the tenant's own console, but no client
+surface consults it yet — there is not even a tenant-side invite flow to gate
+(`invite` appears in `components/sections` only in the platform panel's own
+owner invitation). The platform panel says so on the card rather than implying
+a switched-off row already restricts somebody.
+
+## Awaiting hand-apply: self-reported learner identity on the widget
+
+Committed 2026-07-31 and **not yet applied**. Recorded here before any apply,
+in the same session it was written.
+
+| Version | Name | SHA-256 | Bytes |
+|---|---|---|---|
+| 20260731090000 | `widget_self_reported_learner_identity` | `0fbe9aeea351b74b4d1d13f79de45709864dba1efab919ff18ace622f08b2103` | 22,949 |
+
+Pure ASCII, verified by byte scan (zero bytes outside 0x20-0x7E plus tab and
+newline). Route it through base64 anyway.
+
+Order matters against `20260731070000`, which holds the current
+`public.widget_ask` body. This file **drops** that eight-argument function and
+creates a ten-argument one, so it must be applied after it. It does not touch
+`public.widget_record_answer`, so it is independent of the still-unapplied
+`20260731080000` and `20260731081000` and may be applied before or after
+either.
+
+### What it does
+
+1. `public.conversation_surfaces` gains `learner_key` (a 64-hex digest, or
+   null) and `learner_identity` (`unidentified` / `self_reported_learner`),
+   plus two check constraints and a partial index on `(tenant_id,
+   learner_key)`. Both new columns are additive; the `not null default` on
+   `learner_identity` is a catalog-only change on PG11+ and rewrites no row.
+2. `app_private.conversation_surface_view` is **dropped and recreated** with
+   the two new columns appended to its `returns table`. A return type cannot
+   be changed by `create or replace`. The body is otherwise the 20260726094000
+   body character for character, and all sixteen callers select from it by
+   column name, so appending is invisible to them.
+3. `public.widget_ask` is **dropped and recreated** with `visitor_ref text
+   default null` and `visitor_tier text default null` appended. The drop is
+   the point: two defaulted arguments added by `create or replace` would leave
+   an eight-argument and a ten-argument candidate, and PostgREST calls this
+   function by name, so every widget question would fail as `function is not
+   unique`. The drop takes the ACL with it, so `grant execute ... to anon` is
+   restated. Everything else in the body is unchanged from 20260731070000.
+
+### Why `visitor_identity` was not given a third value
+
+`conversation_surfaces.visitor_key` does not mean "a person" today. Every
+widget row's key is derived from the conversation idempotency key
+(`widget:<hash>`), which is a per-browser-session nonce the embed keeps in
+`sessionStorage`. Six analytics bodies count `distinct visitor_key` on that
+basis, and `app_private.widget_signal_detections` tells the customer so in
+words: *an anonymous visitor reference identifies a returning browser, not a
+person*.
+
+Writing a person-stable hash into that column would have changed what all six
+numbers mean without changing a line of any of them, and made that sentence
+false. Adding `self_reported_learner` to `visitor_identity` has the mirror
+failure: every one of those bodies filters on the literals
+`'anonymous_visitor'` and `'verified_learner'`, so the new rows would have been
+dropped from both buckets in silence.
+
+So the person-stable pseudonym is a new column with its own label.
+`visitor_identity` keeps its two values, and an identified widget visitor is
+still `anonymous_visitor` — that column answers "did this platform verify a
+learner", and the answer is genuinely no.
+
+The surface row this function writes sets `visitor_key` to exactly the digest
+`conversation_surface_view` was already synthesising for the same conversation,
+so materialising the row cannot move a distinct-visitor count a tenant has
+already been shown.
+
+### What does change once applied
+
+For a conversation whose host page declared an identity, `conversation_surfaces`
+gains a real row where previously the view inferred everything. That row also
+carries `host_origin`, which widget conversations have never had:
+`app_private.widget_conversation` writes no `hostOrigin` into conversation
+metadata, so the anonymous-spike signal currently groups every widget question
+under `(origin not recorded)`. Opted-in tenants will start seeing the real
+origin there. That is more truth, not different truth, but it is a visible
+change to a shipped signal.
+
+`attribution_source` for those conversations moves from `inferred_console` /
+`conversation_metadata` to `recorded`, which is accurate: a surface really was
+recorded.
+
+### Until it is applied
+
+Nothing regresses and nothing needs to wait for it.
+
+`widgetAsk` omits `visitor_ref` and `visitor_tier` from the RPC body entirely
+when no identity was declared, so every install that has not opted in sends
+byte-for-byte what it sent before and matches the eight-argument function that
+is live today. An install that *has* opted in gets one failed call, and
+`/api/widget/ask` retries the same turn (same idempotency key, same trace id)
+without the identity and logs `[widget-identity] the database refused the
+identified call`. The visitor gets their answer; only the attribution is lost,
+and the log says which migration is missing.
+
+### Rollback
+
+`drop function public.widget_ask(text,text,text,text,text,text,text,text,text,
+text)` and re-run 20260731070000; `drop function
+app_private.conversation_surface_view(uuid)` and re-run the 20260726094000
+definition; then drop the two columns, the two constraints and the index. No
+existing row is read or rewritten by any statement in the file — the only
+runtime writes are to `conversation_surfaces`, keyed `(tenant_id,
+conversation_id)`, and the update leaves `visitor_key` and `visitor_identity`
+alone.
+
+### Not covered
+
+The new `learner_key` has **no reader yet**. It is reachable through
+`conversation_surface_view` — the only sanctioned read path, since
+`conversation_surfaces_no_direct_access` refuses every direct authenticated
+read — but no analytics RPC or signal selects it. Per-learner signals
+("this learner is stuck", repeat-question detection across sessions) are the
+next piece of work and are not in this migration.
+
+## Edge functions are still deployed by hand
+
+`infra/supabase/functions/learning-admin-users/index.ts` has an **unapplied
+change**: it now also returns a copyable `inviteLink` from
+`auth.admin.generateLink`, because outbound email is not configured on this
+project and `inviteUserByEmail` hands the link to the mail provider and returns
+nothing usable. Without the deploy, an invitation is created and audited and
+nobody can act on it.
+
+```
+supabase functions deploy learning-admin-users --project-ref fwilehggxqkpeuojxqzk
+```
+
+There is still no deploy config for edge functions anywhere -- no CI step, and
+nothing in `hosted-release.mjs`. Every function on this project has been pushed
+by hand, and this one is no different.
+
+### `learning-provider-widget-complete` -- unapplied, 2026-07-31
+
+`infra/supabase/functions/learning-provider-widget-complete/index.ts` has an
+**unapplied change**: it now accepts `stream: true` and, when asked, proxies the
+provider's token stream back as `text/event-stream` instead of a buffered JSON
+body. This is what lets `/api/widget/ask` stream to the embedded widget and to
+the hosted full-page assistant.
+
+```
+sha256  e9582374f8b032cf14c6700b81b5683c5037045a5f5570d6b1ba57f629a6db63
+bytes   22035
+```
+
+```
+supabase functions deploy learning-provider-widget-complete --project-ref fwilehggxqkpeuojxqzk
+```
+
+Why it had to be this function rather than a direct call from the console: this
+is the only place the widget surface's tenant id exists, so it is the only place
+`learning_reserve_provider_call` can run before the spend and
+`learning_record_provider_cost` after it. Streaming around it would have made
+every streamed widget answer unmetered.
+
+**Not deploying is safe, and is the current state.** The new code path is
+opt-in on a field the deployed function does not know: it ignores `stream` and
+returns the JSON it always has. `streamWithManagedWidgetProvider`
+(`apps/console/src/lib/provider-runtime.ts`) detects that -- it checks for a
+`text/event-stream` content type and gets `application/json` -- and yields the
+whole answer as one delta followed by `done`. So until the deploy, both
+customer-facing surfaces get sources immediately and the prose in one piece;
+after it, the prose arrives token by token. Nothing else differs, and no ledger
+row changes shape either way.
+
+The reservation, the ledger write and the refusal codes are unchanged in the
+buffered branch. Both branches now write the ledger through one helper
+(`recordWidgetCost`) specifically so a future edit cannot leave one of them
+unmetered.
+
+Everything added to this file is ASCII; the four non-ASCII characters it still
+contains are pre-existing em-dashes in comments, untouched.

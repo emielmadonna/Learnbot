@@ -12,14 +12,17 @@ import {
   exitPlatformTenant,
   getPlatformClientClaims,
   getPlatformOverview,
+  getPlatformTenantCapabilities,
   getPlatformTenantDetail,
   isPlatformAdmin,
+  isPlatformCapabilityKey,
   isPlatformClientPlan,
   isPlatformSectionKey,
   isPlatformSlug,
   isPlatformTenantStatus,
   revokePlatformClientClaim,
   setPlatformTenantStatus,
+  setTenantCapability,
   setTenantSection,
 } from "../../../lib/supabase/platform-rpc";
 
@@ -44,6 +47,7 @@ const statusByCode = new Map<string, number>([
 ]);
 
 const hexColorPattern = /^#[0-9a-f]{6}$/iu;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 
 function response(body: unknown, status = 200) {
   return NextResponse.json(body, {
@@ -114,6 +118,24 @@ function optionalBoundedText(value: unknown, max: number) {
   return trimmed;
 }
 
+async function functionResult(
+  data: unknown,
+  error: unknown,
+): Promise<Record<string, unknown> | null> {
+  if (isRecord(data)) return data;
+  const context =
+    error && typeof error === "object" && "context" in error
+      ? (error as { context?: unknown }).context
+      : null;
+  if (!(context instanceof Response)) return null;
+  try {
+    const body: unknown = await context.json();
+    return isRecord(body) ? body : null;
+  } catch {
+    return null;
+  }
+}
+
 async function platformClient(request: Request, mutation: boolean) {
   if (mutation) assertSameOrigin(request);
   const supabase = await authenticatedLearningClient(request, { mutation });
@@ -126,14 +148,18 @@ async function platformClient(request: Request, mutation: boolean) {
 export async function GET(request: Request) {
   try {
     const supabase = await platformClient(request, false);
-    const requestedTenantId = new URL(request.url).searchParams.get("tenantId");
+    const search = new URL(request.url).searchParams;
+    const requestedTenantId = search.get("tenantId");
     if (requestedTenantId !== null) {
-      return response(
-        await getPlatformTenantDetail(
-          supabase,
-          requireTenantId(requestedTenantId),
-        ),
-      );
+      const tenantId = requireTenantId(requestedTenantId);
+      // Capabilities are a separate read, not another field on the tenant
+      // detail: 20260731081000 is hand-applied like every migration on this
+      // project, so a console pointed at a database without it must still
+      // render the rest of the client detail rather than failing whole.
+      if (search.get("view") === "capabilities") {
+        return response(await getPlatformTenantCapabilities(supabase, tenantId));
+      }
+      return response(await getPlatformTenantDetail(supabase, tenantId));
     }
     return response(await getPlatformOverview(supabase));
   } catch (error) {
@@ -159,6 +185,22 @@ export async function POST(request: Request) {
         await setTenantSection(supabase, {
           tenantId: requireTenantId(input.tenantId),
           sectionKey: input.sectionKey,
+          enabled: input.enabled,
+        }),
+      );
+    }
+
+    if (action === "capability") {
+      if (
+        !isPlatformCapabilityKey(input.capabilityKey) ||
+        typeof input.enabled !== "boolean"
+      ) {
+        throw new PlatformRpcError("invalid_request");
+      }
+      return response(
+        await setTenantCapability(supabase, {
+          tenantId: requireTenantId(input.tenantId),
+          capabilityKey: input.capabilityKey,
           enabled: input.enabled,
         }),
       );
@@ -208,6 +250,63 @@ export async function POST(request: Request) {
       });
       // 200 on a replay: an idempotent retry did not create anything.
       return response(creation, creation.created ? 201 : 200);
+    }
+
+    if (action === "client.inviteOwner") {
+      const tenantId = requireTenantId(input.tenantId);
+      const email =
+        typeof input.email === "string"
+          ? input.email.trim().toLowerCase()
+          : "";
+      if (!emailPattern.test(email)) {
+        throw new PlatformRpcError("invalid_request");
+      }
+      const invoked = await supabase.functions.invoke("learning-admin-users", {
+        body: {
+          tenantId,
+          email,
+          displayName: requireBoundedText(input.displayName, 160),
+          role: "tenant_owner",
+          idempotencyKey: requireBoundedText(input.idempotencyKey, 200),
+        },
+      });
+      const result = await functionResult(invoked.data, invoked.error);
+      if (invoked.error || !result || result.ok !== true) {
+        const code =
+          typeof result?.code === "string"
+            ? result.code
+            : "invitation_provider_failed";
+        const status =
+          code === "access_denied"
+            ? 403
+            : code === "account_exists"
+              ? 409
+              : code === "owner_identity_conflict"
+                ? 409
+                : code === "provider_not_configured"
+                  ? 503
+                  : 502;
+        return response(
+          {
+            ok: false,
+            code,
+            providerCode:
+              typeof result?.providerCode === "string"
+                ? result.providerCode
+                : undefined,
+            providerMessage:
+              typeof result?.providerMessage === "string"
+                ? result.providerMessage
+                : undefined,
+            deliveryStatus:
+              typeof result?.deliveryStatus === "string"
+                ? result.deliveryStatus
+                : undefined,
+          },
+          status,
+        );
+      }
+      return response(result, 201);
     }
 
     if (action === "client.claims") {

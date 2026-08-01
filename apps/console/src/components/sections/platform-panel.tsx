@@ -6,29 +6,29 @@ import { createPortal } from "react-dom";
 import { createBrowserSupabaseClient } from "../../lib/supabase/client";
 import {
   PlatformRpcError,
-  isPlatformClientPlan,
   normalizePlatformSlug,
-  parsePlatformClientClaimRevocation,
-  parsePlatformClientClaims,
   parsePlatformClientCreation,
   parsePlatformOverview,
   parsePlatformTenantDetail,
   parsePlatformTenantEntry,
+  parsePlatformTenantCapabilities,
   parsePlatformTenantExit,
   parsePlatformTenantStatusChange,
+  parseTenantCapabilityUpdate,
   parseTenantSectionUpdate,
-  platformClientPlans,
+  platformCapabilityKeys,
   platformOperationKey,
   platformSectionKeys,
   platformSlugPattern,
 } from "../../lib/supabase/platform-rpc";
 import type {
-  PlatformClientClaim,
+  PlatformCapabilityKey,
   PlatformClientPlan,
   PlatformOverview,
   PlatformSectionKey,
   PlatformTenantDetail,
   PlatformTenantSummary,
+  TenantCapability,
   TenantSection,
 } from "../../lib/supabase/platform-rpc";
 import {
@@ -51,6 +51,7 @@ import type {
 import type { PanelProps } from "../app-shell/contract";
 import { useDataVersion } from "../app-shell/shell-data";
 import { usePanelRouter } from "../app-shell/use-panel-router";
+import { CorsoIcon } from "../corso/corso-icon";
 import {
   Button,
   ColorField,
@@ -101,11 +102,19 @@ const codeMessages: Record<string, string> = {
   tenant_unavailable: "That client workspace is not available to enter.",
   section_not_found: "That section does not exist on this workspace.",
   stripe_not_configured:
-    "Stripe is not configured on this deployment. Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and STRIPE_METERED_PRICE_ID to enable checkout and the billing portal.",
+    "Stripe is not configured on this deployment. Set the Stripe secret, webhook secret, metered price and meter event name to enable checkout, usage billing and the billing portal.",
   plan_not_configured:
     "This plan has no Stripe price configured. Set its STRIPE_PRICE_* environment variable first.",
   stripe_customer_missing:
     "This client has no Stripe customer on file yet — start a checkout before opening the billing portal.",
+  provider_not_configured:
+    "Invitation email is not configured for this deployment.",
+  invitation_provider_failed:
+    "The invitation provider did not confirm delivery.",
+  invitation_provisioning_failed:
+    "The invitation email was attempted, but workspace access could not be provisioned.",
+  owner_identity_conflict:
+    "The client owner must use a different identity from the platform administrator.",
 };
 
 function describe(error: unknown): string {
@@ -209,11 +218,82 @@ const sectionCopy: Record<
     description:
       "Cross-tenant operating view. Normally off for a client workspace.",
   },
+  widget: {
+    label: "Widget",
+    description:
+      "The client's own site-facing assistant: embed key, appearance and public link.",
+  },
   settings: {
     label: "Settings",
     description: "Workspace profile, branding and account controls.",
   },
 };
+
+/**
+ * "What the client can change themselves" — five independent grants for bot
+ * identity, welcome copy, voice, model choice and invites.
+ *
+ * These used to render permanently disabled, because nothing backed them: a
+ * tenant admin's ability to edit their own bot name/colour/icon, welcome
+ * message, voice, model, or to invite others came entirely from their role
+ * membership (tenant_owner / tenant_admin), with no separate record a
+ * platform administrator could use to restrict one client without restricting
+ * the role everywhere. `public.tenant_capability_grants` and
+ * `public.platform_admin_set_tenant_capability` (20260731081000) are that
+ * record, built to mirror the existing `platform_admin_set_tenant_section`
+ * pattern exactly: durable per-tenant row, definer RPC, audited write.
+ *
+ * The rows fall BACK to the old disabled rendering whenever the capability
+ * read failed — on a database where that migration has not been hand-applied
+ * yet, this panel says so instead of showing a toggle that would throw.
+ */
+const capabilityCopy: Record<
+  PlatformCapabilityKey,
+  { label: string; description: string }
+> = {
+  bot_identity: {
+    label: "Bot name, colour and icon",
+    description:
+      "Lets the client rename their assistant and set its palette and mark.",
+  },
+  welcome_message: {
+    label: "Welcome message and starters",
+    description:
+      "Lets the client write the opening line and the suggested questions.",
+  },
+  voice_answer_length: {
+    label: "Voice and answer length",
+    description: "Lets the client pick a voice and how long answers run.",
+  },
+  model_choice: {
+    label: "Which model answers",
+    description:
+      "Model choice also changes cost, so this one is off unless granted.",
+  },
+  invite_members: {
+    label: "Invite other people to the workspace",
+    description:
+      "Lets the client bring in their own administrators and learners.",
+  },
+  provider_api_key: {
+    label: "Manage a workspace API key",
+    description:
+      "Lets this client add or remove its own OpenAI key. Off keeps provider billing under platform control.",
+  },
+};
+
+/**
+ * What a granted capability does NOT yet do, said plainly.
+ *
+ * The grant is durable and audited, and the client's own console can read it
+ * through `tenant_get_capabilities`. Nothing in the client console consults it
+ * yet — there is not even a tenant-side invite surface to gate (the only
+ * "invite" in components/sections is the platform panel's own owner
+ * invitation). Saying that here is better than implying a switched-off row is
+ * already restricting somebody.
+ */
+const capabilityEnforcementNote =
+  "Provider API-key access is enforced in both the console and credential service. The remaining grants are recorded and audited but are not all enforced by their client controls yet.";
 
 function statusState(status: string): StatState {
   if (status === "active") return "known";
@@ -237,6 +317,47 @@ function readinessLabel(value: boolean): { state: StatState; text: string } {
     : { state: "partial", text: "Not yet" };
 }
 
+function tenantInitials(value: string): string {
+  const words = value
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean);
+  if (words.length === 0) return "—";
+  if (words.length === 1) return words[0]?.slice(0, 2).toUpperCase() ?? "—";
+  return `${words[0]?.[0] ?? ""}${words.at(-1)?.[0] ?? ""}`.toUpperCase();
+}
+
+function needsWorkspaceAttention(tenant: PlatformTenantSummary): boolean {
+  return (
+    tenant.status !== "suspended" &&
+    (tenant.publishedCourses === 0 ||
+      tenant.knowledgeChunks === 0 ||
+      tenant.members === 0)
+  );
+}
+
+/**
+ * The design calls for a fourth workspace state beyond paused/setup/live: a
+ * "Review" workspace — live and launched, but still failing its people,
+ * judged by something like a refusal or ungrounded-answer rate. That figure
+ * exists per tenant (see `ungroundedQuestions` / `unansweredQuestions` in
+ * lib/supabase/analytics-rpc.ts, read inside a single tenant's own Insights
+ * panel), but `platform_admin_overview` — the RPC behind `PlatformOverview` —
+ * never aggregates it across tenants, and `PlatformTenantSummary` carries no
+ * such field today.
+ *
+ * Rather than invent a threshold over data this panel cannot see, this stays
+ * an honest `false` until the platform overview is extended with a windowed,
+ * per-tenant figure — e.g. `recentUngroundedShare: number | null` or
+ * `recentUnansweredCount: number` on `PlatformTenantSummary`, computed the
+ * same way Insights already computes it, just aggregated platform-wide. The
+ * visual state (dot, ring, "Review" label) below is built and wired to this
+ * predicate, so turning it on is a one-line change once that data exists.
+ */
+function needsWorkspaceReview(_tenant: PlatformTenantSummary): boolean {
+  return false;
+}
+
 /* --- new-client provisioning ---------------------------------------- *
  *
  * The seeded surface below mirrors the value the provisioning migration writes
@@ -250,13 +371,7 @@ const seededSurface = "#F7F8FC";
 // Used only when the current workspace reports a colour this console cannot
 // parse. A neutral grey is honest; borrowing another tenant's hue is not.
 const neutralSeed = "#767676";
-
-const planCopy: Record<PlatformClientPlan, string> = {
-  unconfirmed: "Unconfirmed",
-  starter: "Starter",
-  growth: "Growth",
-  enterprise: "Enterprise",
-};
+const invitationEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 
 /* --- billing, margin and Stripe entitlement --------------------------- *
  *
@@ -327,13 +442,6 @@ function formatMoney(microUnits: number, currency: string): string {
   }
 }
 
-const claimStatusCopy: Record<string, { state: StatState; text: string }> = {
-  pending: { state: "known", text: "Outstanding" },
-  claimed: { state: "known", text: "Redeemed" },
-  revoked: { state: "restricted", text: "Revoked" },
-  expired: { state: "partial", text: "Expired" },
-};
-
 type ClientDraft = {
   displayName: string;
   slug: string;
@@ -343,15 +451,70 @@ type ClientDraft = {
   accentColor: string;
   region: string;
   plan: PlatformClientPlan;
+  knowledgeStart: KnowledgeStart;
+  ownerDisplayName: string;
+  ownerEmail: string;
 };
+
+type KnowledgeStart = "course" | "youtube" | "circle" | "paste" | "qa";
+
+const knowledgeStarts: readonly {
+  value: KnowledgeStart;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "course",
+    label: "Write a course now",
+    description: "Start with a private course and publish it when it is ready.",
+  },
+  {
+    value: "youtube",
+    label: "Connect YouTube videos",
+    description: "Choose real videos or a playlist in the new workspace.",
+  },
+  {
+    value: "circle",
+    label: "Connect a learning account",
+    description: "Import selected courses from the workspace's own Circle account.",
+  },
+  {
+    value: "paste",
+    label: "Paste text",
+    description: "Add a syllabus, transcript, guide, or FAQ.",
+  },
+  {
+    value: "qa",
+    label: "Questions and answers",
+    description: "Author the questions learners ask most often.",
+  },
+];
+
+function knowledgeStartLabel(value: KnowledgeStart): string {
+  return knowledgeStarts.find((item) => item.value === value)?.label ?? "Add learning";
+}
+
+function knowledgeStartDestination(value: KnowledgeStart): string {
+  if (value === "course" || value === "qa") {
+    return "/app?panel=course&view=library&intent=create";
+  }
+  return `/app?panel=course&view=import&source=${encodeURIComponent(value)}`;
+}
 
 type IssuedClaim = {
   claimId: string;
   tenantId: string;
   slug: string;
   displayName: string;
-  token: string;
+  token: string | null;
   expiresAt: string | null;
+  ownerEmail: string;
+  ownerDisplayName: string;
+  knowledgeStart: KnowledgeStart;
+  invitationStatus: "sent" | "failed";
+  /** Single-use sign-in link, for when outbound email is not configured. */
+  inviteLink: string | null;
+  invitationError: string | null;
 };
 
 function slugProblem(value: string): string | undefined {
@@ -372,6 +535,7 @@ type EnteredSession = {
 type Busy =
   | null
   | { kind: "section"; sectionKey: PlatformSectionKey }
+  | { kind: "capability"; capabilityKey: PlatformCapabilityKey }
   | { kind: "status" }
   | { kind: "enter" }
   | { kind: "exit" };
@@ -405,6 +569,17 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
   const { params, openPanel } = usePanelRouter();
   const dataVersion = useDataVersion();
   const selectedTenantId = params.get("id");
+  const requestedView = params.get("view");
+  const panelView =
+    selectedTenantId !== null
+      ? "client"
+      : requestedView === "add-client"
+        ? "add-client"
+        : requestedView === "billing"
+          ? "billing"
+          : requestedView === "settings"
+            ? "settings"
+            : "workspaces";
 
   const [overview, setOverview] = useState<PlatformOverview | null>(null);
   const [overviewState, setOverviewState] = useState<
@@ -418,6 +593,12 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
   >("idle");
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  const [capabilities, setCapabilities] = useState<TenantCapability[]>([]);
+  const [capabilityState, setCapabilityState] = useState<
+    "idle" | "loading" | "ready" | "failed"
+  >("idle");
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
+
   const [session, setSession] = useState<EnteredSession | null>(null);
   const [claimsStale, setClaimsStale] = useState(false);
 
@@ -427,8 +608,13 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [workspaceQuery, setWorkspaceQuery] = useState("");
+  const [workspaceFilter, setWorkspaceFilter] = useState<
+    "all" | "attention" | "paused"
+  >("all");
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [createStep, setCreateStep] = useState(1);
   const [draft, setDraft] = useState<ClientDraft | null>(null);
   const [createKey, setCreateKey] = useState<string | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
@@ -436,14 +622,14 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
   const [takenSlug, setTakenSlug] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedClaim | null>(null);
   const [copied, setCopied] = useState(false);
-  const [claims, setClaims] = useState<PlatformClientClaim[] | null>(null);
-  const [claimsError, setClaimsError] = useState<string | null>(null);
-  const [claimsVersion, setClaimsVersion] = useState(0);
-  const [revoking, setRevoking] = useState<string | null>(null);
-
-  const [billingOverview, setBillingOverview] = useState<BillingOverview | null>(
-    null,
-  );
+  const [billingOverview, setBillingOverview] =
+    useState<BillingOverview | null>(null);
+  const [billingOverviewState, setBillingOverviewState] = useState<
+    "loading" | "ready" | "failed"
+  >("loading");
+  const [billingOverviewError, setBillingOverviewError] = useState<
+    string | null
+  >(null);
   const [billingDetail, setBillingDetail] = useState<BillingTenantDetail | null>(
     null,
   );
@@ -472,32 +658,41 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     setMounted(true);
   }, []);
 
-  /* --- outstanding owner claims ------------------------------------- *
-   *
-   * Status and expiry only. The control plane never returns a token here, so
-   * there is nothing for this view to leak.
-   */
-
   useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const parsed = parsePlatformClientClaims(
-          await platformWrite({ action: "client.claims" }),
-        );
-        if (!active) return;
-        setClaims(parsed.claims);
-        setClaimsError(null);
-      } catch (error) {
-        if (!active) return;
-        setClaims(null);
-        setClaimsError(describe(error));
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [dataVersion, claimsVersion]);
+    if (
+      panelView !== "add-client" ||
+      createOpen ||
+      draft !== null ||
+      issued !== null
+    ) {
+      return;
+    }
+    setDraft({
+      displayName: "",
+      slug: "",
+      slugTouched: false,
+      assistantName: "",
+      primaryColor: normalizeHex(payload.agent.primaryColor) ?? neutralSeed,
+      accentColor: normalizeHex(payload.agent.accentColor) ?? neutralSeed,
+      region: "",
+      plan: "unconfirmed",
+      knowledgeStart: "course",
+      ownerDisplayName: "",
+      ownerEmail: "",
+    });
+    setCreateKey(platformOperationKey("platform-client"));
+    setCreateStep(1);
+    setCreateOpen(true);
+    setCreateError(null);
+    setTakenSlug(null);
+  }, [
+    createOpen,
+    draft,
+    issued,
+    panelView,
+    payload.agent.accentColor,
+    payload.agent.primaryColor,
+  ]);
 
   /* --- overview --------------------------------------------------- */
 
@@ -533,13 +728,19 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
 
   useEffect(() => {
     let active = true;
+    setBillingOverviewState("loading");
     void (async () => {
       try {
         const parsed = parseBillingOverview(await billingRead(""));
         if (!active) return;
         setBillingOverview(parsed);
-      } catch {
-        if (active) setBillingOverview(null);
+        setBillingOverviewError(null);
+        setBillingOverviewState("ready");
+      } catch (error) {
+        if (!active) return;
+        setBillingOverview(null);
+        setBillingOverviewError(describe(error));
+        setBillingOverviewState("failed");
       }
     })();
     return () => {
@@ -638,6 +839,68 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     };
   }, [selectedTenantId, dataVersion]);
 
+  /* --- what the client may change for itself ----------------------- *
+   *
+   * A third independent fetch, for the same reason billing is one: a
+   * database on which 20260731081000 has not been hand-applied yet answers
+   * `request_failed` here and nothing else on the client detail is lost.
+   * The card then renders the honest "not wired" state rather than an empty
+   * list, which would read as "this client may change nothing".
+   */
+
+  const loadCapabilities = useCallback(async (tenantId: string) => {
+    setCapabilityState("loading");
+    try {
+      const parsed = parsePlatformTenantCapabilities(
+        await platformRead(
+          `?tenantId=${encodeURIComponent(tenantId)}&view=capabilities`,
+        ),
+      );
+      setCapabilities(parsed.capabilities);
+      setCapabilityError(null);
+      setCapabilityState("ready");
+      return parsed;
+    } catch (error) {
+      setCapabilities([]);
+      setCapabilityError(describe(error));
+      setCapabilityState("failed");
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (selectedTenantId === null) {
+      setCapabilities([]);
+      setCapabilityError(null);
+      setCapabilityState("idle");
+      return;
+    }
+    void (async () => {
+      const tenantId = selectedTenantId;
+      setCapabilityState("loading");
+      try {
+        const parsed = parsePlatformTenantCapabilities(
+          await platformRead(
+            `?tenantId=${encodeURIComponent(tenantId)}&view=capabilities`,
+          ),
+        );
+        if (!active) return;
+        setCapabilities(parsed.capabilities);
+        setCapabilityError(null);
+        setCapabilityState("ready");
+      } catch (error) {
+        if (!active) return;
+        setCapabilities([]);
+        setCapabilityError(describe(error));
+        setCapabilityState("failed");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [selectedTenantId, dataVersion]);
+
   const loadBillingDetail = useCallback(async (tenantId: string) => {
     setBillingDetailState("loading");
     try {
@@ -718,14 +981,14 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
       setActionError(null);
       setNotice(null);
       setConfirmation(null);
-      openPanel("platform", { id: tenantId });
+      openPanel("platform", { id: tenantId, view: "client" });
     },
     [openPanel],
   );
 
   const closeClient = useCallback(() => {
     setConfirmation(null);
-    openPanel("platform", { id: null });
+    openPanel("platform", { id: null, view: "workspaces" });
   }, [openPanel]);
 
   async function toggleSection(
@@ -768,6 +1031,46 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     }
   }
 
+  async function toggleCapability(
+    tenantId: string,
+    capabilityKey: PlatformCapabilityKey,
+    enabled: boolean,
+  ) {
+    setBusy({ kind: "capability", capabilityKey });
+    setActionError(null);
+    setNotice(null);
+    try {
+      const update = parseTenantCapabilityUpdate(
+        await platformWrite({
+          action: "capability",
+          tenantId,
+          capabilityKey,
+          enabled,
+        }),
+      );
+      // Reflect exactly what the control plane returned, not what was asked
+      // for — the same rule the section toggle follows above.
+      setCapabilities((current) => [
+        ...current.filter(
+          (capability) =>
+            capability.capabilityKey !== update.capability.capabilityKey,
+        ),
+        update.capability,
+      ]);
+      setNotice(
+        `${capabilityCopy[update.capability.capabilityKey].label} is now ${
+          update.capability.enabled ? "granted" : "withheld"
+        } for this client.`,
+      );
+    } catch (error) {
+      setActionError(describe(error));
+      // The durable state is authoritative; re-read rather than guess.
+      await loadCapabilities(tenantId);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function changeStatus(
     tenantId: string,
     displayName: string,
@@ -796,7 +1099,11 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     }
   }
 
-  async function enterClient(tenantId: string, displayName: string) {
+  async function enterClient(
+    tenantId: string,
+    displayName: string,
+    destination = "/app",
+  ) {
     setBusy({ kind: "enter" });
     setActionError(null);
     setNotice(null);
@@ -815,12 +1122,23 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
         slug: entry.slug,
         enteredAt: entry.enteredAt,
       });
+      if (refreshed) {
+        try {
+          window.sessionStorage.setItem(
+            "platform-client-preview",
+            entry.tenantId,
+          );
+        } catch {
+          // The durable session remains authoritative when storage is blocked.
+        }
+      }
       setNotice(
         refreshed
           ? `You are now operating inside ${entry.displayName}. This entry is audited.`
           : `${entry.displayName} was entered, but this browser session still carries the previous claims. Refresh the secure session to finish the switch.`,
       );
       await refresh();
+      if (refreshed) window.location.assign(destination);
     } catch (error) {
       setActionError(describe(error));
     } finally {
@@ -839,6 +1157,11 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
       const refreshed = await refreshBrowserClaims();
       setClaimsStale(!refreshed);
       setSession(null);
+      try {
+        window.sessionStorage.removeItem("platform-client-preview");
+      } catch {
+        // The durable exit remains authoritative when storage is blocked.
+      }
       setNotice(
         exit.exited
           ? "You left the client workspace and are back in your own platform context."
@@ -870,15 +1193,21 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
       accentColor: normalizeHex(payload.agent.accentColor) ?? neutralSeed,
       region: "",
       plan: "unconfirmed",
+      knowledgeStart: "course",
+      ownerDisplayName: "",
+      ownerEmail: "",
     });
     // One key per form session: a retry after a failure is the same request,
     // so it can never provision two workspaces.
     setCreateKey(platformOperationKey("platform-client"));
+    setCreateStep(1);
     setCreateOpen(true);
     setCreateError(null);
     setTakenSlug(null);
+    setIssued(null);
     setNotice(null);
     setActionError(null);
+    openPanel("platform", { id: null, view: "add-client" });
   }
 
   function closeCreate() {
@@ -887,6 +1216,10 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     setCreateKey(null);
     setCreateError(null);
     setTakenSlug(null);
+    setCreateStep(1);
+    setIssued(null);
+    setCopied(false);
+    openPanel("platform", { id: null, view: "workspaces" });
   }
 
   function updateDraft(patch: Partial<ClientDraft>) {
@@ -899,6 +1232,8 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     const displayName = draft.displayName.trim();
     const assistantName = draft.assistantName.trim();
     const region = draft.region.trim();
+    const ownerDisplayName = draft.ownerDisplayName.trim();
+    const ownerEmail = draft.ownerEmail.trim().toLowerCase();
     setCreateBusy(true);
     setCreateError(null);
     setTakenSlug(null);
@@ -917,25 +1252,61 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
         }),
       );
       const token = creation.claim?.token ?? null;
-      closeCreate();
-      if (token === null) {
-        // A replay of an earlier attempt. The code was disclosed once, then;
-        // it is not recoverable, and saying otherwise would be a lie.
-        setNotice(
-          `${creation.displayName} was already created by an earlier attempt. Its owner code was shown once at that moment and cannot be re-issued — revoke it below if it never reached the client.`,
-        );
-      } else {
-        setIssued({
-          claimId: creation.claim?.claimId ?? "",
-          tenantId: creation.tenantId,
-          slug: creation.slug,
-          displayName: creation.displayName,
-          token,
-          expiresAt: creation.claim?.expiresAt ?? null,
-        });
-        setCopied(false);
-      }
-      setClaimsVersion((version) => version + 1);
+      const invitationBody = await platformWrite({
+        action: "client.inviteOwner",
+        tenantId: creation.tenantId,
+        email: ownerEmail,
+        displayName: ownerDisplayName,
+        idempotencyKey: `${createKey}:owner-invitation`.slice(0, 200),
+      });
+      const invitation =
+        invitationBody &&
+        typeof invitationBody === "object" &&
+        !Array.isArray(invitationBody)
+          ? (invitationBody as Record<string, unknown>)
+          : null;
+      const invitationSent =
+        invitation?.ok === true &&
+        invitation.deliveryStatus === "sent";
+      const invitationRecord =
+        invitation !== null &&
+        typeof invitation.invitation === "object" &&
+        invitation.invitation !== null
+          ? (invitation.invitation as Record<string, unknown>)
+          : null;
+      const issuedLink =
+        typeof invitationRecord?.inviteLink === "string" &&
+        invitationRecord.inviteLink.length > 0
+          ? invitationRecord.inviteLink
+          : null;
+      const invitationError =
+        typeof invitation?.providerMessage === "string"
+          ? invitation.providerMessage
+          : typeof invitation?.code === "string"
+            ? codeMessages[invitation.code] ??
+              `The invitation provider failed (${invitation.code}).`
+            : "The invitation provider did not confirm delivery.";
+
+      setCreateOpen(false);
+      setDraft(null);
+      setCreateKey(null);
+      setCreateError(null);
+      setTakenSlug(null);
+      setIssued({
+        claimId: creation.claim?.claimId ?? "",
+        tenantId: creation.tenantId,
+        slug: creation.slug,
+        displayName: creation.displayName,
+        token,
+        expiresAt: creation.claim?.expiresAt ?? null,
+        ownerEmail,
+        ownerDisplayName,
+        knowledgeStart: draft.knowledgeStart,
+        invitationStatus: invitationSent ? "sent" : "failed",
+        invitationError: invitationSent ? null : invitationError,
+        inviteLink: issuedLink,
+      });
+      setCopied(false);
       await refresh();
     } catch (error) {
       if (error instanceof PlatformRpcError && error.code === "slug_conflict") {
@@ -959,28 +1330,79 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     }
   }
 
-  async function revokeClaim(claim: PlatformClientClaim) {
-    setRevoking(claim.claimId);
+  async function retryOwnerInvitation(result: IssuedClaim) {
+    setCreateBusy(true);
     setActionError(null);
-    setNotice(null);
     try {
-      const revoked = parsePlatformClientClaimRevocation(
-        await platformWrite({
-          action: "client.revokeClaim",
-          claimId: claim.claimId,
-        }),
-      );
+      const invitationBody = await platformWrite({
+        action: "client.inviteOwner",
+        tenantId: result.tenantId,
+        email: result.ownerEmail,
+        displayName: result.ownerDisplayName,
+        idempotencyKey: platformOperationKey("owner-invitation"),
+      });
+      const invitation =
+        invitationBody &&
+        typeof invitationBody === "object" &&
+        !Array.isArray(invitationBody)
+          ? (invitationBody as Record<string, unknown>)
+          : null;
+      if (
+        invitation?.ok !== true ||
+        invitation.deliveryStatus !== "sent"
+      ) {
+        const message =
+          typeof invitation?.providerMessage === "string"
+            ? invitation.providerMessage
+            : typeof invitation?.code === "string"
+              ? codeMessages[invitation.code] ??
+                `The invitation provider failed (${invitation.code}).`
+              : "The invitation provider did not confirm delivery.";
+        setIssued((current) =>
+          current === null
+            ? current
+            : {
+                ...current,
+                invitationStatus: "failed",
+                invitationError: message,
+              },
+        );
+        return;
+      }
+      const resentRecord =
+        typeof invitation.invitation === "object" &&
+        invitation.invitation !== null
+          ? (invitation.invitation as Record<string, unknown>)
+          : null;
+      const resentLink =
+        typeof resentRecord?.inviteLink === "string" &&
+        resentRecord.inviteLink.length > 0
+          ? resentRecord.inviteLink
+          : null;
       setIssued((current) =>
-        current !== null && current.claimId === revoked.claimId ? null : current,
+        current === null
+          ? current
+          : {
+              ...current,
+              token: null,
+              invitationStatus: "sent",
+              invitationError: null,
+              inviteLink: resentLink ?? current.inviteLink,
+            },
       );
-      setNotice(
-        `The owner code for ${claim.displayName} is revoked and can never be redeemed. Create a replacement workspace if that client still needs access.`,
-      );
-      setClaimsVersion((version) => version + 1);
+      await refresh();
     } catch (error) {
-      setActionError(describe(error));
+      setIssued((current) =>
+        current === null
+          ? current
+          : {
+              ...current,
+              invitationStatus: "failed",
+              invitationError: describe(error),
+            },
+      );
     } finally {
-      setRevoking(null);
+      setCreateBusy(false);
     }
   }
 
@@ -1197,17 +1619,17 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
               }
               variant="primary"
             >
-              Enter {target.displayName}
+              Start preview
             </Button>
           </>
         }
         onClose={() => setConfirmation(null)}
         side="inline"
-        title={`Enter ${target.displayName}?`}
+        title={`Preview ${target.displayName}?`}
       >
         <div className={styles.confirmBody}>
           <p className={styles.groupHint}>
-            You are about to operate inside{" "}
+            You are about to preview{" "}
             <strong>{target.displayName}</strong> — a client workspace that is
             not your own.
           </p>
@@ -1215,7 +1637,8 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
             <li>Your session context switches to this client until you exit.</li>
             <li>The entry is recorded as an audited platform session.</li>
             <li>
-              Everything you do next is attributed to work inside this client.
+              You remain yourself through a host-provisioned tenant-admin
+              membership. No client user is impersonated.
             </li>
           </ul>
         </div>
@@ -1659,6 +2082,11 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     const enabledByKey = new Map<PlatformSectionKey, TenantSection>(
       client.sections.map((section) => [section.sectionKey, section] as const),
     );
+    const capabilityByKey = new Map<PlatformCapabilityKey, TenantCapability>(
+      capabilities.map(
+        (capability) => [capability.capabilityKey, capability] as const,
+      ),
+    );
     const readinessRows: Array<{ label: string; ready: boolean }> = [
       { label: "Branding configured", ready: client.readiness.hasBranding },
       {
@@ -1795,19 +2223,123 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
 
           <section className={styles.detailGroup}>
             <h5 className={styles.groupTitle}>Active sections</h5>
-            <p className={styles.groupHint}>
-              A section that is off disappears from this client’s workspace for
-              everyone in it. Changes apply immediately.
-            </p>
+            <div className={styles.sectionHead}>
+              <p className={styles.groupHint}>
+                A section that is off disappears from this client’s workspace
+                for everyone in it. Changes apply immediately.
+              </p>
+              <Button
+                disabled={entered || busy !== null}
+                onClick={() =>
+                  setConfirmation({
+                    kind: "enter",
+                    tenantId: client.tenant.tenantId,
+                    displayName: client.tenant.displayName,
+                  })
+                }
+                size="sm"
+              >
+                Preview client workspace
+              </Button>
+            </div>
             <div className={styles.switches}>
               {platformSectionKeys.map((sectionKey, index) => {
                 const section = enabledByKey.get(sectionKey);
                 const updated = formatWhen(section?.updatedAt);
                 const copy = sectionCopy[sectionKey];
+                const bordered = index < platformSectionKeys.length - 1;
+
+                // The assistant is the one section every client workspace is
+                // built around — there is no coherent state where a tenant
+                // keeps its workspace but the assistant itself goes dark. This
+                // row is locked rather than borrowed from the interactive
+                // Toggle, so nobody can click something that was never really
+                // optional.
+                if (sectionKey === "agent") {
+                  return (
+                    <div
+                      className={cx(
+                        styles.lockedSwitch,
+                        bordered && styles.lockedSwitchBordered,
+                      )}
+                      key={sectionKey}
+                    >
+                      <span className={styles.lockedSwitchCopy}>
+                        <span className={styles.lockedSwitchLabelRow}>
+                          <span className={styles.lockedSwitchLabel}>
+                            {copy.label}
+                          </span>
+                          <span className={styles.lockedSwitchBadge}>
+                            Always on
+                          </span>
+                        </span>
+                        <span className={styles.lockedSwitchDescription}>
+                          {copy.description} Every workspace needs its
+                          assistant — it can’t be switched off from here.
+                        </span>
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={styles.lockedSwitchTrack}
+                      >
+                        <i />
+                      </span>
+                    </div>
+                  );
+                }
+
+                // A key this console knows but the workspace's own catalogue
+                // did not return. `widget` joined the catalogue in
+                // 20260731081000, so on a database without that migration
+                // this is the honest answer: not "off", which would be a
+                // plausible-looking lie about a section the client can still
+                // reach, but "this workspace has no record for it".
+                if (section === undefined) {
+                  return (
+                    <div
+                      className={cx(
+                        styles.lockedSwitch,
+                        bordered && styles.lockedSwitchBordered,
+                      )}
+                      key={sectionKey}
+                    >
+                      <span className={styles.lockedSwitchCopy}>
+                        <span className={styles.lockedSwitchLabelRow}>
+                          <span className={styles.lockedSwitchLabel}>
+                            {copy.label}
+                          </span>
+                          <span
+                            className={cx(
+                              styles.lockedSwitchBadge,
+                              styles.lockedSwitchBadgeWarn,
+                            )}
+                          >
+                            Not in catalogue
+                          </span>
+                        </span>
+                        <span className={styles.lockedSwitchDescription}>
+                          {copy.description} This workspace returned no record
+                          for it, so its current state is unknown and it cannot
+                          be changed from here.
+                        </span>
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={cx(
+                          styles.lockedSwitchTrack,
+                          styles.lockedSwitchTrackOff,
+                        )}
+                      >
+                        <i />
+                      </span>
+                    </div>
+                  );
+                }
+
                 return (
                   <Toggle
-                    bordered={index < platformSectionKeys.length - 1}
-                    checked={section?.enabled === true}
+                    bordered={bordered}
+                    checked={section.enabled}
                     description={
                       updated === null
                         ? copy.description
@@ -1827,6 +2359,101 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
                 );
               })}
             </div>
+          </section>
+
+          <section className={styles.detailGroup}>
+            <h5 className={styles.groupTitle}>
+              What the client can change themselves
+            </h5>
+            {capabilityState === "loading" || capabilityState === "idle" ? (
+              <p className={styles.loading} role="status">
+                Loading client capabilities…
+              </p>
+            ) : capabilityState === "failed" ? (
+              <>
+                {/* Not an empty list: an empty list would read as "this
+                    client may change nothing". The read failed, and that is
+                    what is reported. */}
+                <p className={styles.failure} role="alert">
+                  {capabilityError ??
+                    "Client capabilities could not be read."}{" "}
+                  Until `tenant_capability_grants` (20260731081000) is applied
+                  there is no record here to read, and these stay disabled.
+                </p>
+                <div className={styles.switches}>
+                  {platformCapabilityKeys.map((capabilityKey, index) => (
+                    <div
+                      className={cx(
+                        styles.lockedSwitch,
+                        index < platformCapabilityKeys.length - 1 &&
+                          styles.lockedSwitchBordered,
+                      )}
+                      key={capabilityKey}
+                    >
+                      <span className={styles.lockedSwitchCopy}>
+                        <span className={styles.lockedSwitchLabelRow}>
+                          <span className={styles.lockedSwitchLabel}>
+                            {capabilityCopy[capabilityKey].label}
+                          </span>
+                          <span
+                            className={cx(
+                              styles.lockedSwitchBadge,
+                              styles.lockedSwitchBadgeWarn,
+                            )}
+                          >
+                            Not readable
+                          </span>
+                        </span>
+                        <span className={styles.lockedSwitchDescription}>
+                          {capabilityCopy[capabilityKey].description}
+                        </span>
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={cx(
+                          styles.lockedSwitchTrack,
+                          styles.lockedSwitchTrackOff,
+                        )}
+                      >
+                        <i />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className={styles.groupHint}>{capabilityEnforcementNote}</p>
+                <div className={styles.switches}>
+                  {platformCapabilityKeys.map((capabilityKey, index) => {
+                    const grant = capabilityByKey.get(capabilityKey);
+                    const updated = formatWhen(grant?.updatedAt);
+                    const copy = capabilityCopy[capabilityKey];
+                    return (
+                      <Toggle
+                        bordered={index < platformCapabilityKeys.length - 1}
+                        checked={grant?.enabled === true}
+                        description={
+                          updated === null
+                            ? copy.description
+                            : `${copy.description} Changed ${updated}.`
+                        }
+                        disabled={busy !== null}
+                        key={capabilityKey}
+                        label={copy.label}
+                        onChange={(next) =>
+                          void toggleCapability(
+                            client.tenant.tenantId,
+                            capabilityKey,
+                            next,
+                          )
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </section>
 
           {renderBillingSection(client.tenant.tenantId)}
@@ -1911,21 +2538,282 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     !createBusy &&
     draft.displayName.trim().length > 0 &&
     draft.assistantName.trim().length > 0 &&
+    draft.ownerDisplayName.trim().length > 0 &&
+    invitationEmailPattern.test(draft.ownerEmail.trim()) &&
     platformSlugPattern.test(trimmedSlug) &&
     slugError === undefined;
+  const canContinueCreate =
+    draft !== null &&
+    (createStep === 1
+      ? draft.displayName.trim().length > 0 &&
+        platformSlugPattern.test(trimmedSlug) &&
+        slugError === undefined
+      : createStep === 2
+        ? draft.assistantName.trim().length > 0
+        : createStep === 4
+          ? draft.ownerDisplayName.trim().length > 0 &&
+            invitationEmailPattern.test(draft.ownerEmail.trim())
+          : true);
 
   const createView =
     !createOpen || draft === null ? null : (
-      <PanelFrame
-        autoFocus={false}
-        className={styles.confirm}
-        description="Creates the workspace, seeds its assistant branding, and mints a single-use owner code. The client redeems that code to become the owner of their own account."
-        eyebrow="Onboard a client"
-        footer={
-          <>
-            <Button disabled={createBusy} onClick={closeCreate}>
-              Cancel
-            </Button>
+      <section className={styles.createCard} aria-label="Add a client">
+        <header className={styles.createHeader}>
+          <button
+            aria-label="Back to workspaces"
+            className={styles.createBack}
+            disabled={createBusy}
+            onClick={closeCreate}
+            type="button"
+          >
+            ‹
+          </button>
+          <span className={styles.createHeaderTitle}>
+            {draft.displayName.trim() || "Add a client"}
+          </span>
+          <span className={styles.createCount}>{createStep} of 4</span>
+        </header>
+
+        <div className={styles.createProgress} aria-hidden="true">
+          {[1, 2, 3, 4].map((step) => (
+            <i data-complete={step <= createStep || undefined} key={step} />
+          ))}
+        </div>
+
+        <div className={styles.createBody}>
+          {createStep === 1 ? (
+            <>
+              <p className={styles.createKicker}>Step 1 · Who</p>
+              <h3 className={styles.createTitle}>Who is this for?</h3>
+              <p className={styles.createDescription}>
+                The name your client calls their programme.
+              </p>
+              <div className={styles.form}>
+                <TextField
+                  autoComplete="organization"
+                  autoFocus
+                  help="People inside the workspace see this name."
+                  label="Client or programme name"
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    updateDraft({
+                      displayName: next,
+                      slug: draft.slugTouched
+                        ? draft.slug
+                        : normalizePlatformSlug(next),
+                    });
+                  }}
+                  required
+                  value={draft.displayName}
+                />
+                <TextField
+                  autoComplete="off"
+                  error={slugError}
+                  help="Permanent. Lowercase letters, numbers and hyphens."
+                  label="Workspace address"
+                  onChange={(event) =>
+                    updateDraft({
+                      slug: event.target.value
+                        .toLowerCase()
+                        .replace(/[^a-z0-9-]+/gu, "-")
+                        .slice(0, 63),
+                      slugTouched: true,
+                    })
+                  }
+                  required
+                  spellCheck={false}
+                  value={draft.slug}
+                />
+                <p className={styles.addressPreview}>
+                  corso.app/{trimmedSlug || "workspace"}
+                </p>
+              </div>
+            </>
+          ) : null}
+
+          {createStep === 2 ? (
+            <>
+              <p className={styles.createKicker}>Step 2 · The bot</p>
+              <h3 className={styles.createTitle}>Name and colour it</h3>
+              <p className={styles.createDescription}>
+                This is what students see. The client can change it later.
+              </p>
+              <div className={styles.form}>
+                <TextField
+                  autoComplete="off"
+                  autoFocus
+                  help="What the assistant calls itself in this workspace."
+                  label="Bot name"
+                  onChange={(event) =>
+                    updateDraft({ assistantName: event.target.value })
+                  }
+                  required
+                  value={draft.assistantName}
+                />
+                <div className={styles.formRow}>
+                  <ColorField
+                    contrastAgainst={seededSurface}
+                    contrastLabel="primary on the client surface"
+                    help="Buttons and highlights."
+                    label="Primary colour"
+                    onChange={(hex) => updateDraft({ primaryColor: hex })}
+                    value={draft.primaryColor}
+                  />
+                  <ColorField
+                    contrastAgainst={seededSurface}
+                    contrastLabel="accent on the client surface"
+                    help="Secondary emphasis."
+                    label="Accent colour"
+                    onChange={(hex) => updateDraft({ accentColor: hex })}
+                    value={draft.accentColor}
+                  />
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {createStep === 3 ? (
+            <>
+              <p className={styles.createKicker}>Step 3 · Knowledge</p>
+              <h3 className={styles.createTitle}>Give it something to know</h3>
+              <p className={styles.createDescription}>
+                Choose the first real source to configure. The new workspace
+                stays blank until you enter it and finish that source.
+              </p>
+              <div className={styles.knowledgeChoices}>
+                {knowledgeStarts.map((item) => (
+                  <label
+                    className={styles.knowledgeChoice}
+                    data-selected={draft.knowledgeStart === item.value || undefined}
+                    key={item.value}
+                  >
+                    <input
+                      checked={draft.knowledgeStart === item.value}
+                      name="knowledgeStart"
+                      onChange={() => updateDraft({ knowledgeStart: item.value })}
+                      type="radio"
+                      value={item.value}
+                    />
+                    <span>
+                      <strong>{item.label}</strong>
+                      <small>{item.description}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          {createStep === 4 ? (
+            <>
+              <p className={styles.createKicker}>Step 4 · Owner</p>
+              <h3 className={styles.createTitle}>Who owns this workspace?</h3>
+              <p className={styles.createDescription}>
+                This person receives a secure email invitation and chooses
+                their own password.
+              </p>
+              <div className={styles.form}>
+                <div className={styles.formRow}>
+                  <TextField
+                    autoComplete="name"
+                    autoFocus
+                    help="Shown inside the workspace."
+                    label="Owner name"
+                    onChange={(event) =>
+                      updateDraft({ ownerDisplayName: event.target.value })
+                    }
+                    required
+                    value={draft.ownerDisplayName}
+                  />
+                  <TextField
+                    autoComplete="email"
+                    help="Supabase sends the invitation to this address."
+                    label="Owner email"
+                    onChange={(event) =>
+                      updateDraft({ ownerEmail: event.target.value })
+                    }
+                    required
+                    type="email"
+                    value={draft.ownerEmail}
+                  />
+                </div>
+              </div>
+              <dl className={styles.createReview}>
+                <div>
+                  <dt>Programme</dt>
+                  <dd>{draft.displayName}</dd>
+                </div>
+                <div>
+                  <dt>Address</dt>
+                  <dd>corso.app/{trimmedSlug}</dd>
+                </div>
+                <div>
+                  <dt>Bot</dt>
+                  <dd>{draft.assistantName}</dd>
+                </div>
+                <div>
+                  <dt>First source</dt>
+                  <dd>{knowledgeStartLabel(draft.knowledgeStart)}</dd>
+                </div>
+                <div>
+                  <dt>Owner</dt>
+                  <dd>{draft.ownerEmail.trim() || "Not entered"}</dd>
+                </div>
+              </dl>
+              <div className={styles.createInfo}>
+                <strong>The workspace starts empty.</strong>
+                <span>
+                  No sample courses, files, sources or learner activity are
+                  created. The owner adds the first learning material after
+                  accepting the invitation.
+                </span>
+              </div>
+            </>
+          ) : null}
+
+          {createError === null ? null : (
+            <p className={styles.failure} role="alert">
+              {createError}
+            </p>
+          )}
+        </div>
+
+        <footer className={styles.createFooter}>
+          <Button
+            disabled={createBusy}
+            onClick={
+              createStep === 1
+                ? closeCreate
+                : () => setCreateStep((step) => Math.max(1, step - 1))
+            }
+          >
+            {createStep === 1 ? "Cancel" : "‹ Back"}
+          </Button>
+          {createStep < 4 ? (
+            <div className={styles.createFooterRight}>
+              {createStep === 3 ? (
+                // Nothing on this step is actually required — the workspace
+                // is created empty regardless of which source stays selected
+                // (see the "workspace starts empty" notice on step 4). Skip
+                // and Continue both just advance the step; Skip exists so
+                // someone who doesn't want to engage with the picker isn't
+                // made to feel like they have to.
+                <Button
+                  disabled={createBusy}
+                  onClick={() => setCreateStep((step) => Math.min(4, step + 1))}
+                >
+                  Skip
+                </Button>
+              ) : null}
+              <Button
+                disabled={!canContinueCreate}
+                onClick={() => setCreateStep((step) => Math.min(4, step + 1))}
+                variant="primary"
+              >
+                Continue
+              </Button>
+            </div>
+          ) : (
             <Button
               disabled={!canCreate}
               loading={createBusy}
@@ -1935,368 +2823,237 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
             >
               Create workspace
             </Button>
-          </>
-        }
-        footerLead="Nothing is written until you create."
-        onClose={closeCreate}
-        side="inline"
-        title="Add a client"
-      >
-        <div className={styles.form}>
-          <TextField
-            autoComplete="organization"
-            help="The client's own name for their workspace. People inside it see this."
-            label="Company name"
-            onChange={(event) => {
-              const next = event.target.value;
-              updateDraft({
-                displayName: next,
-                slug: draft.slugTouched
-                  ? draft.slug
-                  : normalizePlatformSlug(next),
-              });
-            }}
-            required
-            value={draft.displayName}
-          />
-
-          <TextField
-            autoComplete="off"
-            error={slugError}
-            help="Lowercase letters, numbers and hyphens. Permanent — it identifies the workspace everywhere."
-            label="Workspace URL"
-            onChange={(event) =>
-              updateDraft({
-                slug: event.target.value
-                  .toLowerCase()
-                  .replace(/[^a-z0-9-]+/gu, "-")
-                  .slice(0, 63),
-                slugTouched: true,
-              })
-            }
-            required
-            spellCheck={false}
-            value={draft.slug}
-          />
-
-          <TextField
-            autoComplete="off"
-            help="What the assistant calls itself in this client's workspace."
-            label="Assistant name"
-            onChange={(event) =>
-              updateDraft({ assistantName: event.target.value })
-            }
-            required
-            value={draft.assistantName}
-          />
-
-          <div className={styles.formRow}>
-            <ColorField
-              contrastAgainst={seededSurface}
-              contrastLabel="primary on the client's surface"
-              help="Buttons and highlights inside the client workspace."
-              label="Primary colour"
-              onChange={(hex) => updateDraft({ primaryColor: hex })}
-              value={draft.primaryColor}
-            />
-            <ColorField
-              contrastAgainst={seededSurface}
-              contrastLabel="accent on the client's surface"
-              help="Secondary emphasis."
-              label="Accent colour"
-              onChange={(hex) => updateDraft({ accentColor: hex })}
-              value={draft.accentColor}
-            />
-          </div>
-
-          <div className={styles.formRow}>
-            <TextField
-              autoComplete="off"
-              help="Optional. Recorded on the tenant; it moves no data by itself."
-              label="Region"
-              onChange={(event) => updateDraft({ region: event.target.value })}
-              value={draft.region}
-            />
-            <SelectField
-              help="Recorded on the workspace. Change it later from the client's account."
-              label="Plan"
-              onChange={(event) =>
-                updateDraft({
-                  plan: isPlatformClientPlan(event.target.value)
-                    ? event.target.value
-                    : "unconfirmed",
-                })
-              }
-              options={platformClientPlans.map((plan) => ({
-                value: plan,
-                label: planCopy[plan],
-              }))}
-              value={draft.plan}
-            />
-          </div>
-
-          {createError === null ? null : (
-            <p className={styles.failure} role="alert">
-              {createError}
-            </p>
           )}
-        </div>
-      </PanelFrame>
+        </footer>
+      </section>
     );
 
-  /* --- the one-time owner code ------------------------------------------ *
-   *
-   * The only moment this value is readable. The control plane stored a SHA-256
-   * digest of it and nothing else, so once this card is dismissed the code is
-   * genuinely gone — the copy here says exactly that, because a reassuring
-   * "you can find it later" would be false.
-   */
+  /* --- workspace creation result ---------------------------------------- */
 
   const issuedExpiry = issued === null ? null : formatWhen(issued.expiresAt);
   const issuedView =
     issued === null ? null : (
-      <section className={styles.issued} role="status">
-        <div className={styles.issuedHead}>
-          <span className={styles.issuedLabel}>One-time owner code</span>
-          <StateBadge state="restricted">Shown once</StateBadge>
-        </div>
-        <p className={styles.issuedName}>
-          {issued.displayName} · {issued.slug}
+      <section className={styles.createdCard} role="status">
+        <span aria-hidden="true" className={styles.createdCheck}>
+          ✓
+        </span>
+        <p className={styles.createKicker}>Workspace created</p>
+        <h3 className={styles.createdTitle}>
+          {issued.displayName} is ready
+        </h3>
+        <p className={styles.createdCopy}>
+          {issued.invitationStatus === "sent"
+            ? `A secure owner invitation was sent to ${issued.ownerEmail}. The workspace contains no sample learning content.`
+            : `The workspace was created, but the invitation provider did not confirm delivery to ${issued.ownerEmail}.`}
         </p>
-        <code className={styles.token}>{issued.token}</code>
+        {issued.invitationStatus === "sent" ? (
+          <>
+            <p className={styles.issuedNote}>
+              The durable invitation is pending until the owner chooses a
+              password. No temporary password or owner code needs to be shared.
+            </p>
+            {/*
+              * Outbound email is not configured on this project, so the link
+              * is surfaced here to be copied and sent by hand. It is the same
+              * single-use link the mail would have carried — sharing it is no
+              * weaker than sharing the email, and it is the only thing that
+              * makes the invitation actionable today.
+              */}
+            {issued.inviteLink === null ? null : (
+              <div className={styles.inviteLinkRow}>
+                <p className={styles.issuedNote}>
+                  Email delivery is not configured. Send this sign-in link to{" "}
+                  {issued.ownerEmail} yourself — it is single-use and expires.
+                </p>
+                <code className={styles.inviteLinkValue}>
+                  {issued.inviteLink}
+                </code>
+                <Button
+                  onClick={() => void copyToken(issued.inviteLink ?? "")}
+                  variant="secondary"
+                >
+                  {copied ? "Copied" : "Copy sign-in link"}
+                </Button>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <p className={styles.failure} role="alert">
+              {issued.invitationError}
+            </p>
+            <Button
+              loading={createBusy}
+              loadingLabel="Retrying…"
+              onClick={() => void retryOwnerInvitation(issued)}
+            >
+              Retry invitation
+            </Button>
+            {issued.token === null ? (
+              <p className={styles.issuedNote}>
+                The one-time recovery code is not recoverable from this replay.
+                Retry email delivery here.
+              </p>
+            ) : (
+              <>
+                <p className={styles.issuedNote}>
+                  Recovery only: deliver this single-use owner code over a
+                  trusted channel if email cannot be restored.
+                  {issuedExpiry === null
+                    ? ""
+                    : ` It expires ${issuedExpiry}.`}
+                </p>
+                <div className={styles.tokenRow}>
+                  <code className={styles.token}>{issued.token}</code>
+                  <Button
+                    onClick={() => void copyToken(issued.token as string)}
+                    size="sm"
+                  >
+                    {copied ? "Copied" : "Copy recovery code"}
+                  </Button>
+                </div>
+              </>
+            )}
+          </>
+        )}
         <div className={styles.issuedActions}>
           <Button
-            onClick={() => void copyToken(issued.token)}
+            loading={busy?.kind === "enter"}
+            loadingLabel="Entering…"
+            onClick={() =>
+              void enterClient(
+                issued.tenantId,
+                issued.displayName,
+                knowledgeStartDestination(issued.knowledgeStart),
+              )
+            }
             variant="primary"
           >
-            {copied ? "Copied" : "Copy code"}
+            Enter workspace and add source
           </Button>
           <Button
             onClick={() => {
               setIssued(null);
               setCopied(false);
+              openClient(issued.tenantId);
             }}
           >
-            I have delivered it
+            Client controls
           </Button>
+          <Button onClick={closeCreate}>All clients</Button>
         </div>
-        <p className={styles.issuedNote}>
-          Only a one-way hash of this code was stored, so it cannot be looked up
-          or re-sent. Dismissing this card is the last time anyone can read it.
-          Deliver it to the client&rsquo;s named owner over a channel you trust —
-          whoever redeems it becomes the owner of{" "}
-          <strong>{issued.displayName}</strong>.
-          {issuedExpiry === null ? "" : ` It expires ${issuedExpiry}.`}
-        </p>
       </section>
     );
-
-  /* --- outstanding owner codes ------------------------------------------ */
-
-  const claimsView = (
-    <section className={styles.detailGroup}>
-      <div className={styles.sectionHead}>
-        <div>
-          <p className={styles.eyebrow}>Onboarding</p>
-          <h4 className={styles.subtitle}>Owner codes</h4>
-        </div>
-        <span className={styles.meta}>
-          Status and expiry only. The codes themselves are not recoverable.
-        </span>
-      </div>
-      {claimsError !== null ? (
-        <p className={styles.failure} role="alert">
-          {claimsError}
-        </p>
-      ) : claims === null ? (
-        <p className={styles.loading} role="status">
-          Loading owner codes…
-        </p>
-      ) : claims.length === 0 ? (
-        <EmptyState
-          action={
-            <Button onClick={openCreate} variant="primary">
-              Add client
-            </Button>
-          }
-          compact
-          description="An owner code appears here for every client workspace you create, until the client redeems it."
-          headline="No owner codes outstanding"
-        />
-      ) : (
-        <ul className={styles.claims}>
-          {claims.map((claim) => {
-            const verdict = claimStatusCopy[claim.status] ?? {
-              state: "partial" as StatState,
-              text: claim.status,
-            };
-            const expiry = formatWhen(claim.expiresAt);
-            const redeemed = formatWhen(claim.claimedAt);
-            const revocable =
-              claim.status === "pending" || claim.status === "expired";
-            return (
-              <li
-                className={styles.claim}
-                data-status={claim.status}
-                key={claim.claimId}
-              >
-                <span className={styles.claimCopy}>
-                  <span className={styles.claimName}>{claim.displayName}</span>
-                  <span className={styles.meta}>
-                    {claim.slug}
-                    {redeemed !== null
-                      ? ` · redeemed ${redeemed}`
-                      : expiry === null
-                        ? ""
-                        : claim.status === "expired"
-                          ? ` · expired ${expiry}`
-                          : ` · expires ${expiry}`}
-                  </span>
-                </span>
-                <span className={styles.claimActions}>
-                  <StateBadge state={verdict.state}>{verdict.text}</StateBadge>
-                  {revocable ? (
-                    <Button
-                      loading={revoking === claim.claimId}
-                      loadingLabel="Revoking…"
-                      onClick={() => void revokeClaim(claim)}
-                      size="sm"
-                      variant="danger"
-                    >
-                      Revoke
-                    </Button>
-                  ) : null}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
-  );
 
   /* --- render ---------------------------------------------------------- */
 
   const clientCard = (tenant: PlatformTenantSummary) => {
     const entered = session?.tenantId === tenant.tenantId;
     const updated = formatWhen(tenant.updatedAt);
-    const billing = billingOverview?.tenants.find(
-      (entry) => entry.tenantId === tenant.tenantId,
-    );
+    const paused = tenant.status === "suspended";
+    const attention = needsWorkspaceAttention(tenant);
+    const review = needsWorkspaceReview(tenant);
+    const state = paused
+      ? "paused"
+      : review
+        ? "review"
+        : attention
+          ? "setup"
+          : "live";
+    const stateLabel = paused
+      ? "Paused"
+      : review
+        ? "Review"
+        : attention
+          ? "Setup"
+          : "Live";
+    const summary = paused
+      ? "The workspace is suspended. Its content is retained."
+      : tenant.publishedCourses === 0
+        ? "No published course yet."
+        : tenant.knowledgeChunks === 0
+          ? `${tenant.publishedCourses.toLocaleString()} published ${
+              tenant.publishedCourses === 1 ? "course" : "courses"
+            } · no grounded knowledge yet.`
+          : `${tenant.publishedCourses.toLocaleString()} published ${
+              tenant.publishedCourses === 1 ? "course" : "courses"
+            } · ${tenant.members.toLocaleString()} active ${
+              tenant.members === 1 ? "person" : "people"
+            }.`;
     return (
       <article
         className={styles.client}
         data-entered={entered ? "true" : undefined}
+        data-review={review ? "true" : undefined}
         data-status={tenant.status}
         key={tenant.tenantId}
       >
         <div className={styles.clientHead}>
+          <span
+            className={styles.clientMonogram}
+            data-live={state === "live" || undefined}
+          >
+            {tenantInitials(tenant.displayName)}
+          </span>
           <div>
             <h5 className={styles.clientName}>{tenant.displayName}</h5>
             <p className={styles.meta}>
-              {tenant.assistantName} · {tenant.slug}
-              {tenant.region === null ? "" : ` · ${tenant.region}`}
+              {tenant.assistantName || "Not named yet"}
             </p>
           </div>
-          <StateBadge state={statusState(tenant.status)}>
-            {tenant.status}
-          </StateBadge>
+          <span className={styles.workspaceState} data-state={state}>
+            <i aria-hidden="true" />
+            {stateLabel}
+          </span>
         </div>
 
         {entered ? (
           <span className={styles.insideTag}>You are inside</span>
         ) : null}
 
-        <dl className={styles.clientStats}>
-          <div>
-            <dt>Courses</dt>
-            <dd>
-              {tenant.publishedCourses}/{tenant.courses} published
-            </dd>
-          </div>
-          <div>
-            <dt>People</dt>
-            <dd>{tenant.members.toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt>Knowledge</dt>
-            <dd>{tenant.knowledgeChunks.toLocaleString()} chunks</dd>
-          </div>
-          <div>
-            <dt>Sources</dt>
-            <dd>{tenant.sources.toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt>Billed</dt>
-            <dd>
-              {billing === undefined
-                ? "—"
-                : formatMoney(billing.windowBilledMicro, billing.currency)}
-            </dd>
-          </div>
-        </dl>
+        <p className={styles.clientSummary}>{summary}</p>
 
-        <p className={styles.meta}>
-          {updated === null ? "No recorded activity" : `Last activity ${updated}`}
-        </p>
-
-        <div className={styles.clientActions}>
-          <Button
+        <div className={styles.clientFoot}>
+          <span className={styles.meta}>
+            {updated === null ? "No recorded activity" : `Active ${updated}`}
+          </span>
+          <button
+            className={styles.openClient}
             onClick={() => openClient(tenant.tenantId)}
-            size="sm"
-            variant="primary"
+            type="button"
           >
-            Open client controls
-          </Button>
-          {entered ? (
-            <Button
-              loading={busy?.kind === "exit"}
-              loadingLabel="Leaving…"
-              onClick={() => void exitClient()}
-              size="sm"
-            >
-              Exit workspace
-            </Button>
-          ) : null}
+            {attention && !paused ? "Finish setup" : "Open"} ›
+          </button>
         </div>
       </article>
     );
   };
 
+  const attentionCount =
+    overview?.tenants.filter(
+      (tenant) => needsWorkspaceAttention(tenant) || needsWorkspaceReview(tenant),
+    ).length ?? 0;
+  const visibleTenants =
+    overview?.tenants.filter((tenant) => {
+      const query = workspaceQuery.trim().toLocaleLowerCase();
+      const matchesQuery =
+        query.length === 0 ||
+        tenant.displayName.toLocaleLowerCase().includes(query) ||
+        tenant.assistantName.toLocaleLowerCase().includes(query) ||
+        tenant.slug.toLocaleLowerCase().includes(query);
+      const matchesFilter =
+        workspaceFilter === "all" ||
+        (workspaceFilter === "paused"
+          ? tenant.status === "suspended"
+          : needsWorkspaceAttention(tenant) || needsWorkspaceReview(tenant));
+      return matchesQuery && matchesFilter;
+    }) ?? [];
+
   return (
-    <div className={styles.root}>
+    <div className={styles.root} data-view={panelView}>
       {bar}
 
-      <section className={styles.intro}>
-        <div className={styles.introCopy}>
-          <p className={styles.eyebrow}>Platform owner</p>
-          <h3 className={styles.title}>Control the client accounts.</h3>
-          <p className={styles.lede}>
-            Every number below comes from the durable LearningBot database.
-            Switch sections on or off per client, suspend or restore an account,
-            and enter a workspace when you have to operate inside it.
-          </p>
-        </div>
-        <div className={styles.introActions}>
-          <Button
-            disabled={busy !== null || createOpen}
-            onClick={openCreate}
-            size="sm"
-            variant="primary"
-          >
-            Add client
-          </Button>
-          <Button
-            disabled={busy !== null}
-            onClick={() => void refresh()}
-            size="sm"
-          >
-            Reload
-          </Button>
-        </div>
-      </section>
-
-      {session !== null ? (
+      {session !== null && panelView !== "add-client" ? (
         <div className={styles.inside}>
           <span className={styles.insideCopy}>
             <span className={styles.insideLabel}>
@@ -2322,9 +3079,6 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
         </div>
       ) : null}
 
-      {createView}
-      {issuedView}
-
       {notice === null ? null : (
         <p className={styles.notice} role="status">
           {notice}
@@ -2336,56 +3090,233 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
         </p>
       )}
 
-      {overviewState === "loading" ? (
-        <p className={styles.loading} role="status">
-          Loading the durable control plane…
-        </p>
-      ) : null}
-
-      {overviewState === "failed" ? (
-        <div className={styles.failure} role="alert">
-          {overviewError ??
-            "The durable platform summary could not be loaded. No fixture data was substituted."}
-        </div>
-      ) : null}
-
-      {overviewState === "ready" && overview !== null ? (
-        <>
-          <section className={styles.tiles} aria-label="Platform totals">
-            <StatTile
-              label="Client workspaces"
-              sublabel={`${overview.totals.activeTenants} active`}
-              value={overview.totals.tenants.toLocaleString()}
-            />
-            <StatTile
-              label="Courses"
-              sublabel="Across isolated tenants"
-              value={overview.totals.courses.toLocaleString()}
-            />
-            <StatTile
-              label="Knowledge sources"
-              sublabel={`${overview.totals.knowledgeChunks.toLocaleString()} grounded chunks`}
-              value={overview.totals.sources.toLocaleString()}
-            />
-            <StatTile
-              label="Managed people"
-              sublabel="Active memberships"
-              value={overview.totals.members.toLocaleString()}
-            />
-          </section>
-
-          {selectedTenantId === null ? (
+      {panelView === "billing" ? (
+        <section className={styles.platformPage}>
+          <div className={styles.intro}>
+            <div className={styles.introCopy}>
+              <h3 className={styles.title}>Billing</h3>
+              <p className={styles.lede}>
+                Durable provider cost, billed usage, subscriptions and budget
+                position across every client workspace.
+              </p>
+            </div>
+            <Button onClick={() => openPanel("platform", { view: "workspaces" })}>
+              Workspaces
+            </Button>
+          </div>
+          {billingOverviewState === "loading" ? (
+            <p className={styles.loading} role="status">
+              Loading billing from the control plane…
+            </p>
+          ) : billingOverviewState === "failed" ||
+            billingOverview === null ? (
+            <p className={styles.failure} role="alert">
+              {billingOverviewError ?? "Billing could not be loaded."}
+            </p>
+          ) : (
             <>
-              <section className={styles.detailGroup}>
-                <div className={styles.sectionHead}>
-                  <div>
-                    <p className={styles.eyebrow}>Clients</p>
-                    <h4 className={styles.subtitle}>Live workspaces</h4>
-                  </div>
-                  <span className={styles.meta}>
-                    Updated {formatWhen(overview.generatedAt) ?? "just now"}
-                  </span>
+              <div className={styles.billingTotals}>
+                <article>
+                  <span>Provider cost</span>
+                  <strong>
+                    {formatMoney(
+                      billingOverview.totals.windowTrueCostMicro,
+                      "USD",
+                    )}
+                  </strong>
+                  <small>Last {billingOverview.windowDays} days</small>
+                </article>
+                <article>
+                  <span>Billed usage</span>
+                  <strong>
+                    {formatMoney(
+                      billingOverview.totals.windowBilledMicro,
+                      "USD",
+                    )}
+                  </strong>
+                  <small>Durable metered amount</small>
+                </article>
+                <article>
+                  <span>Awaiting report</span>
+                  <strong>
+                    {formatMoney(
+                      billingOverview.totals.windowUnreportedMicro,
+                      "USD",
+                    )}
+                  </strong>
+                  <small>Not yet sent to Stripe</small>
+                </article>
+              </div>
+              <div className={styles.billingTenants}>
+                {billingOverview.tenants.map((tenant) => (
+                  <article key={tenant.tenantId}>
+                    <div>
+                      <b>{tenant.displayName}</b>
+                      <span>
+                        {tenant.plan.replaceAll("_", " ")} ·{" "}
+                        {tenant.subscriptionStatus.replaceAll("_", " ")}
+                      </span>
+                    </div>
+                    <strong>
+                      {formatMoney(
+                        tenant.windowBilledMicro,
+                        tenant.currency,
+                      )}
+                    </strong>
+                    <button
+                      onClick={() => openClient(tenant.tenantId)}
+                      type="button"
+                    >
+                      Open ›
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      ) : panelView === "settings" ? (
+        <section className={styles.platformPage}>
+          <div className={styles.intro}>
+            <div className={styles.introCopy}>
+              <h3 className={styles.title}>Platform settings</h3>
+              <p className={styles.lede}>
+                The launch boundaries that apply before any client workspace
+                receives learning or access.
+              </p>
+            </div>
+            <Button onClick={() => openPanel("platform", { view: "workspaces" })}>
+              Workspaces
+            </Button>
+          </div>
+          <div className={styles.platformPolicies}>
+            <article>
+              <span>New workspace content</span>
+              <strong>Empty by default</strong>
+              <p>
+                No courses, sources, assistants answers or Estie data are
+                copied into a new tenant.
+              </p>
+            </article>
+            <article>
+              <span>Owner access</span>
+              <strong>Verified invitation</strong>
+              <p>
+                Owners receive a time-limited email and create their own
+                password before membership activates.
+              </p>
+            </article>
+            <article>
+              <span>Tenant boundary</span>
+              <strong>Database enforced</strong>
+              <p>
+                Learning, analytics, signals, credentials and media remain
+                scoped to the selected tenant.
+              </p>
+            </article>
+          </div>
+        </section>
+      ) : panelView === "add-client" ? (
+        <div className={styles.createPage}>
+          <div className={styles.createPageIntro}>
+            <p className={styles.eyebrow}>Platform owner</p>
+            <h3 className={styles.title}>Add a client</h3>
+            <p className={styles.lede}>
+              Four clear steps. Advanced controls stay inside the workspace
+              after creation.
+            </p>
+          </div>
+          {issuedView ?? createView}
+        </div>
+      ) : (
+        <>
+          {panelView === "workspaces" ? (
+            <section className={styles.intro}>
+              <div className={styles.introCopy}>
+                <h3 className={styles.title}>Workspaces</h3>
+                <p className={styles.lede}>
+                  {overview === null
+                    ? "Loading workspaces…"
+                    : `${overview.totals.tenants.toLocaleString()} ${
+                        overview.totals.tenants === 1
+                          ? "workspace"
+                          : "workspaces"
+                      }. ${
+                        attentionCount === 0
+                          ? "Everything is ready."
+                          : `${attentionCount.toLocaleString()} ${
+                              attentionCount === 1 ? "wants" : "want"
+                            } your attention.`
+                      }`}
+                </p>
+              </div>
+              <div className={styles.introActions}>
+                <Button
+                  disabled={busy !== null || createOpen}
+                  onClick={openCreate}
+                  variant="primary"
+                >
+                  <span aria-hidden="true">＋</span>
+                  Add a client
+                </Button>
+              </div>
+            </section>
+          ) : null}
+
+          {overviewState === "loading" ? (
+            <p className={styles.loading} role="status">
+              Loading the durable control plane…
+            </p>
+          ) : null}
+
+          {overviewState === "failed" ? (
+            <div className={styles.failure} role="alert">
+              {overviewError ??
+                "The durable platform summary could not be loaded. No fixture data was substituted."}
+            </div>
+          ) : null}
+
+          {overviewState === "ready" && overview !== null ? (
+            panelView === "workspaces" ? (
+            <>
+              <div className={styles.workspaceTools}>
+                <label className={styles.workspaceSearch}>
+                  <CorsoIcon name="search" size={15} />
+                  <span className={styles.srOnly}>Search workspaces</span>
+                  <input
+                    onChange={(event) =>
+                      setWorkspaceQuery(event.target.value)
+                    }
+                    placeholder="Search"
+                    type="search"
+                    value={workspaceQuery}
+                  />
+                </label>
+                <div
+                  aria-label="Filter workspaces"
+                  className={styles.workspaceFilters}
+                  role="group"
+                >
+                  {(
+                    [
+                      ["all", "All"],
+                      ["attention", "Needs attention"],
+                      ["paused", "Paused"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      aria-pressed={workspaceFilter === value}
+                      key={value}
+                      onClick={() => setWorkspaceFilter(value)}
+                      type="button"
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
+              </div>
+
+              <section aria-label="Client workspaces">
                 {overview.tenants.length === 0 ? (
                   <EmptyState
                     action={
@@ -2396,29 +3327,61 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
                     description="No client workspace exists on this control plane yet."
                     headline="No clients"
                   />
+                ) : visibleTenants.length === 0 ? (
+                  <EmptyState
+                    action={
+                      <Button
+                        onClick={() => {
+                          setWorkspaceFilter("all");
+                          setWorkspaceQuery("");
+                        }}
+                      >
+                        Clear filters
+                      </Button>
+                    }
+                    compact
+                    description="Try another name or show all workspace states."
+                    headline="No matching workspaces"
+                  />
                 ) : (
                   <div className={styles.clients}>
-                    {overview.tenants.map(clientCard)}
+                    {visibleTenants.map(clientCard)}
+                    {workspaceFilter === "all" &&
+                    workspaceQuery.trim().length === 0 ? (
+                      <button
+                        className={styles.addClientCard}
+                        onClick={openCreate}
+                        type="button"
+                      >
+                        <span aria-hidden="true">+</span>
+                        <strong>Add a client</strong>
+                        <small>
+                          Workspace, bot and owner invitation in about two
+                          minutes.
+                        </small>
+                      </button>
+                    ) : null}
                   </div>
                 )}
               </section>
-              {claimsView}
             </>
           ) : (
             renderDetail()
-          )}
+            )
+          ) : null}
         </>
-      ) : null}
+      )}
 
-      <section className={styles.boundary}>
-        <strong>Operational control without surveillance.</strong>
-        <span>
-          This view carries counts, statuses, timestamps and section flags only.
-          Prompt text, conversation content, learning-source bodies, exports and
-          credentials never cross into it — entering a client workspace is the
-          audited path to tenant-scoped work.
-        </span>
-      </section>
+      {panelView === "client" ? (
+        <section className={styles.boundary}>
+          <strong>Operational control without surveillance.</strong>
+          <span>
+            This view carries counts, statuses, timestamps and section flags
+            only. Prompt text, conversation content, learning-source bodies,
+            exports and credentials never cross into it.
+          </span>
+        </section>
+      ) : null}
     </div>
   );
 }

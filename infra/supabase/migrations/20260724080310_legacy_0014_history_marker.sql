@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0014_onboarding_profile_parameter_qualification.
+-- The executable migration is maintained as 0014_onboarding_profile_parameter_qualification.sql.

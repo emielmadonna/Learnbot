@@ -39,6 +39,34 @@ import { ingestionErrorResponse, isRecord, uuid } from "../shared";
 
 const SCAN_OPERATION_TOKEN_ENV = "LEARNINGBOT_MALWARE_SCAN_OPERATION_TOKEN";
 
+export async function GET(request: Request) {
+  try {
+    // Readiness is only useful to an authenticated authoring session. Keep the
+    // response deliberately coarse: the browser learns which formats are
+    // available, never which scanner or operation credential is configured.
+    await authenticatedLearningClient(request);
+    const operationToken =
+      process.env[SCAN_OPERATION_TOKEN_ENV]?.trim() ?? "";
+    const configured =
+      operationToken.length >= 32 && resolveScanProvider() !== null;
+
+    return NextResponse.json(
+      {
+        ok: true,
+        configured,
+        supportedWithoutScanner: ["text/plain", "text/markdown"],
+        scannerRequired: [
+          "application/pdf",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ],
+      },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
+  } catch (error) {
+    return ingestionErrorResponse(error, "api/ingestion/scan");
+  }
+}
+
 async function sha256Hex(bytes: Uint8Array) {
   const digest = await crypto.subtle.digest("SHA-256", bytes as BufferSource);
   return Array.from(new Uint8Array(digest))

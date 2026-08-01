@@ -29,6 +29,19 @@ export type GroundingSource = {
   lessonId: string | null;
   lessonTitle: string | null;
   sectionName: string | null;
+  /** Private visual metadata; the URL is an authenticated same-origin route. */
+  visual?: {
+    visualAssetId: string;
+    title: string;
+    altText: string;
+    mediaType:
+      | "image/jpeg"
+      | "image/png"
+      | "image/svg+xml"
+      | "image/webp"
+      | "video/mp4";
+    url: string;
+  } | null;
   /**
    * Cosine-style semantic similarity in the retrieval RPC's own scale
    * (present only for hybrid/semantic matches; `null` for a lexical-only
@@ -88,6 +101,12 @@ function sourceContext(sources: readonly GroundingSource[]) {
           `<source index="${index + 1}" chunk_id="${source.chunkId}" content_hash="${source.contentHash}">`,
           `Course: ${source.courseTitle}`,
           `Lesson: ${source.lessonTitle ?? source.documentTitle}`,
+          ...(source.visual
+            ? [
+                `Available visual: ${source.visual.title}`,
+                `Visual alt text: ${source.visual.altText}`,
+              ]
+            : []),
           source.excerpt,
           "</source>",
         ].join("\n"),
@@ -143,68 +162,29 @@ function tenantPersonaLines(
   return lines;
 }
 
-export async function answerGroundedLearningQuestion(input: {
+/**
+ * The grounded-answer provider request, built once and shared.
+ *
+ * `answerGroundedLearningQuestion` below buffers a completion; the widget's
+ * streaming path (`api/widget/ask`) streams one. They MUST send the identical
+ * system prompt, history window and source block, or the same question answered
+ * on the same tenant would be grounded differently depending on whether the
+ * visitor's browser asked for a stream. Extracting it is the only way to make
+ * that divergence impossible rather than merely unlikely.
+ */
+export function groundedAnswerRequest(input: {
   assistantName: string;
-  tenantId: string;
-  actorId: string;
-  requestId: string;
-  traceId: string;
-  idempotencyKey: string;
   question: string;
   intent: LearningIntent;
   scopeLabel: string | null;
-  personaInstructions?: string | null;
-  tone?: string | null;
+  personaInstructions?: string | null | undefined;
+  tone?: string | null | undefined;
   history: readonly ConversationHistoryItem[];
   sources: readonly GroundingSource[];
-  /**
-   * The raw `learning_get_agent_directive` payload, or an already-resolved
-   * directive. Optional, and every field of it is re-validated on read
-   * regardless (`resolveAgentDirective`): a missing directive, a directive
-   * from a tenant that predates the agent-control-surface migration, or an
-   * out-of-range stored value all fall back to the same safe platform
-   * defaults rather than reaching the provider.
-   */
-  agentDirective?: unknown;
-  /**
-   * Supplying the caller's Supabase client meters this completion into
-   * `public.cost_ledger` under the resolved model and subjects it to the
-   * tenant's durable budget. Optional so callers that have not been updated
-   * (the widget and preview answer paths) keep working exactly as before,
-   * unmetered.
-   */
-  supabase?: SupabaseClient | null;
-  conversationId?: string | null;
-  operationToken?: string | null;
-}) {
-  const directive: ResolvedAgentDirective =
-    isResolvedAgentDirective(input.agentDirective)
-      ? input.agentDirective
-      : resolveAgentDirective(input.agentDirective);
-
-  if (input.sources.length === 0) {
-    return {
-      answer: directive.noResultsMessage,
-      provider: "grounding-boundary",
-      adapterId: "no-source-safe-answer",
-      providerRequestRef: input.requestId,
-      model: null,
-      usage: [],
-    };
-  }
-
-  const context: ProviderRequestContext = {
-    tenantId: input.tenantId,
-    actorId: input.actorId,
-    requestId: input.requestId,
-    traceId: input.traceId,
-    idempotencyKey: input.idempotencyKey,
-    fundingSource: "platform",
-    deadlineMs: Date.now() + 30_000,
-  };
-  const model = directive.model;
-  const request: ChatCompletionInput = {
-    model,
+  model: string;
+}): ChatCompletionInput {
+  return {
+    model: input.model,
     messages: [
       {
         role: "system",
@@ -238,9 +218,88 @@ export async function answerGroundedLearningQuestion(input: {
       },
     ],
   };
+}
+
+export async function answerGroundedLearningQuestion(input: {
+  assistantName: string;
+  tenantId: string;
+  actorId: string;
+  requestId: string;
+  traceId: string;
+  idempotencyKey: string;
+  question: string;
+  intent: LearningIntent;
+  scopeLabel: string | null;
+  personaInstructions?: string | null;
+  tone?: string | null;
+  history: readonly ConversationHistoryItem[];
+  sources: readonly GroundingSource[];
+  /**
+   * The raw `learning_get_agent_directive` payload, or an already-resolved
+   * directive. Optional, and every field of it is re-validated on read
+   * regardless (`resolveAgentDirective`): a missing directive, a directive
+   * from a tenant that predates the agent-control-surface migration, or an
+   * out-of-range stored value all fall back to the same safe platform
+   * defaults rather than reaching the provider.
+   */
+  agentDirective?: unknown;
+  /**
+   * Supplying the caller's Supabase client meters this completion into
+   * `public.cost_ledger` under the resolved model and subjects it to the
+   * tenant's durable budget. Optional so callers that have not been updated
+   * (the widget and preview answer paths) keep working exactly as before,
+   * unmetered.
+   */
+  supabase?: SupabaseClient | null;
+  conversationId?: string | null;
+  operationToken?: string | null;
+  completion?: (
+    context: ProviderRequestContext,
+    request: ChatCompletionInput,
+  ) => Promise<ProviderOutcome<ChatCompletion>>;
+}) {
+  const directive: ResolvedAgentDirective =
+    isResolvedAgentDirective(input.agentDirective)
+      ? input.agentDirective
+      : resolveAgentDirective(input.agentDirective);
+
+  if (input.sources.length === 0) {
+    return {
+      answer: directive.noResultsMessage,
+      provider: "grounding-boundary",
+      adapterId: "no-source-safe-answer",
+      providerRequestRef: input.requestId,
+      model: null,
+      usage: [],
+    };
+  }
+
+  const context: ProviderRequestContext = {
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    requestId: input.requestId,
+    traceId: input.traceId,
+    idempotencyKey: input.idempotencyKey,
+    fundingSource: "platform",
+    deadlineMs: Date.now() + 30_000,
+  };
+  const model = directive.model;
+  const request = groundedAnswerRequest({
+    assistantName: input.assistantName,
+    question: input.question,
+    intent: input.intent,
+    scopeLabel: input.scopeLabel,
+    personaInstructions: input.personaInstructions,
+    tone: input.tone,
+    history: input.history,
+    sources: input.sources,
+    model,
+  });
 
   let outcome: ProviderOutcome<ChatCompletion>;
-  if (input.supabase) {
+  if (input.completion) {
+    outcome = await input.completion(context, request);
+  } else if (input.supabase) {
     try {
       outcome = (
         await runMeteredCompletion({

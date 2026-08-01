@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "console",
+      "autoPort": true,
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@course-ai/console", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "console-prod",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@course-ai/console", "start", "--port", "3200"],
+      "port": 3200
+    }
+  ]
+}

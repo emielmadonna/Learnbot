@@ -88,6 +88,30 @@ class FakeElement extends EventTarget {
     return this.attributes.get(name) ?? null;
   }
 
+  /**
+   * The mirror of setAttribute, including the dataset and observedAttributes
+   * bookkeeping. Without this the shim throws "removeAttribute is not a
+   * function" the first time the runtime clears an attribute rather than
+   * setting it to a falsy value, which is a test-harness gap masquerading as a
+   * runtime bug.
+   */
+  removeAttribute(name) {
+    const prior = this.getAttribute(name);
+    this.attributes.delete(name);
+    if (name.startsWith("data-")) {
+      const key = name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+      delete this.dataset[key];
+    }
+    const observed = this.constructor.observedAttributes;
+    if (Array.isArray(observed) && observed.includes(name)) {
+      this.attributeChangedCallback?.(name, prior, null);
+    }
+  }
+
+  hasAttribute(name) {
+    return this.attributes.has(name);
+  }
+
   attachShadow() {
     const root = new FakeShadowRoot(this);
     this.shadowRoot = root;

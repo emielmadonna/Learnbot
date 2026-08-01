@@ -76,7 +76,8 @@ type Pose = (typeof POSES)[number];
 const CHARACTER_STYLE =
   "A friendly, stylized 3D bobblehead character: a slightly oversized " +
   "rounded head, simple clean shading, a warm neutral palette, plain " +
-  "transparent background. A gentle caricature, not a photoreal portrait — " +
+  "transparent background with no scenery, floor, frame, glow or cast shadow. " +
+  "A gentle caricature, not a photoreal portrait — " +
   "keep the person's recognizable features (hair, skin tone, glasses if " +
   "present) but simplify and soften them. Square composition, the whole " +
   "character visible and centered.";
@@ -454,6 +455,8 @@ export async function POST(request: Request) {
         width: 1024,
         height: 1024,
         outputMediaType: "image/png",
+        background: "transparent",
+        quality: "medium",
         references,
       });
       if (!outcome.ok) {
@@ -513,4 +516,3 @@ export async function POST(request: Request) {
 
 // The exact accepted consent wording, so the Studio UI can present it
 // without a round trip just to discover it.
-export { CONSENT_PERMISSION_STATEMENT, CONSENT_SELF_STATEMENT };

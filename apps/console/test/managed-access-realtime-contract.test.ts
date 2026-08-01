@@ -14,6 +14,9 @@ const proxy = source("../src/proxy.ts");
 const realtimeRoute = source(
   "../src/app/api/learning/voice/realtime/route.ts",
 );
+const managedVoiceEdge = source(
+  "../../../infra/supabase/functions/learning-provider-voice/index.ts",
+);
 const conversation = source(
   "../src/app/app/conversation/conversation-client.tsx",
 );
@@ -33,12 +36,13 @@ test("production access is admin-created password access without public signup",
 });
 
 test("continuous voice uses authenticated WebRTC with automatic turn detection", () => {
-  assert.match(realtimeRoute, /v1\/realtime\/calls/);
-  assert.match(realtimeRoute, /gpt-realtime-2\.1/);
-  assert.match(realtimeRoute, /semantic_vad/);
-  assert.match(realtimeRoute, /create_response: false/);
-  assert.match(realtimeRoute, /interrupt_response: true/);
-  assert.match(realtimeRoute, /OpenAI-Safety-Identifier/);
+  assert.match(realtimeRoute, /invokeManagedVoice/);
+  assert.match(managedVoiceEdge, /v1\/realtime\/calls/);
+  assert.match(managedVoiceEdge, /gpt-realtime-2\.1/);
+  assert.match(managedVoiceEdge, /semantic_vad/);
+  assert.match(managedVoiceEdge, /create_response: false/);
+  assert.match(managedVoiceEdge, /interrupt_response: true/);
+  assert.match(managedVoiceEdge, /openai-safety-identifier/);
   assert.match(conversation, /new RTCPeerConnection/);
   assert.match(
     conversation,

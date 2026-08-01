@@ -11,7 +11,7 @@ import { widgetHostAdapterSource } from "./embed-prelude";
  *   <script src="https://learning.example.com/widget.js"
  *           data-tenant="wk_..."></script>
  *
- * It is the LearningBot host adapter followed by the built
+ * It is the Corso host adapter followed by the built
  * `@course-ai/widget-runtime` IIFE. The runtime registers
  * `<course-ai-widget>`, reads `globalThis.CourseAiWidgetAdapter` (which the
  * prelude has just defined) and auto-mounts against the `data-tenant` widget

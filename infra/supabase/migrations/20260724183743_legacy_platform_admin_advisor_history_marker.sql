@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for platform_admin_advisor_hardening.
+-- The executable migration is maintained as 20260724183637_platform_admin_advisor_hardening.sql.

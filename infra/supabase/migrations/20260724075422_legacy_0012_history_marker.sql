@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0012_authenticated_onboarding_rpcs.
+-- The executable migration is maintained as 0012_authenticated_onboarding_rpcs.sql.

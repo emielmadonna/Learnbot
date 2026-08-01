@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0022_learning_turn_replay.
+-- The executable migration is maintained as 0022_learning_turn_replay.sql.

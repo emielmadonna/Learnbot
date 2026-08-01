@@ -27,6 +27,8 @@ export type AvatarCharacterProps = {
   /** Accessible name. Omit to keep the character purely decorative. */
   readonly label?: string;
   readonly className?: string;
+  /** Adds a restrained hover/focus reaction for launcher-sized characters. */
+  readonly interactive?: boolean;
 };
 
 const poseClass: Record<AvatarPose, string | undefined> = {
@@ -64,6 +66,7 @@ export function AvatarCharacter({
   monogram,
   label,
   className,
+  interactive = false,
 }: AvatarCharacterProps) {
   const layers = useMemo(
     () =>
@@ -82,8 +85,14 @@ export function AvatarCharacter({
     <span
       aria-hidden={label === undefined ? true : undefined}
       aria-label={label}
-      className={cx(styles.root, poseClass[pose], className)}
+      className={cx(
+        styles.root,
+        poseClass[pose],
+        interactive && styles.interactive,
+        className,
+      )}
       role={label === undefined ? undefined : "img"}
+      tabIndex={interactive ? 0 : undefined}
     >
       <span className={styles.stage}>
         {hasAnyImage ? (
