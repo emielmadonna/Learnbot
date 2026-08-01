@@ -35,7 +35,24 @@ export default async function SignInPage({
     readSupabasePublicConfig();
     const supabase = await createServerSupabaseClient();
     const result = await supabase.auth.getUser();
-    authenticated = Boolean(result.data.user && !result.error);
+    const user = result.data.user;
+    // This predicate must stay identical to `requireVerifiedUser` in
+    // lib/supabase/auth-boundary.ts. It used to be the weaker
+    // `Boolean(user && !error)`, and that difference was a redirect loop:
+    // /auth/change-password calls `requireVerifiedUser`, which rejects a
+    // session whose email (or phone) was never confirmed and bounces to
+    // /auth/sign-in?next=/auth/change-password; this page then saw the same
+    // session as authenticated and redirected straight back. A user in that
+    // state — an invited account that never confirmed — got
+    // ERR_TOO_MANY_REDIRECTS instead of a sign-in form. Treating an unverified
+    // session as not-signed-in here renders the form, which is the only screen
+    // that can actually resolve the state.
+    authenticated = Boolean(
+      user &&
+        !result.error &&
+        !user.is_anonymous &&
+        (user.email_confirmed_at || user.phone_confirmed_at),
+    );
   } catch {
     configured = false;
   }

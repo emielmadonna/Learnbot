@@ -73,29 +73,43 @@ async function resolveSections(
 
   try {
     const response = await supabase.rpc("tenant_get_sections");
-    if (response.error) return permitted;
-    const sections = parseTenantSections(
-      (response.data as { sections?: unknown } | null)?.sections,
-    );
-    if (sections.length === 0) return permitted;
-    for (const section of sections) {
-      if (!isPlatformSectionKey(section.sectionKey)) continue;
-      const key = section.sectionKey as PanelKey;
-      // Platform administration is an account-level entitlement. A client's
-      // own section catalogue must never hide the operator control plane from
-      // an authorized platform administrator who also has a tenant
-      // membership.
-      if (key === "platform" && access.canManagePlatform) {
-        permitted.platform = true;
-        continue;
+    if (!response.error) {
+      const sections = parseTenantSections(
+        (response.data as { sections?: unknown } | null)?.sections,
+      );
+      for (const section of sections) {
+        if (!isPlatformSectionKey(section.sectionKey)) continue;
+        const key = section.sectionKey as PanelKey;
+        // A tenant may switch a section off, but never on past its role gate.
+        permitted[key] = permitted[key] && section.enabled;
       }
-      // A tenant may switch a section off, but never on past its role gate.
-      permitted[key] = permitted[key] && section.enabled;
     }
-    return permitted;
   } catch {
-    return permitted;
+    // Fall through to the operator carve-out on the defaults above.
   }
+
+  // Operator entitlements, applied LAST so they hold on every path — including
+  // an RPC error or an empty catalogue, where the loop above never runs. These
+  // are account-level entitlements rather than client preferences, and a
+  // client's own section catalogue must not take either away from an
+  // authorized platform administrator who also holds a membership there:
+  //
+  //   platform — the operator control plane itself. Losing it strands the
+  //              operator inside the client workspace with no route back.
+  //   insights — analytics and the learner questions behind them. A client may
+  //              legitimately have results switched off in their own console,
+  //              but the operator still has to see what learners are asking in
+  //              order to support the account.
+  //
+  // This only ever widens what the OPERATOR sees. A client's own view is
+  // decided by `section.enabled` in the loop above, so switching results off
+  // for a tenant genuinely hides it from that tenant.
+  if (access.canManagePlatform) {
+    permitted.platform = true;
+    permitted.insights = true;
+  }
+
+  return permitted;
 }
 
 function toShellRole(identityRole: string, canManagePlatform: boolean): ShellRole {

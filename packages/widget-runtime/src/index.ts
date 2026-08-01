@@ -154,6 +154,14 @@ export type WidgetPart =
   | ProgressPart
   | FollowupsPart;
 
+export type AnswerRating = "helpful" | "not_helpful";
+
+/** The local state of one rating: what was clicked, and whether it landed. */
+export interface WidgetAnswerFeedback {
+  rating: AnswerRating;
+  status: "sending" | "saved" | "failed";
+}
+
 export interface WidgetThreadItem {
   id: string;
   sequence: number;
@@ -162,6 +170,20 @@ export interface WidgetThreadItem {
   status: "pending" | "streaming" | "complete" | "interrupted" | "failed";
   parts: WidgetPart[];
   createdAt: string;
+  /**
+   * A SERVER-minted handle this answer can be rated against.
+   *
+   * `id` above is whatever the adapter invented locally to correlate its own
+   * pending and complete events; it means nothing to any API. Ratings key on
+   * this field instead, and the control is not rendered without it, because a
+   * rating posted against a client-minted id is rejected — which on the
+   * console's authenticated surface produced a button that 400'd on every
+   * click. Absent means the server offered no ratable id, and the honest
+   * response to that is to show nothing.
+   */
+  feedbackRef?: string;
+  /** Set by the runtime when the visitor rates; never sent by an adapter. */
+  feedback?: WidgetAnswerFeedback;
 }
 
 export interface WidgetConversation {
@@ -236,6 +258,21 @@ export interface WidgetRuntimeAdapter {
     emit: (event: WidgetRuntimeEvent) => void,
   ): Promise<WidgetVoiceControl>;
   stopGeneration?(input: { conversationId: string; itemId?: string }): Promise<void>;
+  /**
+   * Submit "did that help?" for one answer. Resolve on success, reject on
+   * anything else — the runtime shows the visitor which of those happened
+   * rather than assuming the write landed.
+   *
+   * Optional: a host with no rating endpoint implements nothing, and the
+   * control is never rendered.
+   */
+  rateAnswer?(input: {
+    conversationId: string;
+    itemId: string;
+    feedbackRef: string;
+    rating: AnswerRating;
+    signal: AbortSignal;
+  }): Promise<void>;
   reportHealth?(event: { code: string; tenantKey?: string }): void;
 }
 
@@ -460,6 +497,7 @@ function cloneConversation(conversation: WidgetConversation): WidgetConversation
     items: conversation.items.map((item) => ({
       ...item,
       parts: item.parts.map((part) => ({ ...part })),
+      ...(item.feedback ? { feedback: { ...item.feedback } } : {}),
     })),
   };
 }
@@ -902,6 +940,51 @@ export class CourseAiWidgetElement extends HTMLElementBase {
     await this.send(text);
   }
 
+  /**
+   * Rate one answer.
+   *
+   * Refuses rather than guesses in three cases, all of which would otherwise
+   * become a request the server rejects: no host implementation, no
+   * server-minted `feedbackRef`, and a rating already in flight. The visitor
+   * sees the outcome — "sending", then either the choice held or a failure
+   * they can retry — because a control that silently reports success it never
+   * got is worse than no control.
+   */
+  async rateAnswer(itemId: string, rating: AnswerRating): Promise<void> {
+    await this.#guardAsync("rating", async () => {
+      const adapter = this.#config?.adapter;
+      if (!adapter?.rateAnswer) return;
+      const item = this.#state.conversation.items.find(
+        (candidate) => candidate.id === itemId,
+      );
+      const feedbackRef = item?.feedbackRef;
+      if (!item || !feedbackRef || item.feedback?.status === "sending") return;
+      item.feedback = { rating, status: "sending" };
+      this.#render();
+      const configurationVersion = this.#configurationVersion;
+      try {
+        await adapter.rateAnswer({
+          conversationId: this.#state.conversation.id,
+          itemId,
+          feedbackRef,
+          rating,
+          signal: this.#abort?.signal ?? new AbortController().signal,
+        });
+      } catch (error) {
+        if (configurationVersion !== this.#configurationVersion) return;
+        // The previous choice is NOT restored: the visitor asked for this one,
+        // and reverting the label would misreport what they clicked. Only the
+        // status says the write did not land.
+        item.feedback = { rating, status: "failed" };
+        this.#render();
+        throw error;
+      }
+      if (configurationVersion !== this.#configurationVersion) return;
+      item.feedback = { rating, status: "saved" };
+      this.#render();
+    }, false);
+  }
+
   async startVoice(mode: "push-to-talk" | "tap-to-start" = "tap-to-start"): Promise<void> {
     await this.#guardAsync("voice_start", async () => {
       if (!this.#config?.adapter.startVoice || !this.#state.branding.voiceEnabled) return;
@@ -1245,6 +1328,8 @@ export class CourseAiWidgetElement extends HTMLElementBase {
       if (item.role === "user" && item.status === "failed") {
         fragment.append(this.#renderRetryRow());
       }
+      const feedbackRow = this.#renderFeedbackRow(item);
+      if (feedbackRow) fragment.append(feedbackRow);
     }
     this.#refs.thread.replaceChildren(fragment);
     this.#refs.thread.scrollTop = this.#refs.thread.scrollHeight;
@@ -1272,6 +1357,60 @@ export class CourseAiWidgetElement extends HTMLElementBase {
   #thinkingLabel(): string {
     const module = this.#state.learningContext.module;
     return module ? `Reading ${module}…` : "Thinking…";
+  }
+
+  /**
+   * The "Did that help?" row shown under a finished answer.
+   *
+   * Returns `null` — rendering nothing at all — unless every precondition for
+   * a write the server will accept is already true: the turn is an assistant
+   * turn that has finished, the host implements `rateAnswer`, and the server
+   * supplied a `feedbackRef` to rate against. A control that cannot succeed is
+   * not shown, and no state is invented to make it appear.
+   */
+  #renderFeedbackRow(item: WidgetThreadItem): HTMLElement | null {
+    if (item.role !== "assistant") return null;
+    if (item.status !== "complete" && item.status !== "interrupted") return null;
+    if (!item.feedbackRef || !this.#config?.adapter.rateAnswer) return null;
+
+    const row = document.createElement("div");
+    row.className = "feedbackRow";
+    row.dataset.state = item.feedback?.status ?? "offered";
+
+    const prompt = document.createElement("span");
+    prompt.className = "feedbackPrompt";
+    prompt.textContent =
+      item.feedback?.status === "saved"
+        ? "Thanks — noted."
+        : item.feedback?.status === "failed"
+          ? "That didn't save."
+          : "Did that help?";
+    row.append(prompt);
+
+    const options: { rating: AnswerRating; label: string }[] = [
+      { rating: "helpful", label: "Yes" },
+      { rating: "not_helpful", label: "Not really" },
+    ];
+    for (const option of options) {
+      const chosen = item.feedback?.rating === option.rating;
+      const button = createButton(
+        option.rating === "helpful"
+          ? "Yes, that answer helped"
+          : "No, that answer did not help",
+        `feedbackButton${chosen ? " chosen" : ""}`,
+        option.label,
+      );
+      button.setAttribute("aria-pressed", chosen ? "true" : "false");
+      // Only the in-flight state disables the pair. A saved rating stays
+      // clickable so a visitor can correct it: re-rating updates in place in
+      // the database, by unique index, rather than counting twice.
+      if (item.feedback?.status === "sending") button.disabled = true;
+      button.addEventListener("click", () => {
+        void this.rateAnswer(item.id, option.rating);
+      });
+      row.append(button);
+    }
+    return row;
   }
 
   /** The "Didn't send · Try again" row shown under a failed user message. */
@@ -1654,6 +1793,10 @@ export class CourseAiWidgetElement extends HTMLElementBase {
     if (!(incoming.status === "pending" && existing.status !== "pending")) {
       existing.status = incoming.status;
     }
+    // The ratable id arrives with the completed turn, never with the pending
+    // placeholder, so it is adopted when offered and never cleared by a later
+    // event that does not carry one.
+    if (incoming.feedbackRef) existing.feedbackRef = incoming.feedbackRef;
     existing.role = incoming.role;
     existing.modality = incoming.modality;
     existing.createdAt = incoming.createdAt;
@@ -2129,6 +2272,13 @@ button:focus-visible,textarea:focus-visible,[tabindex]:focus-visible,a:focus-vis
 .retryRow{display:flex;justify-content:flex-end;margin:-10px 0 16px}
 .retryLabel{color:#c53030;font-size:11px}
 .retryButton{border:0;background:transparent;padding:0;color:#c53030;font:inherit;font-weight:600;text-decoration:underline}
+.feedbackRow{display:flex;align-items:center;gap:8px;margin:-8px 0 16px;font-size:11px}
+.feedbackPrompt{color:#5b6663}
+.feedbackRow[data-state=failed] .feedbackPrompt{color:#c53030}
+.feedbackButton{border:1px solid #d8e0de;border-radius:999px;background:transparent;padding:3px 10px;color:#3d4a47;font-size:11px;font-weight:600;line-height:1.6}
+.feedbackButton:hover:not(:disabled){border-color:var(--widget-primary);color:var(--widget-primary)}
+.feedbackButton.chosen{border-color:var(--widget-primary);background:var(--widget-accent);color:var(--widget-primary)}
+.feedbackButton:disabled{opacity:.55;cursor:default}
 .away{margin:10px 14px 0;padding:14px 16px;border-radius:14px;background:var(--widget-surface);box-shadow:0 1px 2px rgba(0,0,0,.06);text-align:center}
 .away[hidden]{display:none}
 .awayHeading{font-size:14px;font-weight:650;margin-bottom:4px}

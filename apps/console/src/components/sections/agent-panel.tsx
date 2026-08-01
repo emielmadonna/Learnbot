@@ -11,6 +11,7 @@ import {
 import ConversationClient from "../../app/app/conversation/conversation-client";
 import { UsageSignal } from "../../app/app/usage-signal";
 import { AvatarStudio } from "../avatar-studio";
+import { CorsoIcon, corsoIconNames } from "../corso/corso-icon";
 import { brandStyle } from "../app-shell/brand";
 import type { AgentConfig, PanelProps, ShellPayload } from "../app-shell/contract";
 import { asWorkspace, useDataVersion } from "../app-shell/shell-data";
@@ -731,26 +732,38 @@ function AssistantView({
               </div>
             )}
           </section>
+          {/*
+            * Collapsed by default. The grounding list answers "what can it
+            * read?", which is a question you ask once — not something worth
+            * a permanent column of course titles beside every conversation.
+            * `<details>` with no `open` attribute is the same pattern the
+            * per-message source list already uses, so both places in the
+            * product disclose their sources the same way.
+            */}
           <section>
-            <p>Grounding</p>
-            <h3>
-              {workspace.courses.length === 0
-                ? "No courses yet"
-                : `${workspace.courses.length} ${workspace.courses.length === 1 ? "course" : "courses"}`}
-            </h3>
-            <ul className={styles.talkCourseList}>
-              {workspace.courses.slice(0, 4).map((course) => (
-                <li key={course.courseId}>
-                  <span>{course.title}</span>
-                  <small>{course.status}</small>
-                </li>
-              ))}
-            </ul>
-            {workspace.courses.length > 4 ? (
-              <span className={styles.talkMore}>
-                +{workspace.courses.length - 4} more
-              </span>
-            ) : null}
+            <details className={styles.talkGrounding}>
+              <summary>
+                <span className={styles.talkGroundingLabel}>Grounding</span>
+                <span className={styles.talkGroundingCount}>
+                  {workspace.courses.length === 0
+                    ? "No courses yet"
+                    : `${workspace.courses.length} ${workspace.courses.length === 1 ? "course" : "courses"}`}
+                </span>
+              </summary>
+              <ul className={styles.talkCourseList}>
+                {workspace.courses.slice(0, 4).map((course) => (
+                  <li key={course.courseId}>
+                    <span>{course.title}</span>
+                    <small>{course.status}</small>
+                  </li>
+                ))}
+              </ul>
+              {workspace.courses.length > 4 ? (
+                <span className={styles.talkMore}>
+                  +{workspace.courses.length - 4} more
+                </span>
+              ) : null}
+            </details>
           </section>
         </aside>
       </div>
@@ -1966,16 +1979,50 @@ function AgentConfigurator({
                   required
                   value={draft.assistantName}
                 />
-                <TextField
-                  autoComplete="off"
-                  disabled={busy}
-                  error={errors.iconGlyph}
-                  help="Shown when there is no image. One letter or emoji."
-                  label="Icon glyph"
-                  maxLength={16}
-                  onChange={(event) => update("iconGlyph", event.target.value)}
-                  value={draft.iconGlyph}
-                />
+                {/*
+                  * The icon is stored as free text, so a Corso icon name and a
+                  * typed character live in the same column. The picker offers
+                  * the product's own icon set — which is what the rest of the
+                  * console draws with — while the field underneath still takes
+                  * any letter or emoji. Nothing already saved stops working.
+                  */}
+                <div className={styles.iconField}>
+                  <TextField
+                    autoComplete="off"
+                    disabled={busy}
+                    error={errors.iconGlyph}
+                    help="Pick a Corso icon, or type a single letter or emoji."
+                    label="Icon"
+                    maxLength={16}
+                    onChange={(event) =>
+                      update("iconGlyph", event.target.value)
+                    }
+                    value={draft.iconGlyph}
+                  />
+                  <div
+                    aria-label="Corso icons"
+                    className={styles.iconChoices}
+                    role="radiogroup"
+                  >
+                    {corsoIconNames.map((name) => (
+                      <button
+                        aria-checked={draft.iconGlyph === name}
+                        aria-label={name}
+                        className={styles.iconChoice}
+                        data-selected={
+                          draft.iconGlyph === name ? "true" : "false"
+                        }
+                        disabled={busy}
+                        key={name}
+                        onClick={() => update("iconGlyph", name)}
+                        role="radio"
+                        type="button"
+                      >
+                        <CorsoIcon name={name} size={18} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
               <div className={styles.pair}>
                 <FileDrop

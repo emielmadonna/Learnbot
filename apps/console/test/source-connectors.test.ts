@@ -330,3 +330,97 @@ test("source hardening aligns author roles and binds Circle Vault refs to the te
     /grant execute on function public\.learning_source_connector_sync\([\s\S]*?\) to authenticated;/u,
   );
 });
+
+/* ------------------------------------------- imported courses can publish */
+
+const publishImportedMigration = readFileSync(
+  new URL(
+    "../../../infra/supabase/migrations/20260731071000_publish_imported_source_courses.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
+test("publishing accepts imported knowledge, not only hand-authored lessons", () => {
+  // The gate that made every connector import a dead end: a course created by
+  // `learning_create_source_course` has zero lessons and zero content blocks,
+  // so the authored-content check raised unconditionally and the course could
+  // never leave 'draft' — while retrieval requires 'published'.
+  assert.match(publishImportedMigration, /has_authored_content := exists \(/u);
+  assert.match(publishImportedMigration, /has_imported_knowledge := exists \(/u);
+  assert.match(
+    publishImportedMigration,
+    /if not has_authored_content and not has_imported_knowledge then/u,
+  );
+  assert.match(
+    publishImportedMigration,
+    /raise check_violation using message = 'Course has no publishable content';/u,
+  );
+});
+
+test("imported knowledge only unlocks a publish when it is live and active", () => {
+  // Anything weaker would let a retired or superseded import publish a course
+  // that then answers nothing.
+  for (const predicate of [
+    "kv.knowledge_version_id = c.active_knowledge_version_id",
+    "and kv.deleted_at is null",
+    "and kv.status = 'published'",
+    "and ch.deleted_at is null",
+  ]) {
+    assert.ok(
+      publishImportedMigration.includes(predicate),
+      `the imported-knowledge gate dropped ${predicate}`,
+    );
+  }
+});
+
+test("an import-only publish does not mint an empty authored knowledge version", () => {
+  assert.match(publishImportedMigration, /if has_authored_content then/u);
+  assert.match(
+    publishImportedMigration,
+    /projection := app_private\.knowledge_project_course\(/u,
+  );
+  assert.match(
+    publishImportedMigration,
+    /projection := app_private\.knowledge_active_version_state\(/u,
+  );
+});
+
+test("publishing stays an authenticated, authored act", () => {
+  assert.match(
+    publishImportedMigration,
+    /revoke execute on function public\.learning_publish_course\(uuid, text\)\s*from public, anon, service_role;/u,
+  );
+  assert.match(
+    publishImportedMigration,
+    /grant execute on function public\.learning_publish_course\(uuid, text\)\s*to authenticated;/u,
+  );
+  // The connector still must not publish anything by itself.
+  assert.doesNotMatch(migration, /set status = 'published'[\s\S]{0,80}public\.courses/u);
+});
+
+test("the connector stops calling an unpublished import answerable", () => {
+  assert.match(
+    publishImportedMigration,
+    /'activationBlockedReason', 'course_not_published'/u,
+  );
+  assert.match(publishImportedMigration, /'retrievable', false/u);
+  assert.match(publishImportedMigration, /and c\.status = 'published'/u);
+  // A refusal must be passed through untouched rather than rewritten.
+  assert.match(
+    publishImportedMigration,
+    /when coalesce\(\(projected\.result ->> 'ok'\)::boolean, false\) is not true\s*then projected\.result/u,
+  );
+});
+
+test("the connector panel tells the creator what actually unblocks the import", () => {
+  assert.match(component, /activationBlockedReason/u);
+  assert.match(
+    component,
+    /"Imported — publish this course to make it answerable"/u,
+  );
+  assert.match(
+    component,
+    /Publish the course to let the assistant answer from it\./u,
+  );
+});

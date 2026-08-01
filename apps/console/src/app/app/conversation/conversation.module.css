@@ -1168,61 +1168,195 @@
   perspective: 900px;
 }
 
+/*
+ * A cloud suspended in glass.
+ *
+ * The shell is a clean sphere and holds its shape; everything that moves lives
+ * INSIDE it. Previously the outer body itself morphed, so the whole mark
+ * wobbled like an amoeba. Separating the two is what makes it read as liquid
+ * under glass rather than as something growing: the glass stays still and
+ * catches light, the cloud drifts and re-forms behind it.
+ *
+ * `overflow: hidden` is what does the containing — the cloud is deliberately
+ * larger than the sphere and is clipped by it, so its edges never resolve and
+ * you only ever see it through the glass. The ambient bloom that used to come
+ * from the clipped child is now carried by the outer box-shadows.
+ */
 .voiceOrb {
   --voice-energy: 0;
   position: relative;
   display: block;
-  width: 74%;
-  height: 64%;
-  border-radius: 48% 52% 58% 42% / 56% 46% 54% 44%;
+  overflow: hidden;
+  /* Contains the additive blending below so it cannot leak onto the page. */
+  isolation: isolate;
+  width: 68%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  /*
+   * BRIGHT, not dark. The sphere runs near-white at the top left and
+   * saturates into the brand colour at the bottom right, with no vignette and
+   * no dark rim anywhere.
+   *
+   * Earlier passes built a dark interior on the theory that white vapour needs
+   * a dark field to read against. That produced a storm cloud. The reference is
+   * lit from within — the contrast comes from white bands crossing a saturated
+   * gradient, not from light-on-dark.
+   *
+   * `--accent` is brand-derived (app-shell/brand.ts), so this follows a
+   * tenant's palette with no extra wiring.
+   */
   background:
-    radial-gradient(circle at 26% 27%, color-mix(in srgb, var(--ink) 60%, transparent), transparent 18%),
-    radial-gradient(circle at 44% 55%, var(--accent), var(--elev) 82%);
-  box-shadow:
-    0 28px 70px var(--accent-wash),
-    0 0 80px var(--accent-wash);
+    linear-gradient(
+      142deg,
+      color-mix(in srgb, var(--accent) 20%, #fff) 0%,
+      color-mix(in srgb, var(--accent) 56%, #fff) 38%,
+      color-mix(in srgb, var(--accent) 94%, #fff) 76%,
+      var(--accent) 100%
+    );
+  box-shadow: 0 24px 60px var(--accent-wash);
   scale: calc(1 + (var(--voice-energy) * 0.2));
   transform: rotate(-3deg);
   transition: scale 70ms linear;
   animation: cloudBreathe 7s ease-in-out infinite;
 }
 
+/*
+ * The glass itself: a specular highlight above and a bounce below. Sits over
+ * the cloud but under the voice bars, so it reads as a surface the cloud is
+ * behind rather than a layer painted on top of everything.
+ */
+.voiceOrb::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  border-radius: 50%;
+  /*
+   * Kept deliberately restrained. An earlier pass used a near-opaque white
+   * highlight across the top third, which flattened everything underneath it —
+   * the glass was legible and the gas was not. A tight specular and a thin rim
+   * are enough to say "sphere" without competing with what is inside it.
+   */
+  background:
+    radial-gradient(
+      ellipse 30% 20% at 30% 17%,
+      color-mix(in srgb, #fff 52%, transparent),
+      transparent 68%
+    ),
+    radial-gradient(
+      ellipse 56% 34% at 70% 92%,
+      color-mix(in srgb, #fff 14%, transparent),
+      transparent 72%
+    );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 16%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+
+/*
+ * All four layers are WHITE. Each is built from several SMALL, tight radial
+ * gradients rather than one broad soft one — that is what makes individual
+ * puffs readable. A single wide gradient blurs into an even fog no matter how
+ * it moves; a handful of tight ones stay separate enough to be seen sliding
+ * past each other, which is the thing that reads as cloud.
+ *
+ * Blur is 6-10px, roughly half what it was. Past about 12px on an orb this
+ * size every internal edge dissolves and the result is a glow, not a cloud.
+ */
+
+/*
+ * CONTINUOUS VAPOUR, not a set of puffs.
+ *
+ * Every earlier attempt built the cloud from layered radial gradients, and it
+ * always read as cotton wool for a structural reason: a radial gradient is a
+ * disc. Stack as many as you like, blur them as hard as you like, and you
+ * still have a group of discrete round blobs — the eye reads the circles.
+ *
+ * Instead there are now two smooth white fields, each displaced by fractal
+ * noise (`feTurbulence` + `feDisplacementMap`, defined in
+ * conversation-client.tsx). Displacement pushes each pixel of a continuous
+ * field by a noise value, which shreds the circles into filaments and wisps —
+ * genuinely continuous structure, which is what vapour actually is.
+ *
+ * The two filters animate `baseFrequency` in opposite directions at 26s and
+ * 19s, so the fields flow against each other rather than moving as one mass.
+ *
+ * `--voice-energy` drives opacity and scale here rather than blur: with a
+ * displacement map already in the chain, blur is the expensive filter to
+ * animate, and opacity reads more strongly anyway.
+ */
+.voiceOrb::before,
 .voiceOrb em {
   position: absolute;
-  z-index: -1;
-  inset: -30%;
-  border-radius: 50%;
-  background: var(--accent-wash);
-  filter: blur(38px);
   content: "";
+  will-change: opacity, transform;
 }
 
-.voiceOrb i {
-  position: absolute;
-  z-index: 2;
-  top: 48%;
-  width: 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) 74%, transparent);
-  opacity: 0.74;
+/*
+ * BANDS, not puffs.
+ *
+ * The source of each layer is a linear gradient of white stripes running
+ * diagonally, which the turbulence above bends into long silky ribbons. That
+ * is the structure in the reference: continuous flow crossing the sphere, not
+ * a field of separate blobs.
+ *
+ * The filters use only 2-3 octaves at very low frequency. Octave count is what
+ * decides grain versus flow — the previous 6-octave version produced fine
+ * cumulus texture, which is a different material entirely.
+ */
+.voiceOrb::before {
+  z-index: 0;
+  inset: -50%;
+  background: linear-gradient(
+    126deg,
+    transparent 2%,
+    #fff 18%,
+    color-mix(in srgb, #fff 15%, transparent) 34%,
+    #fff 52%,
+    color-mix(in srgb, #fff 10%, transparent) 68%,
+    #fff 84%,
+    transparent 98%
+  );
+  opacity: calc(0.95 + (var(--voice-energy) * 0.05));
+  filter: url("#corsoGasA");
+  animation: gasDriftA 24s ease-in-out infinite;
 }
 
-.voiceOrb i:nth-child(1) {
-  left: 43%;
-  height: 15px;
+.voiceOrb em {
+  z-index: 0;
+  inset: -42%;
+  background: linear-gradient(
+    104deg,
+    transparent 6%,
+    #fff 26%,
+    color-mix(in srgb, #fff 8%, transparent) 44%,
+    #fff 64%,
+    color-mix(in srgb, #fff 12%, transparent) 82%,
+    transparent 96%
+  );
+  opacity: calc(0.82 + (var(--voice-energy) * 0.18));
+  filter: url("#corsoGasB");
+  scale: calc(1 + (var(--voice-energy) * 0.12));
+  transition:
+    scale 90ms ease-out,
+    opacity 90ms ease-out;
+  animation: gasDriftC 31s ease-in-out infinite reverse;
 }
 
-.voiceOrb i:nth-child(2) {
-  left: 50%;
-  height: 27px;
-  transform: translateY(-6px);
-}
-
-.voiceOrb i:nth-child(3) {
-  left: 57%;
-  height: 12px;
-}
-
+/*
+ * The three equaliser bars are gone.
+ *
+ * Speech is shown by the CLOUD now: `--voice-energy` drives every layer's
+ * opacity, blur and scale, so the gas visibly surges as the assistant listens
+ * and answers. Bars sitting on top of that were a second, cruder read-out of
+ * the same signal, and they blocked the middle of the orb — the densest part
+ * of the cloud and the whole reason to look at it.
+ *
+ * Hidden rather than removed from the markup: `conversation-client.tsx` still
+ * renders the three `<i>` elements, and hiding here keeps this change to one
+ * file. The nth-child and per-state rules below are inert while this holds.
+ */
 .voiceOrb_recording {
   animation: cloudListening 1.2s ease-in-out infinite;
 }
@@ -1234,21 +1368,6 @@
 
 .voiceOrb_speaking {
   animation: cloudSpeaking 0.95s ease-in-out infinite;
-}
-
-.voiceOrb_recording i,
-.voiceOrb_speaking i {
-  animation: voiceBar 0.72s ease-in-out infinite alternate;
-}
-
-.voiceOrb_recording i:nth-child(2),
-.voiceOrb_speaking i:nth-child(2) {
-  animation-delay: 0.14s;
-}
-
-.voiceOrb_recording i:nth-child(3),
-.voiceOrb_speaking i:nth-child(3) {
-  animation-delay: 0.28s;
 }
 
 .voiceContinuous .voiceOrb {
@@ -1460,17 +1579,59 @@
   }
 }
 
+/*
+ * The glass. Scale and a slight turn only — a sphere that morphs stops being
+ * glass. The `border-radius` morph that used to live here now belongs to the
+ * cloud inside it.
+ */
 @keyframes cloudBreathe {
   0%,
   100% {
     transform: rotate(-3deg) scale(0.98);
-    border-radius: 48% 52% 58% 42% / 56% 46% 54% 44%;
   }
   50% {
     transform: rotate(3deg) scale(1.025);
-    border-radius: 57% 43% 46% 54% / 47% 58% 42% 53%;
   }
 }
+
+/*
+ * The four gas layers.
+ *
+ * Each one translates as well as morphing, and that is the whole trick: layers
+ * that only rotate in place stay locked together and read as one object, while
+ * layers that slide past each other shear, and shearing is what the eye reads
+ * as gas. They travel in different directions at different rates so the
+ * overlaps are never the same twice.
+ */
+@keyframes gasDriftA {
+  0%,
+  100% {
+    border-radius: 54% 46% 61% 39% / 47% 58% 42% 53%;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  33% {
+    border-radius: 43% 57% 48% 52% / 62% 38% 62% 38%;
+    transform: translate(6%, -5%) rotate(8deg) scale(1.08);
+  }
+  66% {
+    border-radius: 60% 40% 55% 45% / 40% 60% 40% 60%;
+    transform: translate(-5%, 4%) rotate(-6deg) scale(0.95);
+  }
+}
+
+
+@keyframes gasDriftC {
+  0%,
+  100% {
+    border-radius: 62% 38% 44% 56% / 43% 58% 42% 57%;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  50% {
+    border-radius: 45% 55% 59% 41% / 57% 44% 56% 43%;
+    transform: translate(9%, -8%) rotate(14deg) scale(1.12);
+  }
+}
+
 
 @keyframes cloudListening {
   0%,
@@ -1501,17 +1662,6 @@
   }
   50% {
     transform: rotate(2deg) scale(1.04);
-  }
-}
-
-@keyframes voiceBar {
-  from {
-    opacity: 0.42;
-    scale: 1 0.45;
-  }
-  to {
-    opacity: 1;
-    scale: 1 1.25;
   }
 }
 
@@ -1702,13 +1852,11 @@
   .spectralEdge,
   .textCanvas,
   .voiceOrb,
+  .voiceOrb::before,
+  .voiceOrb em,
   .orb,
   .welcomeOrb,
   .thinkingDots i,
-  .voiceOrb i {
-    animation: none;
-    transition: none;
-  }
 
   .feed {
     scroll-behavior: auto;

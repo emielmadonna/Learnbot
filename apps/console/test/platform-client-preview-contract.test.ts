@@ -50,10 +50,22 @@ test("the global banner verifies the durable session and always exposes an exit"
 });
 
 test("ordinary tenant sessions do not probe platform detail", () => {
-  assert.match(
-    banner,
-    /sessionStorage\.getItem\("platform-client-preview"\)[\s\S]*tenant\.tenantId/,
-  );
-  assert.match(banner, /if \([\s\S]*\) \{\s*return;\s*\}/);
+  // The probe is gated on the SERVER-DERIVED role, never on browser storage.
+  //
+  // `sessionStorage` was the original gate and it was wrong twice over. It is
+  // ephemeral, so a second tab or a browser restart lost the key while the
+  // durable server-side entry stayed open — and because
+  // `resolveAppAccessMode` returns `tenant_workspace` for as long as a tenant
+  // is selected, the operator was then stranded inside the client workspace
+  // with no route back to the control plane. It is also writable from
+  // devtools, so it never actually stopped a curious tenant member from
+  // probing. `role` resolves from `platform_admin_is_authorized` on the
+  // server and does neither.
+  assert.match(banner, /role !== "platform_owner"/);
+  assert.doesNotMatch(banner, /sessionStorage\.getItem/);
+  // The shell must hand the role down, or the gate silently hides the exit
+  // from everyone — the exact failure this test now guards.
+  assert.match(shell, /<PlatformClientPreviewBanner[\s\S]*?role=\{payload\.role\}/);
+  // Exiting still clears the marker the platform panel writes on entry.
   assert.match(banner, /sessionStorage\.removeItem\("platform-client-preview"\)/);
 });

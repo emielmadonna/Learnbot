@@ -521,6 +521,41 @@ Deno.serve(async (request: Request) => {
     );
   }
 
+  // A copyable link, because outbound email is not configured on this project.
+  //
+  // `inviteUserByEmail` above hands the link to the mail provider and returns
+  // nothing usable, so if delivery is not set up the invitation exists and is
+  // audited but nobody can act on it. `generateLink` returns the same
+  // single-use action link directly, which an operator can paste into whatever
+  // channel they actually use.
+  //
+  // `magiclink` rather than `invite`: by this point the auth user definitely
+  // exists (it was just created, or recovered above), and `invite` refuses an
+  // existing user. This is also what makes it work for someone already stuck
+  // half-provisioned with an unconfirmed email.
+  //
+  // Failure here is deliberately NOT fatal. The invitation is already durably
+  // recorded; a missing link is a degraded response, not a failed provision.
+  let inviteLink: string | null = null;
+  let inviteLinkError: string | null = null;
+  try {
+    const generated = await service.auth.admin.generateLink({
+      type: "magiclink",
+      email: canonicalEmail,
+      options: { redirectTo },
+    });
+    const actionLink = generated.data?.properties?.action_link;
+    if (generated.error) {
+      inviteLinkError = safeProviderMessage(generated.error.message);
+    } else if (typeof actionLink === "string" && actionLink.length > 0) {
+      inviteLink = actionLink;
+    }
+  } catch (error) {
+    inviteLinkError = safeProviderMessage(
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+
   return json({
     ok: true,
     invitation: {
@@ -532,6 +567,8 @@ Deno.serve(async (request: Request) => {
       displayName: canonicalDisplayName,
       role: canonicalRole,
       status: "sent",
+      inviteLink,
+      inviteLinkError,
     },
     deliveryStatus: "sent",
   });

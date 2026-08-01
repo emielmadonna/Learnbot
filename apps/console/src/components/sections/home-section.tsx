@@ -16,7 +16,9 @@ import {
 import type { LearningCourse } from "../../lib/supabase/learning-rpc";
 import {
   parseAnalyticsQuestionLabels,
+  parseAnalyticsSignals,
   type AnalyticsQuestionLabels,
+  type AnalyticsSignals,
 } from "../../lib/supabase/question-intelligence-rpc";
 import {
   PlatformRpcError,
@@ -461,6 +463,8 @@ type ActivitySnapshot = {
   answerQuality: AnalyticsAnswerQuality;
   progress: AnalyticsLearnerProgress;
   questionLabels: AnalyticsQuestionLabels | null;
+  /** Null when the signals read failed — never an empty list standing in. */
+  signals: AnalyticsSignals | null;
 };
 
 type ActivityFailure = "unavailable" | "denied" | "authentication" | "unverifiable";
@@ -548,7 +552,21 @@ async function loadActivity(days: number): Promise<ActivitySnapshot> {
     throw new AnalyticsRpcError("unverifiable");
   }
 
-  const questionLabels = await fetch(
+  /*
+   * One request, both halves of it.
+   *
+   * This response has always carried `signals` alongside `labels`, and Home
+   * parsed the labels and dropped the signals on the floor — which is why the
+   * surface that is supposed to say "here is what is worth acting on" never
+   * mentioned a single detected signal. Nothing new is fetched here; the
+   * payload is simply no longer half-read.
+   *
+   * The two are parsed independently so a malformed half cannot take the
+   * other down, and each falls to null rather than to an empty value: an
+   * empty list would read as "nothing detected", which is a claim, while null
+   * renders as "not known".
+   */
+  const intelligence = await fetch(
     `/api/analytics/question-intelligence?${query.toString()}`,
     {
       cache: "no-store",
@@ -564,9 +582,23 @@ async function loadActivity(days: number): Promise<ActivitySnapshot> {
       if (!isRecord(intelligenceBody) || intelligenceBody.ok !== true) {
         return null;
       }
-      return parseAnalyticsQuestionLabels(intelligenceBody.labels);
+      let labels: AnalyticsQuestionLabels | null = null;
+      let signals: AnalyticsSignals | null = null;
+      try {
+        labels = parseAnalyticsQuestionLabels(intelligenceBody.labels);
+      } catch {
+        labels = null;
+      }
+      try {
+        signals = parseAnalyticsSignals(intelligenceBody.signals);
+      } catch {
+        signals = null;
+      }
+      return { labels, signals };
     })
     .catch(() => null);
+  const questionLabels = intelligence?.labels ?? null;
+  const detectedSignals = intelligence?.signals ?? null;
 
   return {
     overview: parseAnalyticsTenantOverview(body.overview),
@@ -574,6 +606,7 @@ async function loadActivity(days: number): Promise<ActivitySnapshot> {
     answerQuality: parseAnalyticsAnswerQuality(body.answerQuality),
     progress: parseAnalyticsLearnerProgress(body.learnerProgress),
     questionLabels,
+    signals: detectedSignals,
   };
 }
 
@@ -928,6 +961,8 @@ function OperatorActivityGrid({
   const distribution = activity.snapshot.distribution.distribution;
   const topicDistribution =
     activity.snapshot.questionLabels?.metrics.topicDistribution ?? null;
+  const signalsMetric =
+    activity.snapshot.signals?.metrics.detectedSignals ?? null;
   const questions =
     volume.state === "unknown" ? null : volume.value.totalQuestions;
   const people =
@@ -1087,6 +1122,57 @@ function OperatorActivityGrid({
           variant="quiet"
         >
           See every question <span aria-hidden="true">›</span>
+        </PanelLink>
+      </section>
+      {/*
+        * Signals — the half of this response Home used to discard.
+        *
+        * Three states are kept apart on purpose, because collapsing them is
+        * how a surface starts lying: a failed read says "not known", a
+        * successful read with nothing detected says WHY (the RPC ships that
+        * sentence, and it is usually "no question in this range carries a
+        * recorded classification"), and a real detection is listed. An empty
+        * list is never rendered as reassurance.
+        */}
+      <section className={styles.topicCard} aria-labelledby="home-signals">
+        <h2 id="home-signals">Worth acting on</h2>
+        {signalsMetric === null ? (
+          <p className={styles.noTopics}>
+            Signals are not known for this range — the read did not complete.
+          </p>
+        ) : signalsMetric.state === "unknown" ? (
+          <p className={styles.noTopics}>
+            {signalsMetric.limitations.length > 0
+              ? signalsMetric.limitations[0]
+              : "Signals are not known for this range."}
+          </p>
+        ) : signalsMetric.value.signals.length === 0 ? (
+          <p className={styles.noTopics}>
+            {signalsMetric.limitations.length > 0
+              ? signalsMetric.limitations[0]
+              : "Nothing in this range met a detection threshold."}
+          </p>
+        ) : (
+          <div className={styles.topics}>
+            {signalsMetric.value.signals.slice(0, 3).map((signal) => (
+              <div className={styles.topic} key={signal.signalFingerprint}>
+                <div>
+                  <span>{signal.headline}</span>
+                  <span>{signal.severity}</span>
+                </div>
+                <small>{signal.detail}</small>
+              </div>
+            ))}
+          </div>
+        )}
+        <PanelLink
+          className={styles.topicLink}
+          extra={{ view: "signals" }}
+          panel="insights"
+          payload={payload}
+          variant="quiet"
+        >
+          See every signal <span aria-hidden="true">›</span>
         </PanelLink>
       </section>
     </div>

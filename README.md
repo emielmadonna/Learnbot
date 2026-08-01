@@ -56,9 +56,17 @@ forced RLS.
   of the UI.
 - **Widget delivery.** `20260726093000_widget_delivery.sql` provides public
   `widget_bootstrap` / `widget_ask` with origin allowlisting, and
-  `packages/widget-runtime` is being wired to it now. The currently shipped
-  artifact, `apps/console/public/integrations/circle-learningbot.js`, is 38
-  lines that append a link to `/app/conversation`.
+  `packages/widget-runtime` is wired to it. The shipped artifact is the
+  `/widget.js` route (`apps/console/src/app/widget.js/route.ts`), which serves
+  the Corso host adapter concatenated with the built runtime IIFE; the customer
+  pastes one `<script src=".../widget.js" data-tenant="wk_...">` tag, and
+  `/install/circle` generates that snippet against the origin the page is
+  served from. Two older generation artifacts under
+  `apps/console/public/integrations/` were deleted on 2026-07-31: nothing
+  executable referenced them and they documented a `data-widget-key` attribute
+  the runtime does not read. Note `anonymousQuestions` defaults to `false`, so
+  a freshly installed widget paints a launcher and refuses every question until
+  it is switched on.
 - **Audit.** `public.audit_ledger` is written by agent configuration, authoring,
   tenant sections, signal review and widget paths. It is **not** written by
   conversations, voice, uploads, onboarding, tenant status changes or account

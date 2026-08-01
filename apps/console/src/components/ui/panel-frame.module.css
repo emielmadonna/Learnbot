@@ -35,8 +35,24 @@
 }
 
 /* Inline variant sits in the page flow, e.g. a settings column. */
+/*
+ * The inline variant needs a bounded height, and used to have none.
+ *
+ * `.panel` is `overflow: hidden` so that `.body` can be the single scroll
+ * container (see the comment on `.body`). The fixed slide-in variants get
+ * their bound from `top: 0; bottom: 0`. `.inline` had width, radius and shadow
+ * and nothing else — so `.body`'s `flex: 1 1 auto` resolved against an
+ * unbounded parent, never became scrollable, and `overflow: hidden` simply cut
+ * the content off. Any inline panel taller than its container, such as the
+ * client workspace detail, lost everything below the fold with no scrollbar.
+ *
+ * `100%` covers the common case of a sized flex/grid parent; the viewport
+ * bound is the fallback for an unsized one, so this can't silently regress
+ * into the same clipped state again.
+ */
 .inline {
   width: 100%;
+  max-height: min(100%, calc(100dvh - var(--space-8)));
   border-radius: var(--r-lg);
   box-shadow: var(--ui-shadow);
 }

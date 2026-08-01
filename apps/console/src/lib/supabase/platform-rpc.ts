@@ -7,10 +7,35 @@ export const platformSectionKeys = [
   "course",
   "people",
   "platform",
+  // `widget` joined the durable catalogue in 20260731081000. Before that it
+  // was a console PanelKey with no row behind it, so the tenant's own
+  // site-facing surface was the one section a platform administrator could
+  // not flag per client.
+  "widget",
   "settings",
 ] as const;
 
 export type PlatformSectionKey = (typeof platformSectionKeys)[number];
+
+/**
+ * What a client workspace may change for itself.
+ *
+ * A capability is not a section: sections decide which dock entries exist,
+ * capabilities decide which controls inside them a tenant administrator may
+ * operate. Until 20260731081000 there was no record for this at all — the
+ * ability to rename the bot, rewrite the welcome copy, change voice, choose a
+ * model or invite people came entirely from role membership, so it could not
+ * be restricted for one client without restricting the role everywhere.
+ */
+export const platformCapabilityKeys = [
+  "bot_identity",
+  "welcome_message",
+  "voice_answer_length",
+  "model_choice",
+  "invite_members",
+] as const;
+
+export type PlatformCapabilityKey = (typeof platformCapabilityKeys)[number];
 
 export const platformTenantStatuses = ["active", "suspended"] as const;
 
@@ -57,6 +82,12 @@ export function isPlatformSlug(value: unknown): value is string {
 
 export type TenantSection = {
   sectionKey: PlatformSectionKey;
+  enabled: boolean;
+  updatedAt: string | null;
+};
+
+export type TenantCapability = {
+  capabilityKey: PlatformCapabilityKey;
   enabled: boolean;
   updatedAt: string | null;
 };
@@ -136,6 +167,21 @@ export type TenantSectionUpdate = {
   dataMode: "durable";
   tenantId: string;
   section: TenantSection;
+};
+
+export type PlatformTenantCapabilities = {
+  ok: true;
+  dataMode: "durable";
+  generatedAt: string;
+  tenantId: string;
+  capabilities: TenantCapability[];
+};
+
+export type TenantCapabilityUpdate = {
+  ok: true;
+  dataMode: "durable";
+  tenantId: string;
+  capability: TenantCapability;
 };
 
 export type PlatformTenantStatusChange = {
@@ -267,6 +313,15 @@ export function isPlatformSectionKey(
   );
 }
 
+export function isPlatformCapabilityKey(
+  value: unknown,
+): value is PlatformCapabilityKey {
+  return (
+    typeof value === "string" &&
+    (platformCapabilityKeys as readonly string[]).includes(value)
+  );
+}
+
 export function isPlatformTenantStatus(
   value: unknown,
 ): value is PlatformTenantStatus {
@@ -313,6 +368,63 @@ export function parseTenantSections(value: unknown): TenantSection[] {
       enabled: section.enabled === true,
       updatedAt: optionalText(section.updatedAt),
     }));
+}
+
+/**
+ * A capability key this console does not recognize is dropped rather than
+ * rendered as an unlabelled toggle. The same fail-closed rule as
+ * `parseTenantSections`: the browser accepts exactly the shapes the server
+ * produced and nothing else.
+ */
+export function parseTenantCapabilities(value: unknown): TenantCapability[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isRecord)
+    .filter((capability) => isPlatformCapabilityKey(capability.capabilityKey))
+    .map((capability) => ({
+      capabilityKey: capability.capabilityKey as PlatformCapabilityKey,
+      enabled: capability.enabled === true,
+      updatedAt: optionalText(capability.updatedAt),
+    }));
+}
+
+export function parsePlatformTenantCapabilities(
+  value: unknown,
+): PlatformTenantCapabilities {
+  const result = requirePlatformRpcSuccess(value);
+  if (result.dataMode !== "durable" || !Array.isArray(result.capabilities)) {
+    throw new PlatformRpcError("invalid_response");
+  }
+  return {
+    ok: true,
+    dataMode: "durable",
+    generatedAt:
+      typeof result.generatedAt === "string"
+        ? result.generatedAt
+        : new Date().toISOString(),
+    tenantId: String(result.tenantId ?? ""),
+    capabilities: parseTenantCapabilities(result.capabilities),
+  };
+}
+
+export function parseTenantCapabilityUpdate(
+  value: unknown,
+): TenantCapabilityUpdate {
+  const result = requirePlatformRpcSuccess(value);
+  const capability = isRecord(result.capability) ? result.capability : null;
+  if (!capability || !isPlatformCapabilityKey(capability.capabilityKey)) {
+    throw new PlatformRpcError("invalid_response");
+  }
+  return {
+    ok: true,
+    dataMode: "durable",
+    tenantId: String(result.tenantId ?? ""),
+    capability: {
+      capabilityKey: capability.capabilityKey,
+      enabled: capability.enabled === true,
+      updatedAt: optionalText(capability.updatedAt),
+    },
+  };
 }
 
 export function parsePlatformOverview(value: unknown): PlatformOverview {
@@ -629,6 +741,34 @@ export async function setTenantSection(
     await callPlatformRpc(supabase, "platform_admin_set_tenant_section", {
       target_tenant_id: input.tenantId,
       target_section_key: input.sectionKey,
+      target_enabled: input.enabled,
+    }),
+  );
+}
+
+export async function getPlatformTenantCapabilities(
+  supabase: SupabaseClient,
+  tenantId: string,
+): Promise<PlatformTenantCapabilities> {
+  return parsePlatformTenantCapabilities(
+    await callPlatformRpc(supabase, "platform_admin_tenant_capabilities", {
+      target_tenant_id: tenantId,
+    }),
+  );
+}
+
+export async function setTenantCapability(
+  supabase: SupabaseClient,
+  input: {
+    tenantId: string;
+    capabilityKey: PlatformCapabilityKey;
+    enabled: boolean;
+  },
+): Promise<TenantCapabilityUpdate> {
+  return parseTenantCapabilityUpdate(
+    await callPlatformRpc(supabase, "platform_admin_set_tenant_capability", {
+      target_tenant_id: input.tenantId,
+      target_capability_key: input.capabilityKey,
       target_enabled: input.enabled,
     }),
   );

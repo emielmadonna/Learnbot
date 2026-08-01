@@ -407,7 +407,7 @@ export function AppShell({ payload, accountName, accountEmail }: AppShellProps) 
         </div>
       </header>
 
-      <PlatformClientPreviewBanner tenant={payload.tenant} />
+      <PlatformClientPreviewBanner role={payload.role} tenant={payload.tenant} />
 
       {activePanel === null ? (
         <main className={styles.canvas} id="shell-canvas" tabIndex={-1}>

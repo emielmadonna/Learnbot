@@ -105,6 +105,77 @@
   margin: 0;
 }
 
+/*
+ * `.agentFrame` is authored for the full-bleed conversation dialog, where a
+ * negative margin on all four sides cancels the dialog's own padding. Here the
+ * same frame is one column of a two-column grid, so those horizontal negatives
+ * push it out under `.talkAside` and the question/grounding cards render on
+ * top of the transcript.
+ *
+ * Two things are needed, and the rule above only ever supplied one of them:
+ *
+ * 1. `.agentFrame` and `.talkFrame` are both single-class selectors living in
+ *    different CSS modules, so `margin: 0` alone wins only on bundler ordering.
+ *    Scoping to the layout gives a specificity that does not depend on it.
+ * 2. `min-width: 0`. A grid item defaults to `min-width: auto`, so the flex
+ *    frame refuses to shrink below its own content and overflows the track
+ *    whatever the margin says. This is what squeezed the transcript into a
+ *    sliver of a column while the frame ran on underneath the aside.
+ */
+.talkLayout > .talkFrame {
+  min-width: 0;
+  margin: 0;
+}
+
+/* Brand icon picker: the product's own icon set, offered where an admin used
+   to have nothing but a free-text box to type a character into. */
+.iconField {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.iconChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.iconChoice {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  align-content: center;
+  justify-content: center;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.iconChoice:hover:not(:disabled),
+.iconChoice:focus-visible {
+  border-color: var(--brand-primary);
+  color: var(--ink);
+}
+
+.iconChoice[data-selected="true"] {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+}
+
+.iconChoice:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .talkLayout {
   display: grid;
   align-items: start;
@@ -210,6 +281,38 @@
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+}
+
+/* Collapsed-by-default grounding disclosure. */
+.talkGrounding summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+.talkGrounding summary::-webkit-details-marker {
+  display: none;
+}
+
+.talkGroundingLabel {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.talkGroundingCount {
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.talkGrounding[open] .talkCourseList {
+  margin-top: var(--space-3);
 }
 
 .talkCourseList {

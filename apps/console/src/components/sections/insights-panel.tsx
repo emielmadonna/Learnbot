@@ -22,6 +22,10 @@ import {
   type AnalyticsWidgetSnapshot,
 } from "../../lib/supabase/analytics-rpc";
 import {
+  parseAnswerFeedbackSummary,
+  type AnswerFeedbackSummary,
+} from "../../lib/supabase/answer-feedback-rpc";
+import {
   parseAnalyticsLearnerSignals,
   parseAnalyticsQuestionLabels,
   parseAnalyticsSignals,
@@ -514,6 +518,8 @@ function V2MetricCard({
 function V2InsightsView({
   exportAvailable,
   exportNotice,
+  feedback,
+  feedbackFailure,
   intelligence,
   loading,
   onExport,
@@ -526,6 +532,8 @@ function V2InsightsView({
 }: {
   readonly exportAvailable: boolean;
   readonly exportNotice: string | null;
+  readonly feedback: AnswerFeedbackSummary | null;
+  readonly feedbackFailure: LoadError | null;
   readonly intelligence: QuestionIntelligence | null;
   readonly loading: boolean;
   readonly onExport: () => void;
@@ -552,6 +560,37 @@ function V2InsightsView({
     answerCount === null ? null : percentage(answerCount, totalQuestions);
   const noAnswerCount =
     answerCount === null ? null : Math.max(0, totalQuestions - answerCount);
+
+  // "Rated helpful" is three distinct statements and collapsing them would be
+  // exactly the lie 20260731061000's header warns about. A read that failed is
+  // "Not known"; a window that genuinely holds no rating is "Not measured";
+  // and a real score never travels without the response rate it was drawn
+  // from, because a percentage over a self-selected handful is meaningless on
+  // its own.
+  const feedbackValue =
+    feedback === null
+      ? "Not known"
+      : feedback.helpfulPercent === null
+        ? "Not measured"
+        : `${feedback.helpfulPercent}%`;
+  const feedbackBadge =
+    feedback === null
+      ? "NOT READ"
+      : feedback.helpfulPercent === null
+        ? "NOT RATED"
+        : feedback.ratedPercent !== null && feedback.ratedPercent < 100
+          ? "PARTIAL"
+          : undefined;
+  const feedbackSublabel =
+    feedback === null
+      ? feedbackFailure === "denied"
+        ? "Your role may not read answer feedback"
+        : feedbackFailure === null
+          ? "Reading recorded ratings…"
+          : "Answer feedback could not be read"
+      : feedback.helpfulPercent === null
+        ? `No answer rated yet — ${count(feedback.answerCount)} answered`
+        : `${count(feedback.ratedCount)} of ${count(feedback.answerCount)} answers rated`;
 
   const labels = intelligence?.labels ?? null;
   const important = labels?.metrics.importantQuestions ?? null;
@@ -659,10 +698,10 @@ function V2InsightsView({
             value={answeredShare ?? "Not known"}
           />
           <V2MetricCard
-            badge="NOT TRACKED"
+            badge={feedbackBadge}
             label="Rated helpful"
-            sublabel="Feedback is not recorded yet"
-            value="Not measured"
+            sublabel={feedbackSublabel}
+            value={feedbackValue}
           />
         </div>
 
@@ -710,7 +749,7 @@ function V2InsightsView({
               </button>
               <span
                 className={cx(styles.v2Pill, styles.v2PillUnavailable)}
-                title="Helpful/not-helpful feedback has not been instrumented"
+                title="Ratings are recorded and totalled on the card above, but analytics_question_labels does not carry a per-question rating, so this list cannot be filtered by one"
               >
                 Not helpful —
               </span>
@@ -1327,6 +1366,13 @@ function V2SignalsView({
                   The deterministic detectors returned no matching signal for
                   this range.
                 </span>
+                {/* The RPC explains its own emptiness — which detector had
+                    nothing to compare, what was truncated — and the panel used
+                    to drop that entirely, leaving an empty pane that looked
+                    broken rather than quiet. */}
+                {metric.limitations.map((limitation) => (
+                  <span key={limitation}>{limitation}</span>
+                ))}
               </div>
             ) : (
               shownSignals.map((signal) => {
@@ -1652,6 +1698,43 @@ async function loadLearnerSignals(
   return parseAnalyticsLearnerSignals(body.learnerSignals);
 }
 
+/**
+ * "Rated helpful" loads on its own, same reason again: a workspace without
+ * 20260731061000 must lose one metric card, not the panel. The card renders
+ * "Not known" on failure and "Not measured" when the window genuinely holds no
+ * rating — two different statements that must not collapse into each other.
+ */
+async function loadAnswerFeedback(
+  days: number,
+): Promise<AnswerFeedbackSummary> {
+  const query = new URLSearchParams({ days: String(days) });
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `/api/analytics/answer-feedback?${query.toString()}`,
+      { cache: "no-store", headers: { accept: "application/json" } },
+    );
+  } catch {
+    throw new AnalyticsRpcError("request_failed");
+  }
+
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new AnalyticsRpcError(
+      mapErrorCode(response.status, isRecord(body) ? body.code : undefined),
+    );
+  }
+  if (!isRecord(body) || body.ok !== true) {
+    throw new AnalyticsRpcError("unverifiable");
+  }
+  return parseAnswerFeedbackSummary({
+    ok: true,
+    dataMode: "durable",
+    ...(isRecord(body.feedback) ? body.feedback : {}),
+  });
+}
+
 function toLoadError(error: unknown): LoadError {
   if (error instanceof AnalyticsRpcError) {
     if (
@@ -1700,6 +1783,10 @@ export function InsightsPanel({ params, payload, refresh }: PanelProps) {
   const [learnerSignalsFailure, setLearnerSignalsFailure] =
     useState<LoadError | null>(null);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<AnswerFeedbackSummary | null>(null);
+  const [feedbackFailure, setFeedbackFailure] = useState<LoadError | null>(
+    null,
+  );
 
   const days = Number(range);
 
@@ -1782,6 +1869,27 @@ export function InsightsPanel({ params, payload, refresh }: PanelProps) {
         if (!active) return;
         setLearnerSignals(null);
         setLearnerSignalsFailure(toLoadError(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, [days, dataVersion]);
+
+  // Answer feedback loads independently for the same reason as the two blocks
+  // above: 20260731061000 is the newest migration on this surface, so it is the
+  // one most likely to be missing from a given project.
+  useEffect(() => {
+    let active = true;
+    loadAnswerFeedback(days)
+      .then((next) => {
+        if (!active) return;
+        setFeedback(next);
+        setFeedbackFailure(null);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setFeedback(null);
+        setFeedbackFailure(toLoadError(error));
       });
     return () => {
       active = false;
@@ -2058,6 +2166,8 @@ export function InsightsPanel({ params, payload, refresh }: PanelProps) {
     <V2InsightsView
       exportAvailable={exportAvailable}
       exportNotice={exportNotice}
+      feedback={feedback}
+      feedbackFailure={feedbackFailure}
       intelligence={intelligence}
       loading={loading}
       onExport={() => exportAnalytics("csv")}

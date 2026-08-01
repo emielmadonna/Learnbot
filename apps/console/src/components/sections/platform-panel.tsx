@@ -11,19 +11,24 @@ import {
   parsePlatformOverview,
   parsePlatformTenantDetail,
   parsePlatformTenantEntry,
+  parsePlatformTenantCapabilities,
   parsePlatformTenantExit,
   parsePlatformTenantStatusChange,
+  parseTenantCapabilityUpdate,
   parseTenantSectionUpdate,
+  platformCapabilityKeys,
   platformOperationKey,
   platformSectionKeys,
   platformSlugPattern,
 } from "../../lib/supabase/platform-rpc";
 import type {
+  PlatformCapabilityKey,
   PlatformClientPlan,
   PlatformOverview,
   PlatformSectionKey,
   PlatformTenantDetail,
   PlatformTenantSummary,
+  TenantCapability,
   TenantSection,
 } from "../../lib/supabase/platform-rpc";
 import {
@@ -213,61 +218,77 @@ const sectionCopy: Record<
     description:
       "Cross-tenant operating view. Normally off for a client workspace.",
   },
+  widget: {
+    label: "Widget",
+    description:
+      "The client's own site-facing assistant: embed key, appearance and public link.",
+  },
   settings: {
     label: "Settings",
     description: "Workspace profile, branding and account controls.",
   },
 };
 
-type ClientCapabilityRow = { key: string; label: string; reason: string };
+/**
+ * "What the client can change themselves" — five independent grants for bot
+ * identity, welcome copy, voice, model choice and invites.
+ *
+ * These used to render permanently disabled, because nothing backed them: a
+ * tenant admin's ability to edit their own bot name/colour/icon, welcome
+ * message, voice, model, or to invite others came entirely from their role
+ * membership (tenant_owner / tenant_admin), with no separate record a
+ * platform administrator could use to restrict one client without restricting
+ * the role everywhere. `public.tenant_capability_grants` and
+ * `public.platform_admin_set_tenant_capability` (20260731081000) are that
+ * record, built to mirror the existing `platform_admin_set_tenant_section`
+ * pattern exactly: durable per-tenant row, definer RPC, audited write.
+ *
+ * The rows fall BACK to the old disabled rendering whenever the capability
+ * read failed — on a database where that migration has not been hand-applied
+ * yet, this panel says so instead of showing a toggle that would throw.
+ */
+const capabilityCopy: Record<
+  PlatformCapabilityKey,
+  { label: string; description: string }
+> = {
+  bot_identity: {
+    label: "Bot name, colour and icon",
+    description:
+      "Lets the client rename their assistant and set its palette and mark.",
+  },
+  welcome_message: {
+    label: "Welcome message and starters",
+    description:
+      "Lets the client write the opening line and the suggested questions.",
+  },
+  voice_answer_length: {
+    label: "Voice and answer length",
+    description: "Lets the client pick a voice and how long answers run.",
+  },
+  model_choice: {
+    label: "Which model answers",
+    description:
+      "Model choice also changes cost, so this one is off unless granted.",
+  },
+  invite_members: {
+    label: "Invite other people to the workspace",
+    description:
+      "Lets the client bring in their own administrators and learners.",
+  },
+};
 
 /**
- * "What the client can change themselves" — the mockup's five independent
- * toggles for bot identity, welcome copy, voice, model choice and invites.
- * None of it is backed by anything: a tenant admin's ability to edit their
- * own bot name/colour/icon, welcome message, voice, model, or to invite
- * others today comes entirely from their role membership (tenant_owner /
- * tenant_admin), with no separate record a platform administrator could use
- * to restrict one client without restricting the role everywhere.
+ * What a granted capability does NOT yet do, said plainly.
  *
- * Every row below renders disabled with this reason rather than pretending a
- * click would do anything real. See the platform-panel change report for the
- * proposed shape (`tenant_capability_grants` /
- * `platform_admin_set_tenant_capability`, mirroring the existing
- * `platform_admin_set_tenant_section` pattern).
+ * The grant is durable and audited, and the client's own console can read it
+ * through `tenant_get_capabilities`. Nothing in the client console consults it
+ * yet — there is not even a tenant-side invite surface to gate (the only
+ * "invite" in components/sections is the platform panel's own owner
+ * invitation). Saying that here is better than implying a switched-off row is
+ * already restricting somebody.
  */
-const clientCapabilities: readonly ClientCapabilityRow[] = [
-  {
-    key: "bot_identity",
-    label: "Bot name, colour and icon",
-    reason:
-      "No capability record exists to separate this from ordinary tenant-admin access — disabled until one does.",
-  },
-  {
-    key: "welcome_message",
-    label: "Welcome message and starters",
-    reason:
-      "Same gap: nothing today distinguishes this from general workspace-settings access.",
-  },
-  {
-    key: "voice_answer_length",
-    label: "Voice and answer length",
-    reason:
-      "Same gap: nothing today distinguishes this from general workspace-settings access.",
-  },
-  {
-    key: "model_choice",
-    label: "Which model answers",
-    reason:
-      "Model choice also changes cost — this needs the same missing record, and should default to off once it exists.",
-  },
-  {
-    key: "invite_members",
-    label: "Invite other people to the workspace",
-    reason:
-      "No capability record exists to separate this from tenant-owner access yet.",
-  },
-];
+const capabilityEnforcementNote =
+  "Grants are recorded and audited immediately. The client console does not read them yet, so switching one off does not remove the control from the client's screen.";
 
 function statusState(status: string): StatState {
   if (status === "active") return "known";
@@ -486,6 +507,8 @@ type IssuedClaim = {
   ownerDisplayName: string;
   knowledgeStart: KnowledgeStart;
   invitationStatus: "sent" | "failed";
+  /** Single-use sign-in link, for when outbound email is not configured. */
+  inviteLink: string | null;
   invitationError: string | null;
 };
 
@@ -507,6 +530,7 @@ type EnteredSession = {
 type Busy =
   | null
   | { kind: "section"; sectionKey: PlatformSectionKey }
+  | { kind: "capability"; capabilityKey: PlatformCapabilityKey }
   | { kind: "status" }
   | { kind: "enter" }
   | { kind: "exit" };
@@ -563,6 +587,12 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     "idle" | "loading" | "ready" | "failed"
   >("idle");
   const [detailError, setDetailError] = useState<string | null>(null);
+
+  const [capabilities, setCapabilities] = useState<TenantCapability[]>([]);
+  const [capabilityState, setCapabilityState] = useState<
+    "idle" | "loading" | "ready" | "failed"
+  >("idle");
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
 
   const [session, setSession] = useState<EnteredSession | null>(null);
   const [claimsStale, setClaimsStale] = useState(false);
@@ -804,6 +834,68 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     };
   }, [selectedTenantId, dataVersion]);
 
+  /* --- what the client may change for itself ----------------------- *
+   *
+   * A third independent fetch, for the same reason billing is one: a
+   * database on which 20260731081000 has not been hand-applied yet answers
+   * `request_failed` here and nothing else on the client detail is lost.
+   * The card then renders the honest "not wired" state rather than an empty
+   * list, which would read as "this client may change nothing".
+   */
+
+  const loadCapabilities = useCallback(async (tenantId: string) => {
+    setCapabilityState("loading");
+    try {
+      const parsed = parsePlatformTenantCapabilities(
+        await platformRead(
+          `?tenantId=${encodeURIComponent(tenantId)}&view=capabilities`,
+        ),
+      );
+      setCapabilities(parsed.capabilities);
+      setCapabilityError(null);
+      setCapabilityState("ready");
+      return parsed;
+    } catch (error) {
+      setCapabilities([]);
+      setCapabilityError(describe(error));
+      setCapabilityState("failed");
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (selectedTenantId === null) {
+      setCapabilities([]);
+      setCapabilityError(null);
+      setCapabilityState("idle");
+      return;
+    }
+    void (async () => {
+      const tenantId = selectedTenantId;
+      setCapabilityState("loading");
+      try {
+        const parsed = parsePlatformTenantCapabilities(
+          await platformRead(
+            `?tenantId=${encodeURIComponent(tenantId)}&view=capabilities`,
+          ),
+        );
+        if (!active) return;
+        setCapabilities(parsed.capabilities);
+        setCapabilityError(null);
+        setCapabilityState("ready");
+      } catch (error) {
+        if (!active) return;
+        setCapabilities([]);
+        setCapabilityError(describe(error));
+        setCapabilityState("failed");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [selectedTenantId, dataVersion]);
+
   const loadBillingDetail = useCallback(async (tenantId: string) => {
     setBillingDetailState("loading");
     try {
@@ -929,6 +1021,46 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
       setActionError(describe(error));
       // The durable state is authoritative; re-read rather than guess.
       await loadDetail(tenantId);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function toggleCapability(
+    tenantId: string,
+    capabilityKey: PlatformCapabilityKey,
+    enabled: boolean,
+  ) {
+    setBusy({ kind: "capability", capabilityKey });
+    setActionError(null);
+    setNotice(null);
+    try {
+      const update = parseTenantCapabilityUpdate(
+        await platformWrite({
+          action: "capability",
+          tenantId,
+          capabilityKey,
+          enabled,
+        }),
+      );
+      // Reflect exactly what the control plane returned, not what was asked
+      // for — the same rule the section toggle follows above.
+      setCapabilities((current) => [
+        ...current.filter(
+          (capability) =>
+            capability.capabilityKey !== update.capability.capabilityKey,
+        ),
+        update.capability,
+      ]);
+      setNotice(
+        `${capabilityCopy[update.capability.capabilityKey].label} is now ${
+          update.capability.enabled ? "granted" : "withheld"
+        } for this client.`,
+      );
+    } catch (error) {
+      setActionError(describe(error));
+      // The durable state is authoritative; re-read rather than guess.
+      await loadCapabilities(tenantId);
     } finally {
       setBusy(null);
     }
@@ -1131,6 +1263,17 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
       const invitationSent =
         invitation?.ok === true &&
         invitation.deliveryStatus === "sent";
+      const invitationRecord =
+        invitation !== null &&
+        typeof invitation.invitation === "object" &&
+        invitation.invitation !== null
+          ? (invitation.invitation as Record<string, unknown>)
+          : null;
+      const issuedLink =
+        typeof invitationRecord?.inviteLink === "string" &&
+        invitationRecord.inviteLink.length > 0
+          ? invitationRecord.inviteLink
+          : null;
       const invitationError =
         typeof invitation?.providerMessage === "string"
           ? invitation.providerMessage
@@ -1156,6 +1299,7 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
         knowledgeStart: draft.knowledgeStart,
         invitationStatus: invitationSent ? "sent" : "failed",
         invitationError: invitationSent ? null : invitationError,
+        inviteLink: issuedLink,
       });
       setCopied(false);
       await refresh();
@@ -1220,6 +1364,16 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
         );
         return;
       }
+      const resentRecord =
+        typeof invitation.invitation === "object" &&
+        invitation.invitation !== null
+          ? (invitation.invitation as Record<string, unknown>)
+          : null;
+      const resentLink =
+        typeof resentRecord?.inviteLink === "string" &&
+        resentRecord.inviteLink.length > 0
+          ? resentRecord.inviteLink
+          : null;
       setIssued((current) =>
         current === null
           ? current
@@ -1228,6 +1382,7 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
               token: null,
               invitationStatus: "sent",
               invitationError: null,
+              inviteLink: resentLink ?? current.inviteLink,
             },
       );
       await refresh();
@@ -1922,6 +2077,11 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
     const enabledByKey = new Map<PlatformSectionKey, TenantSection>(
       client.sections.map((section) => [section.sectionKey, section] as const),
     );
+    const capabilityByKey = new Map<PlatformCapabilityKey, TenantCapability>(
+      capabilities.map(
+        (capability) => [capability.capabilityKey, capability] as const,
+      ),
+    );
     const readinessRows: Array<{ label: string; ready: boolean }> = [
       { label: "Branding configured", ready: client.readiness.hasBranding },
       {
@@ -2123,10 +2283,58 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
                   );
                 }
 
+                // A key this console knows but the workspace's own catalogue
+                // did not return. `widget` joined the catalogue in
+                // 20260731081000, so on a database without that migration
+                // this is the honest answer: not "off", which would be a
+                // plausible-looking lie about a section the client can still
+                // reach, but "this workspace has no record for it".
+                if (section === undefined) {
+                  return (
+                    <div
+                      className={cx(
+                        styles.lockedSwitch,
+                        bordered && styles.lockedSwitchBordered,
+                      )}
+                      key={sectionKey}
+                    >
+                      <span className={styles.lockedSwitchCopy}>
+                        <span className={styles.lockedSwitchLabelRow}>
+                          <span className={styles.lockedSwitchLabel}>
+                            {copy.label}
+                          </span>
+                          <span
+                            className={cx(
+                              styles.lockedSwitchBadge,
+                              styles.lockedSwitchBadgeWarn,
+                            )}
+                          >
+                            Not in catalogue
+                          </span>
+                        </span>
+                        <span className={styles.lockedSwitchDescription}>
+                          {copy.description} This workspace returned no record
+                          for it, so its current state is unknown and it cannot
+                          be changed from here.
+                        </span>
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={cx(
+                          styles.lockedSwitchTrack,
+                          styles.lockedSwitchTrackOff,
+                        )}
+                      >
+                        <i />
+                      </span>
+                    </div>
+                  );
+                }
+
                 return (
                   <Toggle
                     bordered={bordered}
-                    checked={section?.enabled === true}
+                    checked={section.enabled}
                     description={
                       updated === null
                         ? copy.description
@@ -2152,51 +2360,95 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
             <h5 className={styles.groupTitle}>
               What the client can change themselves
             </h5>
-            <p className={styles.groupHint}>
-              A real permission surface the design calls for, but nothing has
-              shipped to back it yet — every row below is disabled rather than
-              pretending a click here would do anything.
-            </p>
-            <div className={styles.switches}>
-              {clientCapabilities.map((item, index) => (
-                <div
-                  className={cx(
-                    styles.lockedSwitch,
-                    index < clientCapabilities.length - 1 &&
-                      styles.lockedSwitchBordered,
-                  )}
-                  key={item.key}
-                >
-                  <span className={styles.lockedSwitchCopy}>
-                    <span className={styles.lockedSwitchLabelRow}>
-                      <span className={styles.lockedSwitchLabel}>
-                        {item.label}
+            {capabilityState === "loading" || capabilityState === "idle" ? (
+              <p className={styles.loading} role="status">
+                Loading client capabilities…
+              </p>
+            ) : capabilityState === "failed" ? (
+              <>
+                {/* Not an empty list: an empty list would read as "this
+                    client may change nothing". The read failed, and that is
+                    what is reported. */}
+                <p className={styles.failure} role="alert">
+                  {capabilityError ??
+                    "Client capabilities could not be read."}{" "}
+                  Until `tenant_capability_grants` (20260731081000) is applied
+                  there is no record here to read, and these stay disabled.
+                </p>
+                <div className={styles.switches}>
+                  {platformCapabilityKeys.map((capabilityKey, index) => (
+                    <div
+                      className={cx(
+                        styles.lockedSwitch,
+                        index < platformCapabilityKeys.length - 1 &&
+                          styles.lockedSwitchBordered,
+                      )}
+                      key={capabilityKey}
+                    >
+                      <span className={styles.lockedSwitchCopy}>
+                        <span className={styles.lockedSwitchLabelRow}>
+                          <span className={styles.lockedSwitchLabel}>
+                            {capabilityCopy[capabilityKey].label}
+                          </span>
+                          <span
+                            className={cx(
+                              styles.lockedSwitchBadge,
+                              styles.lockedSwitchBadgeWarn,
+                            )}
+                          >
+                            Not readable
+                          </span>
+                        </span>
+                        <span className={styles.lockedSwitchDescription}>
+                          {capabilityCopy[capabilityKey].description}
+                        </span>
                       </span>
                       <span
+                        aria-hidden="true"
                         className={cx(
-                          styles.lockedSwitchBadge,
-                          styles.lockedSwitchBadgeWarn,
+                          styles.lockedSwitchTrack,
+                          styles.lockedSwitchTrackOff,
                         )}
                       >
-                        Not wired
+                        <i />
                       </span>
-                    </span>
-                    <span className={styles.lockedSwitchDescription}>
-                      {item.reason}
-                    </span>
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className={cx(
-                      styles.lockedSwitchTrack,
-                      styles.lockedSwitchTrackOff,
-                    )}
-                  >
-                    <i />
-                  </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            ) : (
+              <>
+                <p className={styles.groupHint}>{capabilityEnforcementNote}</p>
+                <div className={styles.switches}>
+                  {platformCapabilityKeys.map((capabilityKey, index) => {
+                    const grant = capabilityByKey.get(capabilityKey);
+                    const updated = formatWhen(grant?.updatedAt);
+                    const copy = capabilityCopy[capabilityKey];
+                    return (
+                      <Toggle
+                        bordered={index < platformCapabilityKeys.length - 1}
+                        checked={grant?.enabled === true}
+                        description={
+                          updated === null
+                            ? copy.description
+                            : `${copy.description} Changed ${updated}.`
+                        }
+                        disabled={busy !== null}
+                        key={capabilityKey}
+                        label={copy.label}
+                        onChange={(next) =>
+                          void toggleCapability(
+                            client.tenant.tenantId,
+                            capabilityKey,
+                            next,
+                          )
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </section>
 
           {renderBillingSection(client.tenant.tenantId)}
@@ -2590,10 +2842,36 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
             : `The workspace was created, but the invitation provider did not confirm delivery to ${issued.ownerEmail}.`}
         </p>
         {issued.invitationStatus === "sent" ? (
-          <p className={styles.issuedNote}>
-            The durable invitation is pending until the owner chooses a
-            password. No temporary password or owner code needs to be shared.
-          </p>
+          <>
+            <p className={styles.issuedNote}>
+              The durable invitation is pending until the owner chooses a
+              password. No temporary password or owner code needs to be shared.
+            </p>
+            {/*
+              * Outbound email is not configured on this project, so the link
+              * is surfaced here to be copied and sent by hand. It is the same
+              * single-use link the mail would have carried — sharing it is no
+              * weaker than sharing the email, and it is the only thing that
+              * makes the invitation actionable today.
+              */}
+            {issued.inviteLink === null ? null : (
+              <div className={styles.inviteLinkRow}>
+                <p className={styles.issuedNote}>
+                  Email delivery is not configured. Send this sign-in link to{" "}
+                  {issued.ownerEmail} yourself — it is single-use and expires.
+                </p>
+                <code className={styles.inviteLinkValue}>
+                  {issued.inviteLink}
+                </code>
+                <Button
+                  onClick={() => void copyToken(issued.inviteLink ?? "")}
+                  variant="secondary"
+                >
+                  {copied ? "Copied" : "Copy sign-in link"}
+                </Button>
+              </div>
+            )}
+          </>
         ) : (
           <>
             <p className={styles.failure} role="alert">

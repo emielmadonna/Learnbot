@@ -49,6 +49,14 @@ type SyncResult = {
   readonly retrievable: boolean;
   readonly changed: boolean;
   readonly versionNumber: number | null;
+  /**
+   * Why the import is built but not answerable, named by the server. Today the
+   * only value is `course_not_published`: the knowledge version is live and
+   * active, but retrieval also requires `courses.status = 'published'`
+   * (20260726093000_widget_delivery.sql:681), and a connector never publishes
+   * a course on its own. `null` when nothing is blocking.
+   */
+  readonly activationBlockedReason: string | null;
 };
 
 const COPY: Record<string, string> = {
@@ -109,7 +117,15 @@ function successMessage(payload: Record<string, unknown>, name: string) {
   }
   const count =
     typeof payload.documentCount === "number" ? payload.documentCount : 0;
-  return `${prefix} and is active${count > 0 ? ` with ${count} source document${count === 1 ? "" : "s"}` : ""}.`;
+  const documents =
+    count > 0 ? ` with ${count} source document${count === 1 ? "" : "s"}` : "";
+  if (payload.activationBlockedReason === "course_not_published") {
+    // Saying "active" and stopping there was the old copy, and it was read as
+    // "the assistant can answer from this now". It cannot: retrieval requires
+    // a published course, and a connector never publishes one.
+    return `${prefix}${documents}. Publish the course to let the assistant answer from it.`;
+  }
+  return `${prefix} and is active${documents}.`;
 }
 
 function numberField(payload: Record<string, unknown>, key: string) {
@@ -150,7 +166,25 @@ function readSyncResult(
     retrievable: payload.retrievable === true,
     changed: payload.changed !== false,
     versionNumber: numberField(payload, "versionNumber"),
+    activationBlockedReason:
+      typeof payload.activationBlockedReason === "string"
+        ? payload.activationBlockedReason
+        : null,
   };
+}
+
+/**
+ * The last step's sub-label. "Answerable now" is only ever shown when the
+ * server said so; a built-but-blocked import says what is blocking it and what
+ * clears it, because "Saved, but not yet answerable" on its own reads as a
+ * failure the creator cannot act on.
+ */
+function answerabilityLabel(result: SyncResult) {
+  if (result.retrievable) return "Answerable now";
+  if (result.activationBlockedReason === "course_not_published") {
+    return "Imported — publish this course to make it answerable";
+  }
+  return "Saved, but not yet answerable";
 }
 
 /**
@@ -776,9 +810,7 @@ export function SourceConnectors({
                   </strong>
                   <small>
                     {stepState === "done"
-                      ? lastResult!.retrievable
-                        ? "Answerable now"
-                        : "Saved, but not yet answerable"
+                      ? answerabilityLabel(lastResult!)
                       : "Next"}
                   </small>
                 </span>

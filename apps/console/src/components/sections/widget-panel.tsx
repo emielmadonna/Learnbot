@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import type { PanelProps } from "../app-shell/contract";
+import { BrandGlyph } from "../corso/brand-glyph";
 import { asWorkspace, useDataVersion } from "../app-shell/shell-data";
 import { usePanelRouter } from "../app-shell/use-panel-router";
 import {
@@ -1468,9 +1469,16 @@ export function WidgetPanel({ payload, params }: PanelProps) {
                   <div>
                     <dt>Mark</dt>
                     <dd>
-                      {payload.agent.logoUrl !== null
-                        ? "Logo image"
-                        : payload.agent.iconGlyph || "Initial"}
+                      {payload.agent.logoUrl !== null ? (
+                        "Logo image"
+                      ) : payload.agent.iconGlyph ? (
+                        // Draws the Corso icon when the stored value names one,
+                        // and the typed character otherwise. Printing the raw
+                        // value here would read out "conversation" as a word.
+                        <BrandGlyph size={18} value={payload.agent.iconGlyph} />
+                      ) : (
+                        "Initial"
+                      )}
                     </dd>
                   </div>
                   <div>
@@ -1664,7 +1672,15 @@ export function WidgetPanel({ payload, params }: PanelProps) {
                 description={
                   draft.anonymousAccess
                     ? "Anyone on an allowed domain can ask, without signing in. Their questions are counted, but nothing is attributed to a person."
-                    : "Only a visitor your site has identified to the widget can ask. Everyone else sees the widget and gets no answer."
+                    : // The old copy promised a visitor-identification path
+                      // into the embed. There is none: the embed adapter sends
+                      // `identity: { tier: "anonymous" }` unconditionally
+                      // (app/widget.js/embed-prelude.ts) and `widget_ask` takes
+                      // no identity argument at all, so with this off the
+                      // answer is refused for everyone. Saying so is the only
+                      // honest description, because the widget still appears
+                      // and still opens.
+                      "Nobody can ask through the embedded widget. It still appears and still opens on your site, and every question is refused."
                 }
                 label="Let signed-out visitors ask"
                 onChange={(next) => update("anonymousAccess", next)}
@@ -1713,8 +1729,13 @@ export function WidgetPanel({ payload, params }: PanelProps) {
 
                   <p className={styles.hint}>
                     Whichever you use, the domain has to be in the list above
-                    first. Installing the snippet on a domain that is not listed
-                    produces a widget that loads and answers nothing.
+                    first, and “Let signed-out visitors ask” has to be on.
+                    Installing the snippet without either one produces a widget
+                    that loads and answers nothing.{" "}
+                    <a href="/install/circle">
+                      Step-by-step Circle instructions
+                    </a>
+                    .
                   </p>
                 </>
               )}

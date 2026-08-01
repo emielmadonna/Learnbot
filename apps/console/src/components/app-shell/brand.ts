@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { isCorsoIconName } from "../corso/corso-icon";
 import type { AgentConfig } from "./contract";
 
 /**
@@ -95,5 +96,10 @@ export function brandStyle(agent: AgentConfig): CSSProperties {
 export function brandInitial(agent: AgentConfig, fallbackName: string) {
   const source = agent.assistantName.trim() || fallbackName.trim();
   const initial = Array.from(source)[0] ?? "";
-  return initial ? initial.toUpperCase() : agent.iconGlyph;
+  if (initial) return initial.toUpperCase();
+  // `iconGlyph` may hold a Corso icon NAME rather than a typed character. A
+  // name is meaningless as a text initial — it would render the literal word
+  // "conversation" — so only fall through to it when it really is a glyph.
+  // `BrandGlyph` draws the icon case properly wherever the mark is rendered.
+  return isCorsoIconName(agent.iconGlyph) ? "" : agent.iconGlyph;
 }

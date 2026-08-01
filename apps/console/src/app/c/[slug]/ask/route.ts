@@ -61,16 +61,27 @@ export async function POST(request: Request, context: HostedAskContext) {
     // Reuse the existing, hardened answer route so validation, rate limits,
     // provider behavior, citations, answer recording and opaque errors cannot
     // drift between embedded, legacy and friendly hosted delivery.
+    //
+    // `accept` is forwarded, and it is the only header here that changes what
+    // comes back: /api/widget/ask streams on `text/event-stream` and returns
+    // JSON otherwise. Dropping it -- which this did until now -- would have
+    // left the hosted full-page assistant the one customer-facing surface that
+    // could not stream, no matter what its own client asked for.
+    const accept = request.headers.get("accept");
     const forwarded = new Request(new URL("/api/widget/ask", request.url), {
       method: "POST",
       headers: {
         "content-type": "application/json",
         origin,
+        ...(accept === null || accept.length > 255 ? {} : { accept }),
       },
       body: JSON.stringify({
         ...input,
         key: resolution.deliveryKey,
       }),
+      // Preserved so a visitor closing the hosted page aborts the provider
+      // call behind it rather than paying for tokens nobody will read.
+      signal: request.signal,
     });
     return askWithWidgetKey(forwarded);
   } catch (error) {

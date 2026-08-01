@@ -39,12 +39,132 @@ test("platform authorization takes precedence when no tenant is selected", () =>
   );
 
   const appPage = source("../src/app/app/page.tsx");
+  // Both indices must be guarded before they are compared. Without the
+  // `> -1` checks a missing `platform_admin_is_authorized` yields -1, and
+  // `-1 < someRealIndex` is true — so this assertion passed even if the
+  // platform-authorization check were deleted outright. The sibling test
+  // below already guards its own lookup; this one did not.
+  const authorizationCheck = appPage.indexOf("platform_admin_is_authorized");
+  const onboardingBranch = appPage.indexOf('accessMode === "onboarding"');
   assert.ok(
-    appPage.indexOf("platform_admin_is_authorized") <
-      appPage.indexOf('accessMode === "onboarding"'),
+    authorizationCheck > -1,
+    "the platform authorization check must exist",
+  );
+  assert.ok(onboardingBranch > -1, "the onboarding access branch must exist");
+  assert.ok(
+    authorizationCheck < onboardingBranch,
+    "platform authorization must be resolved before the onboarding branch",
   );
   assert.match(appPage, /workspace: null/);
   assert.match(appPage, /platform: true/);
+});
+
+test("operator entitlements survive a client's own section catalogue", () => {
+  const appPage = source("../src/app/app/page.tsx");
+
+  // The carve-out has to be applied AFTER the tenant catalogue loop so it also
+  // holds on the paths where that loop never runs — `tenant_get_sections`
+  // erroring, or returning an empty catalogue. Ordering is the whole contract
+  // here: an operator who loses `platform` is stranded inside the client
+  // workspace with no route back, and one who loses `insights` cannot see the
+  // learner questions they need in order to support the account.
+  const tenantLoop = appPage.indexOf(
+    "permitted[key] = permitted[key] && section.enabled",
+  );
+  const carveOut = appPage.indexOf("if (access.canManagePlatform) {");
+  assert.ok(tenantLoop > -1, "tenant section gate must exist");
+  assert.ok(
+    carveOut > tenantLoop,
+    "operator carve-out must be applied after the tenant catalogue loop",
+  );
+  assert.match(
+    appPage,
+    /permitted\.platform = true;\s*permitted\.insights = true;/,
+  );
+
+  // ...and it must only ever WIDEN the operator's view. A client switching
+  // results off still has to hide results from that client.
+  assert.match(
+    appPage,
+    /permitted\[key\] = permitted\[key\] && section\.enabled/,
+  );
+});
+
+test("the widget section became flaggable without darkening it for anyone", () => {
+  const migration = source(
+    "../../../infra/supabase/migrations/20260731081000_tenant_capability_control.sql",
+  );
+  const platformRpc = source("../src/lib/supabase/platform-rpc.ts");
+
+  // `widget` was a console PanelKey with no catalogue row and no place in the
+  // table's own six-key check constraint, so it could not be flagged at all.
+  assert.match(migration, /\('widget'::text, true, 6\)/u);
+  assert.match(platformRpc, /"platform",\s*(?:\/\/[^\n]*\n\s*)*"widget",/u);
+
+  // The unnamed inline constraint from 20260725123000 has to go, or every
+  // widget write fails a check the definitions function says is valid.
+  assert.match(migration, /drop constraint %I/u);
+  assert.match(
+    migration,
+    /add constraint tenant_sections_section_key_check[\s\S]*?'widget'/u,
+  );
+
+  // `billing_apply_plan_entitlements` switches off every catalogue key that is
+  // not entitled. A new key that is not core would go dark on the next plan
+  // projection for every tenant.
+  assert.match(
+    migration,
+    /billing_core_sections[\s\S]*?array\['agent', 'course', 'people', 'settings', 'widget'\]/u,
+  );
+});
+
+test("client capabilities are a durable, audited, platform-only record", () => {
+  const migration = source(
+    "../../../infra/supabase/migrations/20260731081000_tenant_capability_control.sql",
+  );
+  const platformRoute = source("../src/app/api/platform/route.ts");
+  const panel = source("../src/components/sections/platform-panel.tsx");
+
+  // Mirrors the section pattern: tenant-readable table, no write policy for
+  // authenticated callers, writes only through the definer RPC.
+  assert.match(migration, /create table public\.tenant_capability_grants/u);
+  assert.match(
+    migration,
+    /alter table public\.tenant_capability_grants force row level security/u,
+  );
+  assert.match(migration, /tenant_capability_grants_deny_anon/u);
+  assert.doesNotMatch(
+    migration,
+    /create policy [\s\S]*?on public\.tenant_capability_grants\s+for (insert|update|delete)/u,
+  );
+  assert.match(
+    migration,
+    /grant select on public\.tenant_capability_grants to authenticated/u,
+  );
+
+  const setter = between(
+    migration,
+    "create or replace function public.platform_admin_set_tenant_capability(",
+    "-- 6. Execution boundary",
+  );
+  assert.match(setter, /platform_admin_is_authorized\(\)/u);
+  assert.match(setter, /platform_admin_write_audit/u);
+  assert.match(setter, /'platform\.tenant\.capability\.set'/u);
+
+  // Model choice is the only capability that changes what an answer costs, so
+  // it is granted explicitly rather than by omission.
+  assert.match(migration, /\('model_choice'::text, false, 4\)/u);
+
+  // The whole path is wired: API action, panel toggle, panel read.
+  assert.match(platformRoute, /action === "capability"/u);
+  assert.match(platformRoute, /isPlatformCapabilityKey\(input\.capabilityKey\)/u);
+  assert.match(platformRoute, /getPlatformTenantCapabilities/u);
+  assert.match(panel, /void toggleCapability\(/u);
+  assert.match(panel, /action: "capability"/u);
+
+  // ...and it stays honest about what a grant does NOT do yet.
+  assert.match(panel, /capabilityEnforcementNote/u);
+  assert.match(panel, /The client console does not read them yet/u);
 });
 
 test("managed access uses provider invitations and never returns a password", () => {

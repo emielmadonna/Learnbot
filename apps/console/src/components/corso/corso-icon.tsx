@@ -1,16 +1,30 @@
-export type CorsoIconName =
-  | "home"
-  | "learning"
-  | "settings"
-  | "conversation"
-  | "results"
-  | "signals"
-  | "workspaces"
-  | "lesson"
-  | "search"
-  | "people"
-  | "publish"
-  | "restore";
+/**
+ * The runtime list exists so a stored brand value can be checked against the
+ * icon set without duplicating the names. Same shape as `platformSectionKeys`.
+ */
+export const corsoIconNames = [
+  "home",
+  "learning",
+  "settings",
+  "conversation",
+  "results",
+  "signals",
+  "workspaces",
+  "lesson",
+  "search",
+  "people",
+  "publish",
+  "restore",
+] as const;
+
+export type CorsoIconName = (typeof corsoIconNames)[number];
+
+export function isCorsoIconName(value: unknown): value is CorsoIconName {
+  return (
+    typeof value === "string" &&
+    (corsoIconNames as readonly string[]).includes(value)
+  );
+}
 
 export type CorsoIconProps = {
   className?: string;

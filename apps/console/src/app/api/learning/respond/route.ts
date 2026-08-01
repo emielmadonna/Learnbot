@@ -26,7 +26,7 @@ import {
   type EscalationOffer,
   type ResolvedAgentDirective,
 } from "../../../../lib/provider-runtime";
-import { classifyLearnerQuestion } from "../../../../lib/question-classification";
+import { classifyLearnerQuestionOutcome } from "../../../../lib/question-classification";
 import { recordQuestionLabel } from "../../../../lib/supabase/question-intelligence-rpc";
 import {
   AuthenticationBoundaryError,
@@ -303,9 +303,6 @@ function visualAssetIds(sources: readonly GroundingSource[]) {
 // kept in sync by hand rather than sharing a module. If the persona/grounding
 // instructions in `learning-provider.ts` change, mirror the change here too.
 
-const NO_SOURCES_ANSWER =
-  "I couldn’t find this in the published learning yet. Try naming the course, lesson, or idea you want to understand.";
-
 const streamToneDirections: Record<string, string> = {
   neutral: "Keep the delivery plain, even and unhurried.",
   friendly: "Keep the delivery warm and approachable without being casual.",
@@ -500,6 +497,75 @@ type StreamPersistOutcome =
     }
   | { readonly ok: false };
 
+/**
+ * Classify one recorded question and label it.
+ *
+ * Both answer paths do this identically, and both used to discard every
+ * failure on the way: `classifyLearnerQuestion` returned a bare `null`, and
+ * `recordQuestionLabel`'s `{ ok: false, code }` was never read. An unlabelled
+ * question was therefore indistinguishable from a classifier that had never
+ * once run — which is exactly how a tenant reaches two thirds of its questions
+ * unclassified with no evidence of the cause.
+ *
+ * Nothing about what is *recorded* changes here: a fault still writes no label
+ * and still never guesses. The only difference is that the fault is now named
+ * in the server log. Only reason codes and the trace id are logged — never the
+ * question, the answer, or the learner.
+ */
+async function labelRecordedQuestion(
+  supabase: Awaited<ReturnType<typeof authenticatedLearningClient>>,
+  input: {
+    readonly questionMessageId: string;
+    readonly tenantId: string;
+    readonly actorId: string;
+    readonly requestId: string;
+    readonly traceId: string;
+    readonly baseKey: string;
+    readonly question: string;
+    readonly answer: string;
+    readonly scopeLabel: string | null;
+    readonly operationToken: string;
+  },
+): Promise<void> {
+  const outcome = await classifyLearnerQuestionOutcome({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    requestId: input.requestId,
+    traceId: input.traceId,
+    idempotencyKey: input.baseKey,
+    question: input.question,
+    answer: input.answer,
+    scopeLabel: input.scopeLabel,
+    supabase,
+  });
+  if (!outcome.ok) {
+    console.warn(
+      `[question-classifier] no label recorded: reason=${outcome.reason}` +
+        (outcome.detail === null ? "" : ` detail=${outcome.detail}`) +
+        ` trace=${input.traceId}`,
+    );
+    return;
+  }
+  const recorded = await recordQuestionLabel(supabase, {
+    messageId: input.questionMessageId,
+    topicKey: outcome.classification.topicKey,
+    topicLabel: outcome.classification.topicLabel,
+    intent: outcome.classification.intent,
+    importance: outcome.classification.importance,
+    classifierKey: outcome.classification.classifierKey,
+    classifierVersion: outcome.classification.classifierVersion,
+    traceId: input.traceId,
+    idempotencyKey: `label:${input.baseKey}`,
+    operationToken: input.operationToken,
+  });
+  if (!recorded.ok) {
+    console.warn(
+      `[question-classifier] label rejected by the database: ` +
+        `code=${recorded.code ?? "unknown"} trace=${input.traceId}`,
+    );
+  }
+}
+
 function buildStreamingResponse(params: {
   request: Request;
   supabase: Awaited<ReturnType<typeof authenticatedLearningClient>>;
@@ -524,6 +590,13 @@ function buildStreamingResponse(params: {
   retrievalMode: string | null;
   embeddingProvider: string | null;
   embeddingModel: string | null;
+  /*
+   * The tenant's resolved directive. This path is the DEFAULT one — every text
+   * turn streams — and it used to omit this, so `resolveAgentDirective(undefined)`
+   * inside the provider returned platform defaults for the tenant's
+   * `noResultsMessage`, model and escalation on essentially every answer.
+   */
+  agentDirective: unknown;
 }) {
   let resolveOutcome!: (outcome: StreamPersistOutcome) => void;
   const outcome = new Promise<StreamPersistOutcome>((resolve) => {
@@ -542,8 +615,25 @@ function buildStreamingResponse(params: {
           }),
         );
 
+        /*
+         * The tenant's own directive, resolved once for this stream.
+         *
+         * Everything below used to be hardcoded: the refusal was the module
+         * a module constant, and the model was read straight from
+         * `LEARNINGBOT_LLM_MODEL`. Since streaming is the default path for
+         * every text turn, that meant a creator could set a refusal message
+         * and a model in the console, see them work in Preview (which calls
+         * the non-streaming provider), and never have either reach a learner.
+         *
+         * `resolveAgentDirective` re-validates every field and falls back to
+         * the platform default for anything missing or unpriced, so this
+         * cannot widen what a tenant may select.
+         */
+        const streamDirective = resolveAgentDirective(params.agentDirective);
+
         if (params.sources.length === 0) {
-          controller.enqueue(sseBytes("delta", { text: NO_SOURCES_ANSWER }));
+          const refusal = streamDirective.noResultsMessage;
+          controller.enqueue(sseBytes("delta", { text: refusal }));
           controller.enqueue(
             sseBytes("done", {
               conversationId: params.conversationId,
@@ -557,7 +647,7 @@ function buildStreamingResponse(params: {
           controller.close();
           resolveOutcome({
             ok: true,
-            text: NO_SOURCES_ANSWER,
+            text: refusal,
             provider: "grounding-boundary",
             adapterId: "no-source-safe-answer",
             providerRequestRef: params.requestId,
@@ -567,8 +657,10 @@ function buildStreamingResponse(params: {
         }
 
         const adapter = streamingAdapter();
-        const model =
-          process.env.LEARNINGBOT_LLM_MODEL?.trim() || "gpt-5.6-terra";
+        // `resolveAgentDirective` has already fallen back to the platform
+        // default if the tenant's model is absent or missing from the price
+        // book, so this can never route spend to an unpriced model.
+        const model = streamDirective.model;
         const context: ProviderRequestContext = {
           tenantId: params.tenantId,
           actorId: params.actorId,
@@ -725,35 +817,31 @@ function buildStreamingResponse(params: {
         }
       }
       if (params.questionMessageId === null) return;
-      const classification = await classifyLearnerQuestion({
+      await labelRecordedQuestion(params.supabase, {
+        questionMessageId: params.questionMessageId,
         tenantId: params.tenantId,
         actorId: params.actorId,
         requestId: params.requestId,
         traceId: params.traceId,
-        idempotencyKey: params.baseKey,
+        baseKey: params.baseKey,
         question: params.question,
         answer: result.text,
         scopeLabel: params.scopeLabel,
-        supabase: params.supabase,
-      });
-      if (classification === null) return;
-      await recordQuestionLabel(params.supabase, {
-        messageId: params.questionMessageId,
-        topicKey: classification.topicKey,
-        topicLabel: classification.topicLabel,
-        intent: classification.intent,
-        importance: classification.importance,
-        classifierKey: classification.classifierKey,
-        classifierVersion: classification.classifierVersion,
-        traceId: params.traceId,
-        idempotencyKey: `label:${params.baseKey}`,
         operationToken: params.operationToken,
       });
-    } catch {
+    } catch (error) {
       // A dropped assistant-message write here means the learner keeps the
       // answer they already saw, but the transcript never gets it. Never
       // surface this — there is no synchronous response left to surface it
-      // to, and retrying here would risk a duplicate provider call.
+      // to, and retrying here would risk a duplicate provider call. It is
+      // still logged: this catch also swallows the classification below it, so
+      // a silent failure here reads downstream as a question the classifier
+      // simply chose not to label.
+      console.warn(
+        `[streaming-persist] the recorded turn was dropped: ` +
+          `${error instanceof Error ? error.message : "unknown"} ` +
+          `trace=${params.traceId}`,
+      );
     }
   });
 
@@ -795,6 +883,20 @@ function errorResponse(error: unknown) {
     { status: 400, headers: { "Cache-Control": "no-store" } },
   );
 }
+
+/*
+ * The invocation has to outlive the answer because analytics work continues
+ * in `after()`: the assistant message is persisted and the classifier gets its
+ * own bounded eight-second deadline. Keep the route budget explicit so a
+ * hosting-plan or project-default change cannot silently truncate that work.
+ *
+ * Production evidence from the original missing-label investigation did not
+ * identify an authenticated-route timeout: every authenticated question had a
+ * label, while every unlabelled question came from the separate widget route,
+ * which does not invoke this classifier. The 60-second ceiling therefore stays
+ * as defensive headroom, not as a claimed explanation for that historical gap.
+ */
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
@@ -941,6 +1043,7 @@ export async function POST(request: Request) {
         personaInstructions,
         tone,
         history,
+        agentDirective: directive,
         questionMessageId,
         retrievalMode: stringValue(searchResult.retrievalMode),
         embeddingProvider: stringValue(searchResult.embeddingProvider),
@@ -965,6 +1068,23 @@ export async function POST(request: Request) {
       supabase,
       conversationId,
       operationToken,
+      /*
+       * The tenant's own directive, which this call used to omit.
+       *
+       * `directive` is already resolved above and drives retrieval
+       * (`retrievalSimilarityFloor`, `retrievalCount`) and persona/tone here.
+       * It was simply never handed on, so inside `answerGroundedLearningQuestion`
+       * `resolveAgentDirective(undefined)` returned PLATFORM DEFAULTS for
+       * everything else on every authenticated answer: the tenant's
+       * `noResultsMessage` never appeared, and `directive.model` was discarded.
+       *
+       * Safe to pass: `resolveAgentDirective` accepts a stored model only when
+       * `isKnownTextModel` finds it in the price book, and otherwise falls back
+       * to the platform default and logs `model_unpriced_fallback`. A tenant
+       * cannot route spend to an unpriced model by setting this field, which is
+       * the billing property that made this look risky to change.
+       */
+      agentDirective: directive,
     });
     const recorded = await executeLearningRpc(
       supabase,
@@ -1006,32 +1126,27 @@ export async function POST(request: Request) {
     if (questionMessageId !== null) {
       after(async () => {
         try {
-          const classification = await classifyLearnerQuestion({
-            tenantId: stringValue(tenant?.tenantId) ?? "",
+          await labelRecordedQuestion(supabase, {
+            questionMessageId,
+            tenantId,
             actorId: user.id,
             requestId,
             traceId,
-            idempotencyKey: baseKey,
+            baseKey,
             question: message,
             answer: answer.answer,
             scopeLabel: selectedLessonLabel(workspace, lessonId),
-            supabase,
-          });
-          if (classification === null) return;
-          await recordQuestionLabel(supabase, {
-            messageId: questionMessageId,
-            topicKey: classification.topicKey,
-            topicLabel: classification.topicLabel,
-            intent: classification.intent,
-            importance: classification.importance,
-            classifierKey: classification.classifierKey,
-            classifierVersion: classification.classifierVersion,
-            traceId,
-            idempotencyKey: `label:${baseKey}`,
             operationToken,
           });
-        } catch {
-          // A label is optional; the recorded turn is not. Never surface this.
+        } catch (error) {
+          // A label is optional; the recorded turn is not. Never surface this
+          // to the learner — but do not lose it either, or an unlabelled
+          // question stays unexplainable.
+          console.warn(
+            `[question-classifier] labelling threw: ` +
+              `${error instanceof Error ? error.message : "unknown"} ` +
+              `trace=${traceId}`,
+          );
         }
       });
     }

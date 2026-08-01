@@ -29,8 +29,10 @@ async function readBody(response: Response) {
 
 export function PlatformClientPreviewBanner({
   tenant,
+  role,
 }: {
   tenant: ShellPayload["tenant"];
+  role: ShellPayload["role"];
 }) {
   const [session, setSession] = useState<PreviewSession | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -38,16 +40,19 @@ export function PlatformClientPreviewBanner({
 
   useEffect(() => {
     if (!tenant.tenantId) return;
-    try {
-      if (
-        window.sessionStorage.getItem("platform-client-preview") !==
-        tenant.tenantId
-      ) {
-        return;
-      }
-    } catch {
-      return;
-    }
+    // The platform entry is DURABLE and server-side: `/api/platform` is the
+    // authority on whether this caller has an active, audited session in this
+    // tenant. This used to gate on a `sessionStorage` key first, which made the
+    // only route back to the control plane ephemeral — closing the tab, opening
+    // a second one, or restarting the browser lost the flag while the server
+    // still held the entry open. The admin was then left inside the client
+    // workspace with no way out, because `resolveAppAccessMode` keeps returning
+    // `tenant_workspace` for as long as a tenant is selected.
+    //
+    // Gate on the role instead. It comes from `platform_admin_is_authorized`
+    // on the server, survives any browser state, and keeps ordinary members
+    // from firing a platform-only read they would only be denied.
+    if (role !== "platform_owner") return;
     const controller = new AbortController();
     void fetch(
       `/api/platform?tenantId=${encodeURIComponent(tenant.tenantId)}`,
@@ -82,7 +87,7 @@ export function PlatformClientPreviewBanner({
         // audited platform entry.
       });
     return () => controller.abort();
-  }, [tenant.displayName, tenant.tenantId]);
+  }, [role, tenant.displayName, tenant.tenantId]);
 
   async function exitPreview() {
     setLeaving(true);

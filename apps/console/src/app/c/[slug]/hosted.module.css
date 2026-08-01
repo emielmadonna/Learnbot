@@ -262,6 +262,40 @@
   font-size: 15px;
 }
 
+/* Visuals an answer was grounded on. At most two arrive (the ask route caps
+   them and this page re-caps), so a two-column grid never has to reflow into
+   something crowded. */
+.answerVisuals {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.answerVisuals figure {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgb(0 0 0 / 8%);
+  border-radius: 12px;
+  background: #f5f5f7;
+}
+
+.answerVisuals img,
+.answerVisuals video {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  background: #ffffff;
+}
+
+.answerVisuals figcaption {
+  padding: 8px 11px 10px;
+  color: #6e6e73;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .sources {
   margin-top: 18px;
   padding-top: 14px;
@@ -608,9 +642,16 @@
 }
 
 .page[data-ground="dark"] .sourceCard,
+.page[data-ground="dark"] .answerVisuals figure,
 .page[data-ground="dark"] .composer {
   border-color: rgb(255 255 255 / 9%);
   background: #1d2220;
+}
+
+/* The media itself keeps a light backing plate in dark mode: a diagram
+   exported on white reads as a hole punched in the page otherwise. */
+.page[data-ground="dark"] .answerVisuals figcaption {
+  color: #a8b2ae;
 }
 
 .page[data-ground="dark"] .composer input {

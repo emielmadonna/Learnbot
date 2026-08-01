@@ -1,5 +1,6 @@
 import type {
   ChatCompletion,
+  ChatCompletionInput,
   JsonValue,
   ProviderOutcome,
   ProviderRequestContext,
@@ -78,7 +79,8 @@ const MAX_OUTPUT_CHARS = 400;
 const CLASSIFY_DEADLINE_MS = 8_000;
 const TOPIC_KEY_PATTERN = /^[a-z0-9][a-z0-9-]{0,58}[a-z0-9]$/u;
 
-const CLASSIFIER_ADAPTER_ID = "openai-responses-question-classifier-v1";
+export const CLASSIFIER_ADAPTER_ID =
+  "openai-responses-question-classifier-v1";
 
 /** Cheap tier by default; the answer model is deliberately not reused. */
 function classifierModel(): string {
@@ -195,20 +197,97 @@ export type ClassifyQuestionInput = {
    * to remove.
    */
   readonly supabase?: SupabaseClient | null;
+  /**
+   * An explicit provider seam, mirroring `answerGroundedLearningQuestion`'s.
+   *
+   * The widget path has no adapter of its own and cannot use the metered path
+   * either: `runMeteredCompletion` reserves budget through RPCs that require a
+   * Supabase session, and the widget client is anonymous. Its completions go
+   * through the `learning-provider-widget-complete` Edge Function instead,
+   * which revalidates the widget key, the exact origin and the operation token
+   * server-side. Supplying that here is what lets an anonymous question be
+   * classified at all; when it is absent nothing about the existing callers
+   * changes.
+   */
+  readonly completion?: (
+    context: ProviderRequestContext,
+    request: ChatCompletionInput,
+  ) => Promise<ProviderOutcome<ChatCompletion>>;
 };
+
+/**
+ * Why no label was produced.
+ *
+ * Every one of these used to be a bare `return null`, which made "the
+ * classifier declined to label an ambiguous question" and "the classifier has
+ * never once run because nothing configured a provider" the same observation.
+ * Insights then reported both as an unclassified question with no way to tell
+ * them apart — which is exactly the state this platform found itself in, with
+ * two thirds of recorded questions unlabelled and no evidence of why.
+ *
+ * Naming the reason changes nothing about what is recorded: a failed
+ * classification still writes no label and still never guesses.
+ */
+export type ClassificationFailure =
+  /** Below the 2-character floor; nothing to label. */
+  | "question_too_short"
+  /**
+   * No OPENAI_API_KEY adapter, no Supabase client to meter through, and no
+   * explicit `completion` seam.
+   */
+  | "no_provider_configured"
+  /** Transport, adapter or budget fault — `runMeteredCompletion` threw. */
+  | "provider_threw"
+  /** The provider answered, and the answer was an error. */
+  | "provider_refused"
+  /** A completion whose message content was not text. */
+  | "non_text_content"
+  /** No JSON object anywhere in the model's output. */
+  | "unparseable_output"
+  /** Parsed, but the topic/intent/importance was absent or off-taxonomy. */
+  | "off_taxonomy";
+
+export type ClassificationOutcome =
+  | { readonly ok: true; readonly classification: QuestionClassification }
+  | {
+      readonly ok: false;
+      readonly reason: ClassificationFailure;
+      /** Provider error code or similar. Never carries question text. */
+      readonly detail: string | null;
+    };
 
 /**
  * Classifies one question. Returns `null` whenever an honest label cannot be
  * produced; the caller must then record nothing at all.
+ *
+ * Prefer `classifyLearnerQuestionOutcome` in new callers: this wrapper throws
+ * the reason away, and the reason is the only thing that distinguishes a
+ * classifier that is working from one that has never run.
  */
 export async function classifyLearnerQuestion(
   input: ClassifyQuestionInput,
 ): Promise<QuestionClassification | null> {
+  const outcome = await classifyLearnerQuestionOutcome(input);
+  return outcome.ok ? outcome.classification : null;
+}
+
+function declined(
+  reason: ClassificationFailure,
+  detail: string | null = null,
+): ClassificationOutcome {
+  return { ok: false, reason, detail };
+}
+
+export async function classifyLearnerQuestionOutcome(
+  input: ClassifyQuestionInput,
+): Promise<ClassificationOutcome> {
   const question = input.question.trim().slice(0, MAX_QUESTION_CHARS);
-  if (question.length < 2) return null;
+  if (question.length < 2) return declined("question_too_short");
 
   const adapter = sharedResponsesAdapter(CLASSIFIER_ADAPTER_ID);
-  if (adapter === null && !input.supabase) return null;
+  if (adapter === null && !input.supabase && !input.completion) {
+    return declined("no_provider_configured");
+  }
 
   const model = classifierModel();
   const context: ProviderRequestContext = {
@@ -245,7 +324,9 @@ export async function classifyLearnerQuestion(
     // Classification is real provider spend and goes through the metered seam
     // whenever the caller can supply a client. A refused budget, like every
     // other fault here, simply produces no label.
-    outcome = input.supabase
+    outcome = input.completion
+      ? await input.completion(context, request)
+      : input.supabase
       ? (
           await runMeteredCompletion({
             supabase: input.supabase,
@@ -257,17 +338,21 @@ export async function classifyLearnerQuestion(
           })
         ).outcome
       : await adapter!.complete(context, request);
-  } catch {
+  } catch (error) {
     // A transport, adapter or budget fault is a missing label, never a guessed
-    // one.
-    return null;
+    // one. The code travels with it so a budget refusal is distinguishable
+    // from an unreachable provider.
+    return declined(
+      "provider_threw",
+      error instanceof Error ? error.message.slice(0, 200) : null,
+    );
   }
-  if (!outcome.ok) return null;
+  if (!outcome.ok) return declined("provider_refused", outcome.error.code);
 
   const content: JsonValue = outcome.result.value.message.content;
-  if (typeof content !== "string") return null;
+  if (typeof content !== "string") return declined("non_text_content");
   const parsed = firstJsonObject(content.slice(0, MAX_OUTPUT_CHARS));
-  if (!isRecord(parsed)) return null;
+  if (!isRecord(parsed)) return declined("unparseable_output");
 
   const rawTopic = typeof parsed.topic === "string" ? parsed.topic.trim() : "";
   const topicLabel = rawTopic.replace(/\s+/gu, " ").slice(0, 80);
@@ -276,17 +361,20 @@ export async function classifyLearnerQuestion(
   const importance = readImportance(parsed.importance);
   if (topicKey === null || intent === null || importance === null) {
     // `{}` and any partial or off-taxonomy object land here on purpose.
-    return null;
+    return declined("off_taxonomy");
   }
 
   return {
-    topicKey,
-    topicLabel,
-    intent,
-    importance,
-    classifierKey: `${outcome.result.provider}:${
-      outcome.result.modelOrSku ?? model
-    }`.slice(0, 100),
-    classifierVersion: QUESTION_CLASSIFIER_VERSION,
+    ok: true,
+    classification: {
+      topicKey,
+      topicLabel,
+      intent,
+      importance,
+      classifierKey: `${outcome.result.provider}:${
+        outcome.result.modelOrSku ?? model
+      }`.slice(0, 100),
+      classifierVersion: QUESTION_CLASSIFIER_VERSION,
+    },
   };
 }

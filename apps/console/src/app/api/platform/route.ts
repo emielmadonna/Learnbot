@@ -12,14 +12,17 @@ import {
   exitPlatformTenant,
   getPlatformClientClaims,
   getPlatformOverview,
+  getPlatformTenantCapabilities,
   getPlatformTenantDetail,
   isPlatformAdmin,
+  isPlatformCapabilityKey,
   isPlatformClientPlan,
   isPlatformSectionKey,
   isPlatformSlug,
   isPlatformTenantStatus,
   revokePlatformClientClaim,
   setPlatformTenantStatus,
+  setTenantCapability,
   setTenantSection,
 } from "../../../lib/supabase/platform-rpc";
 
@@ -145,14 +148,18 @@ async function platformClient(request: Request, mutation: boolean) {
 export async function GET(request: Request) {
   try {
     const supabase = await platformClient(request, false);
-    const requestedTenantId = new URL(request.url).searchParams.get("tenantId");
+    const search = new URL(request.url).searchParams;
+    const requestedTenantId = search.get("tenantId");
     if (requestedTenantId !== null) {
-      return response(
-        await getPlatformTenantDetail(
-          supabase,
-          requireTenantId(requestedTenantId),
-        ),
-      );
+      const tenantId = requireTenantId(requestedTenantId);
+      // Capabilities are a separate read, not another field on the tenant
+      // detail: 20260731081000 is hand-applied like every migration on this
+      // project, so a console pointed at a database without it must still
+      // render the rest of the client detail rather than failing whole.
+      if (search.get("view") === "capabilities") {
+        return response(await getPlatformTenantCapabilities(supabase, tenantId));
+      }
+      return response(await getPlatformTenantDetail(supabase, tenantId));
     }
     return response(await getPlatformOverview(supabase));
   } catch (error) {
@@ -178,6 +185,22 @@ export async function POST(request: Request) {
         await setTenantSection(supabase, {
           tenantId: requireTenantId(input.tenantId),
           sectionKey: input.sectionKey,
+          enabled: input.enabled,
+        }),
+      );
+    }
+
+    if (action === "capability") {
+      if (
+        !isPlatformCapabilityKey(input.capabilityKey) ||
+        typeof input.enabled !== "boolean"
+      ) {
+        throw new PlatformRpcError("invalid_request");
+      }
+      return response(
+        await setTenantCapability(supabase, {
+          tenantId: requireTenantId(input.tenantId),
+          capabilityKey: input.capabilityKey,
           enabled: input.enabled,
         }),
       );

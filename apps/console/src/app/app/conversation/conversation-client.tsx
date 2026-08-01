@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -287,6 +288,43 @@ function AssistantAnswer({ message }: { message: ConversationMessage }) {
  * generated fallback id (see the `crypto.randomUUID()` path in the non-stream
  * branch) names no durable row, so rating it would always 404.
  */
+/**
+ * `prefers-reduced-motion`, readable from JS.
+ *
+ * The stylesheet already stops every CSS animation on this surface for a
+ * reduced-motion reader, but the assistant orb's vapour is driven by SMIL
+ * `<animate>` elements inside an SVG filter, and SMIL is not affected by CSS
+ * at all — `animation: none` cannot reach it. Without this gate the noise
+ * field kept flowing for exactly the people who asked for it not to.
+ *
+ * Defaults to TRUE, i.e. no motion, until the browser confirms otherwise. The
+ * cost is that everyone else's vapour starts a frame late; the alternative is
+ * a burst of motion in the face of someone who asked for none, which is the
+ * failure that actually matters.
+ */
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(true);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      setReduced(false);
+      return;
+    }
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => setReduced(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
+  return reduced;
+}
+
+/**
+ * A persisted message id. The streaming placeholder is `assistant-<uuid>`,
+ * which deliberately does NOT match — see `reconcilePersistedMessageId`.
+ */
+const PERSISTED_MESSAGE_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
 function AnswerFeedback({ messageId }: { messageId: string }) {
   const [rating, setRating] = useState<"helpful" | "not_helpful" | null>(null);
   const [failed, setFailed] = useState(false);
@@ -871,6 +909,77 @@ export default function ConversationClient({
     };
   }, [selectedCourseId, selectedLessonId]);
 
+  /**
+   * Replace a streamed answer's placeholder id with its persisted one.
+   *
+   * `learning_record_assistant_message` runs inside `after()` on the server —
+   * deliberately, and pinned by streaming-respond-contract.test.ts — so the row
+   * does not exist while the stream is open and no `done` event can carry its
+   * id. The client therefore renders `assistant-<uuid>`, which is not a real
+   * message id, and anything keyed on it (ratings) cannot work.
+   *
+   * Polling closes that gap without touching the after() contract.
+   *
+   * Matching is on CONTENT, never on "the newest assistant message". If
+   * `after()` has not finished yet the newest row is the PREVIOUS turn, and
+   * adopting its id would silently attach this answer's rating to an older
+   * one — a wrong write, which is worse than no write. Content-matching either
+   * finds this exact answer or gives up.
+   */
+  const reducedMotion = usePrefersReducedMotion();
+
+  const reconcilePersistedMessageId = useCallback(
+    async (placeholderId: string, answerText: string) => {
+      const target = answerText.trim();
+      if (target === "") return;
+      const parameters = new URLSearchParams();
+      if (selectedCourseId) parameters.set("courseId", selectedCourseId);
+      if (selectedLessonId) parameters.set("lessonId", selectedLessonId);
+      const suffix = parameters.size ? `?${parameters.toString()}` : "";
+
+      // Backs off across roughly three seconds. Giving up is a safe outcome:
+      // the answer stays on screen, only un-ratable until the next reload,
+      // which is exactly where this started.
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 300 * (attempt + 1));
+        });
+        try {
+          const response = await fetch(
+            `/api/learning/conversations${suffix}`,
+            { cache: "no-store", credentials: "same-origin" },
+          );
+          if (!response.ok) continue;
+          const normalized = normalizeConversation(await readJson(response));
+          const persisted = [...normalized.messages]
+            .reverse()
+            .find(
+              (message) =>
+                message.role === "assistant" &&
+                PERSISTED_MESSAGE_ID.test(message.messageId) &&
+                message.content.trim() === target,
+            );
+          if (!persisted) continue;
+          setMessages((current) =>
+            current.some(
+              (message) => message.messageId === persisted.messageId,
+            )
+              ? current
+              : current.map((message) =>
+                  message.messageId === placeholderId
+                    ? { ...message, messageId: persisted.messageId }
+                    : message,
+                ),
+          );
+          return;
+        } catch {
+          // A failed poll is not a failed answer. Try again, then stop.
+        }
+      }
+    },
+    [selectedCourseId, selectedLessonId],
+  );
+
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, sending]);
@@ -1127,6 +1236,11 @@ export default function ConversationClient({
             : message,
         ),
       );
+      // The answer is on screen but not yet ratable: its id is still the
+      // client-minted placeholder. Recording runs inside `after()` on the
+      // server, strictly after the response is sent, so the real id cannot
+      // arrive on the stream — poll briefly for it instead.
+      void reconcilePersistedMessageId(streamingId, assistantText);
       setLastAnswerRefused(refused);
       void recordUsageEvent("conversation.turn_completed", {
         conversationId: activeConversationId,
@@ -2294,6 +2408,97 @@ export default function ConversationClient({
           >
             <div className={styles.voiceAtmosphere} aria-hidden="true" />
             <div className={styles.cloudStage} aria-hidden="true">
+              {/*
+                * Fractal-noise filters for the assistant orb.
+                *
+                * The gas inside the orb is a smooth white field displaced by
+                * `feTurbulence`. That is the only way to get CONTINUOUS vapour:
+                * layered radial gradients, however many and however blurred,
+                * stay a set of discrete round blobs — they read as cotton wool,
+                * not as smoke. Displacing one continuous field by fractal noise
+                * produces the wisps and filaments that make it look natural.
+                *
+                * The two filters run at different frequencies and drift in
+                * opposite directions, so the layers never move as one mass.
+                *
+                * IDs are global (CSS Modules does not scope SVG ids), hence the
+                * `corsoGas` prefix. Zero-sized and aria-hidden: this element is
+                * a filter definition, never a rendered graphic.
+                */}
+              <svg
+                aria-hidden="true"
+                focusable="false"
+                height="0"
+                style={{ position: "absolute" }}
+                width="0"
+              >
+                <filter
+                  height="220%"
+                  id="corsoGasA"
+                  width="220%"
+                  x="-60%"
+                  y="-60%"
+                >
+                  <feTurbulence
+                    baseFrequency="0.008 0.011"
+                    numOctaves="5"
+                    result="noise"
+                    seed="3"
+                    type="fractalNoise"
+                  >
+                    {reducedMotion ? null : (
+                      <animate
+                        attributeName="baseFrequency"
+                        dur="26s"
+                        repeatCount="indefinite"
+                        values="0.008 0.011;0.011 0.008;0.008 0.011"
+                      />
+                    )}
+                  </feTurbulence>
+                  <feDisplacementMap
+                    in="SourceGraphic"
+                    in2="noise"
+                    result="displaced"
+                    scale="190"
+                    xChannelSelector="R"
+                    yChannelSelector="G"
+                  />
+                  <feGaussianBlur in="displaced" stdDeviation="2" />
+                </filter>
+                <filter
+                  height="220%"
+                  id="corsoGasB"
+                  width="220%"
+                  x="-60%"
+                  y="-60%"
+                >
+                  <feTurbulence
+                    baseFrequency="0.009 0.007"
+                    numOctaves="4"
+                    result="noise"
+                    seed="19"
+                    type="fractalNoise"
+                  >
+                    {reducedMotion ? null : (
+                      <animate
+                        attributeName="baseFrequency"
+                        dur="19s"
+                        repeatCount="indefinite"
+                        values="0.009 0.007;0.007 0.009;0.009 0.007"
+                      />
+                    )}
+                  </feTurbulence>
+                  <feDisplacementMap
+                    in="SourceGraphic"
+                    in2="noise"
+                    result="displaced"
+                    scale="165"
+                    xChannelSelector="R"
+                    yChannelSelector="G"
+                  />
+                  <feGaussianBlur in="displaced" stdDeviation="1.8" />
+                </filter>
+              </svg>
               <span
                 className={`${styles.voiceOrb} ${styles[`voiceOrb_${voicePhase}`]}`}
                 style={
@@ -2302,9 +2507,6 @@ export default function ConversationClient({
                   } as CSSProperties
                 }
               >
-                <i />
-                <i />
-                <i />
                 <em />
               </span>
             </div>
@@ -2582,10 +2784,19 @@ export default function ConversationClient({
                           </details>
                         ) : null}
                         {/* Never on a half-arrived or truncated answer: rating
-                            those would measure the transport, not the answer. */}
+                            those would measure the transport, not the answer.
+
+                            Also never before the message has its PERSISTED id.
+                            A streamed answer starts life as `assistant-<uuid>`,
+                            which /api/learning/feedback rejects as
+                            invalid_request — so this control used to render on
+                            every streamed answer and fail on every click.
+                            `reconcilePersistedMessageId` swaps the real id in a
+                            moment after the stream settles; it appears then. */}
                         {message.role === "assistant" &&
                         !message.streaming &&
-                        !message.streamError ? (
+                        !message.streamError &&
+                        PERSISTED_MESSAGE_ID.test(message.messageId) ? (
                           <AnswerFeedback messageId={message.messageId} />
                         ) : null}
                       </div>

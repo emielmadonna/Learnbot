@@ -14,11 +14,22 @@ test("Insights exports only tenant-scoped data returned by the durable analytics
   assert.match(insights, /widget,/);
   assert.match(insights, /learnerSignals,/);
   assert.match(insights, /rangeQuery\(days\)/);
+  // Both bounds are guarded before slicing. `const toolbar` — the previous end
+  // marker — no longer exists in the panel, so `indexOf` returned -1 and this
+  // slice silently ran from `exportData` to the end of the file instead of to
+  // the end of the memo. It still passed, which is the problem: a region
+  // assertion that loses a bound stops testing the region it names without
+  // ever failing. `const exportAvailable` is the declaration that actually
+  // follows the memo.
+  const exportStart = insights.indexOf("const exportData");
+  const exportEnd = insights.indexOf("const exportAvailable");
+  assert.ok(exportStart > -1, "the export payload memo must exist");
+  assert.ok(
+    exportEnd > exportStart,
+    "the export payload memo must be bounded by the availability flag",
+  );
   assert.doesNotMatch(
-    insights.slice(
-      insights.indexOf("const exportData"),
-      insights.indexOf("const toolbar"),
-    ),
+    insights.slice(exportStart, exportEnd),
     /fixture|sampleData|mockData|Math\.random/,
   );
 });

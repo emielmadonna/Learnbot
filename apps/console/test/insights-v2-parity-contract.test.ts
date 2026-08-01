@@ -32,11 +32,16 @@ test("Results controls filter and range-query durable data instead of fixtures",
   assert.match(source, /onExport=\{\(\) => exportAnalytics\("csv"\)\}/);
   assert.match(source, /intelligence=\{intelligence\}/);
   assert.match(source, /snapshot=\{snapshot\}/);
+  // Guarded before slicing: an unguarded `indexOf` that misses returns -1, and
+  // the resulting slice is empty, which makes `doesNotMatch` pass vacuously.
+  // Both markers exist today; these assertions make a rename fail loudly rather
+  // than silently stop checking for fixture data.
+  const viewStart = source.indexOf("function V2InsightsView");
+  const viewEnd = source.indexOf("function V2DepthBars");
+  assert.ok(viewStart > -1, "V2InsightsView must exist");
+  assert.ok(viewEnd > viewStart, "V2DepthBars must follow V2InsightsView");
   assert.doesNotMatch(
-    source.slice(
-      source.indexOf("function V2InsightsView"),
-      source.indexOf("function V2DepthBars"),
-    ),
+    source.slice(viewStart, viewEnd),
     /mockData|sampleData|fixtureData|Math\.random/,
   );
 });
@@ -60,9 +65,36 @@ test("Signals preserves deterministic evidence and the real review lifecycle", (
   assert.match(source, /href="\/app\?panel=course"/);
 });
 
-test("uninstrumented feedback remains visibly unavailable", () => {
-  assert.match(source, /value="Not measured"/);
-  assert.match(source, /Feedback is not recorded yet/);
+/*
+ * This used to pin the hard-coded `value="Not measured"` placeholder. That
+ * placeholder was the whole defect: 20260731061000 shipped
+ * `learning_answer_feedback_summary` and nothing ever called it, so the card
+ * reported "not recorded yet" no matter how many ratings existed. The contract
+ * now pins the three statements the card must keep distinct instead.
+ */
+test("Rated helpful reads the durable summary and keeps its three states apart", () => {
+  assert.match(source, /loadAnswerFeedback/);
+  assert.match(source, /\/api\/analytics\/answer-feedback/);
+  assert.match(source, /parseAnswerFeedbackSummary/);
+  assert.match(source, /feedback=\{feedback\}/);
+  // A failed read is "Not known"; an unrated window is "Not measured"; a real
+  // score is a percentage. None of these may collapse into another.
+  assert.match(source, /feedback === null\s*\?\s*"Not known"/);
+  assert.match(source, /feedback\.helpfulPercent === null\s*\?\s*"Not measured"/);
+  assert.match(source, /`\$\{feedback\.helpfulPercent\}%`/);
+  // The score never renders without the denominator it was drawn from.
+  assert.match(source, /of \$\{count\(feedback\.answerCount\)\} answers rated/);
+  assert.doesNotMatch(source, /Feedback is not recorded yet/);
+});
+
+test("the not-helpful question filter still states why it cannot filter", () => {
   assert.match(source, /Not helpful —/);
-  assert.match(source, /Helpful\/not-helpful feedback has not been instrumented/);
+  assert.match(
+    source,
+    /analytics_question_labels does not carry a per-question rating/,
+  );
+});
+
+test("an empty Signals list repeats the reasons the RPC gave for being empty", () => {
+  assert.match(source, /metric\.limitations\.map/);
 });

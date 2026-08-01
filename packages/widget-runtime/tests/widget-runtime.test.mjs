@@ -1002,3 +1002,160 @@ test("WID-18: text parts support a restricted **bold** inline syntax, built as r
   assert.match(descendantText(surface), /State the new rate/);
   assert.match(descendantText(surface), /Don't soften it twice\./);
 });
+
+/*
+ * "Did that help?" — WID-19.
+ *
+ * The rating control is only worth rendering if the id it posts is one the
+ * server accepts. On the console's authenticated surface it was keyed on a
+ * client-minted placeholder the API rejected, so every click 400'd. Here the
+ * adapter's own item id is exactly such a placeholder, and the control is
+ * therefore keyed on `feedbackRef` — a server-minted handle — and withheld
+ * entirely when the server offered none.
+ */
+function answeringAdapter(item, overrides = {}) {
+  return adapter({
+    async sendText(input, emit) {
+      emit({ type: "thread.item", conversationId: input.conversationId, item });
+    },
+    ...overrides,
+  });
+}
+
+function ratableAnswer(overrides = {}) {
+  return {
+    id: "local-item-1",
+    sequence: 1,
+    role: "assistant",
+    modality: "text",
+    status: "complete",
+    parts: [{ kind: "text", text: "Charge for the outcome, not the hour." }],
+    createdAt: "2026-07-31T00:00:00.000Z",
+    feedbackRef: "3f1c2b7e-9a4d-4c1b-8f2e-77aa2c9b1d40",
+    ...overrides,
+  };
+}
+
+function feedbackButtons(surface) {
+  const row = findDescendant(surface, (element) => element.className === "feedbackRow");
+  return row ? { row, buttons: row.children.filter((child) => child.tagName === "BUTTON") } : undefined;
+}
+
+test("WID-19: a rating posts the server's id, never the adapter's own item id", async () => {
+  const submitted = [];
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_rating",
+    adapter: answeringAdapter(ratableAnswer(), {
+      async rateAnswer(input) {
+        submitted.push(input);
+      },
+    }),
+  });
+
+  await widget.send("How do I price a retainer?");
+  const surface = widget.shadowRoot.children[2];
+  const found = feedbackButtons(surface);
+  assert.ok(found, "a finished, ratable answer offers the control");
+  assert.equal(found.buttons.length, 2);
+
+  found.buttons[0].click();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.equal(submitted.length, 1);
+  assert.equal(submitted[0].rating, "helpful");
+  assert.equal(submitted[0].feedbackRef, "3f1c2b7e-9a4d-4c1b-8f2e-77aa2c9b1d40");
+  assert.notEqual(submitted[0].feedbackRef, submitted[0].itemId);
+  const rated = widget.getSnapshot().conversation.items.find((item) => item.id === "local-item-1");
+  assert.deepEqual(rated.feedback, { rating: "helpful", status: "saved" });
+  assert.match(descendantText(surface), /Thanks/);
+});
+
+test("WID-19: no server id and no host implementation each mean no control at all", async () => {
+  const unratable = connectedWidget();
+  await unratable.configure({
+    tenantKey: "pk_no_ref",
+    // A pre-migration server returns no message id, so the adapter sets no
+    // feedbackRef. Rendering the control anyway would produce a button that
+    // is refused on every click.
+    adapter: answeringAdapter(ratableAnswer({ feedbackRef: undefined }), {
+      async rateAnswer() {
+        throw new Error("must never be called without a server id");
+      },
+    }),
+  });
+  await unratable.send("How do I price a retainer?");
+  assert.equal(feedbackButtons(unratable.shadowRoot.children[2]), undefined);
+
+  const hostless = connectedWidget();
+  await hostless.configure({
+    tenantKey: "pk_no_host",
+    adapter: answeringAdapter(ratableAnswer()),
+  });
+  await hostless.send("How do I price a retainer?");
+  assert.equal(feedbackButtons(hostless.shadowRoot.children[2]), undefined);
+});
+
+test("WID-19: a rejected rating says so instead of reporting a save that never happened", async () => {
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_rating_fails",
+    adapter: answeringAdapter(ratableAnswer(), {
+      async rateAnswer() {
+        throw new Error("feedback_rejected");
+      },
+    }),
+  });
+
+  await widget.send("How do I price a retainer?");
+  const surface = widget.shadowRoot.children[2];
+  feedbackButtons(surface).buttons[1].click();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  const rated = widget.getSnapshot().conversation.items.find((item) => item.id === "local-item-1");
+  assert.deepEqual(rated.feedback, { rating: "not_helpful", status: "failed" });
+  const after = feedbackButtons(surface);
+  assert.equal(after.row.dataset.state, "failed");
+  assert.match(descendantText(surface), /didn't save/);
+  // Still clickable, so the visitor can try again rather than being stuck.
+  assert.equal(after.buttons.every((button) => button.disabled !== true), true);
+});
+
+test("WID-19: the pending placeholder never carries a ratable id, and the completed turn adopts one", async () => {
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_rating_upsert",
+    adapter: adapter({
+      async sendText(input, emit) {
+        const base = {
+          id: "local-item-1",
+          sequence: 1,
+          role: "assistant",
+          modality: "text",
+          createdAt: "2026-07-31T00:00:00.000Z",
+        };
+        emit({
+          type: "thread.item",
+          conversationId: input.conversationId,
+          item: { ...base, status: "pending", parts: [] },
+        });
+        emit({
+          type: "thread.item",
+          conversationId: input.conversationId,
+          item: {
+            ...base,
+            status: "complete",
+            parts: [{ kind: "text", text: "Charge for the outcome." }],
+            feedbackRef: "3f1c2b7e-9a4d-4c1b-8f2e-77aa2c9b1d40",
+          },
+        });
+      },
+      async rateAnswer() {},
+    }),
+  });
+
+  await widget.send("How do I price a retainer?");
+  const rated = widget.getSnapshot().conversation.items.find((item) => item.id === "local-item-1");
+  assert.equal(rated.feedbackRef, "3f1c2b7e-9a4d-4c1b-8f2e-77aa2c9b1d40");
+  assert.ok(feedbackButtons(widget.shadowRoot.children[2]));
+});

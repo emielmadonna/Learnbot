@@ -53,6 +53,21 @@ type Source = {
   excerpt: string;
 };
 
+/**
+ * One visual an answer was grounded on.
+ *
+ * The vocabulary is the widget runtime's, not a second one invented here:
+ * `/api/widget/ask` emits `message.parts` with `kind: "diagram"` for a still
+ * image and `kind: "video"` for MP4 (see `visualParts` in
+ * api/widget/ask/route.ts), the embed adapter maps exactly those field names
+ * (app/widget.js/embed-prelude.ts `mapRichParts`), and
+ * packages/widget-runtime `#renderPart` renders them. This page is a third
+ * consumer of that same payload, so it reads the same names.
+ */
+type AnswerVisual =
+  | { kind: "diagram"; id: string; url: string; caption: string }
+  | { kind: "video"; id: string; url: string; title: string };
+
 type Message =
   | { id: string; role: "user"; content: string }
   | {
@@ -60,6 +75,7 @@ type Message =
       role: "assistant";
       content: string;
       sources: Source[];
+      visuals: AnswerVisual[];
     };
 
 type HostedAssistantProps = {
@@ -75,8 +91,21 @@ type AskSuccess = {
   message: {
     content: string;
     sources?: unknown;
+    parts?: unknown;
   };
 };
+
+/**
+ * At most two visuals per answer, matching `MAX_ANSWER_VISUALS` in
+ * api/widget/ask/route.ts and `selectedVisualAssetIds` in
+ * api/learning/respond. The server already caps it; this page re-caps because
+ * every other assertion the server made is re-checked here too, and a cap
+ * that only lives on one side is not a cap.
+ */
+const MAX_ANSWER_VISUALS = 2;
+
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 const promptSuggestions = [
   "Help me find the right lesson",
@@ -134,6 +163,157 @@ function parseSources(value: unknown): Source[] {
   });
 }
 
+/**
+ * The visuals this answer is allowed to show.
+ *
+ * Everything the server asserted is re-checked, in the same posture the
+ * authenticated console takes in app/conversation (`normalizeSource`): the id
+ * must be a UUID, and the URL must be this origin's own
+ * `/api/widget/visuals/{id}/content` and nothing else. That second check is
+ * the load-bearing one — it is what stops a payload from turning this page
+ * into a renderer for arbitrary remote media. The query string is preserved
+ * because the visitor's own `key` and `conversationRef` credentials live
+ * there; that endpoint cannot take headers from an `<img src>`.
+ *
+ * `kind` is the only media discriminator the wire carries — the widget part
+ * shape has no `mediaType` field — but it is derived server-side from a media
+ * type that was already checked against `VISUAL_MEDIA_EXTENSIONS`, so
+ * "diagram" means image and "video" means MP4. A kind this build does not
+ * know is skipped silently rather than guessed at, exactly as the runtime's
+ * `#renderPart` does.
+ *
+ * A `diagram` is rendered only when the server marked it `approved`. That
+ * flag is never defaulted to true here, matching the embed adapter.
+ */
+function parseVisuals(value: unknown, origin: string): AnswerVisual[] {
+  if (!Array.isArray(value)) return [];
+  const visuals: AnswerVisual[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (visuals.length >= MAX_ANSWER_VISUALS) break;
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const id = typeof record.id === "string" ? record.id : "";
+    const rawUrl = typeof record.url === "string" ? record.url : "";
+    if (!uuidPattern.test(id) || seen.has(id) || rawUrl.length === 0) continue;
+
+    let url: URL;
+    try {
+      url = new URL(rawUrl, origin);
+    } catch {
+      continue;
+    }
+    if (
+      url.origin !== origin ||
+      url.pathname !== `/api/widget/visuals/${id}/content`
+    ) {
+      continue;
+    }
+
+    if (
+      record.kind === "diagram" &&
+      record.approved === true &&
+      typeof record.caption === "string" &&
+      record.caption.trim().length > 0
+    ) {
+      seen.add(id);
+      visuals.push({
+        kind: "diagram",
+        id,
+        url: url.href,
+        caption: record.caption.trim(),
+      });
+      continue;
+    }
+    if (
+      record.kind === "video" &&
+      typeof record.title === "string" &&
+      record.title.trim().length > 0
+    ) {
+      seen.add(id);
+      visuals.push({
+        kind: "video",
+        id,
+        url: url.href,
+        title: record.title.trim(),
+      });
+    }
+  }
+  return visuals;
+}
+
+/**
+ * Reads the SSE contract `/api/widget/ask` serves on
+ * `Accept: text/event-stream`, forwarded here by `c/[slug]/ask/route.ts`: a
+ * `sources` event first, then `delta` events, then a terminal `done` (or
+ * `error`).
+ *
+ * Frames are separated by a blank line, so a partial frame is held in the
+ * buffer until the rest of it arrives rather than parsed as truncated JSON.
+ *
+ * Resolves `true` ONLY when a terminal `done` was seen. Anything else -- an
+ * `error` frame, a dropped connection, a stream that simply stops -- resolves
+ * `false`, and the caller must not present that turn as a finished answer.
+ * Whatever text did arrive stays on screen, because it is real; what changes is
+ * that the page says the turn did not complete instead of implying it did.
+ */
+async function readEventStream(
+  response: Response,
+  handlers: {
+    onSources: (payload: Record<string, unknown>) => void;
+    onDelta: (text: string) => void;
+    onDone: (payload: Record<string, unknown>) => void;
+  },
+): Promise<boolean> {
+  const body = response.body;
+  if (body === null) return false;
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finished = false;
+
+  const handleFrame = (frame: string) => {
+    let name = "";
+    let data = "";
+    for (const line of frame.split("\n")) {
+      if (line.startsWith("event:")) name = line.slice(6).trim();
+      else if (line.startsWith("data:")) data += line.slice(5).trim();
+    }
+    if (data === "") return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      return;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+    const payload = parsed as Record<string, unknown>;
+    if (name === "sources") handlers.onSources(payload);
+    else if (name === "delta") {
+      if (typeof payload.text === "string" && payload.text.length > 0) {
+        handlers.onDelta(payload.text);
+      }
+    } else if (name === "done") {
+      finished = true;
+      handlers.onDone(payload);
+    }
+    // An `error` frame leaves `finished` false, which is the whole signal.
+  };
+
+  for (;;) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    buffer += decoder.decode(chunk.value, { stream: true });
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      handleFrame(buffer.slice(0, boundary));
+      buffer = buffer.slice(boundary + 2);
+      boundary = buffer.indexOf("\n\n");
+    }
+  }
+  return finished;
+}
+
 function isAskSuccess(value: unknown): value is AskSuccess {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
@@ -186,6 +366,14 @@ export function HostedAssistant({
       : null,
   );
   const [isSending, setIsSending] = useState(false);
+  /**
+   * The answer currently being streamed, if any.
+   *
+   * It exists so the "Checking the published course…" row disappears the
+   * moment real content starts arriving, instead of sitting under a bubble
+   * that is already filling with the answer.
+   */
+  const [streamingId, setStreamingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [prefersDark, setPrefersDark] = useState(false);
   const conversation = useRef("");
@@ -266,6 +454,7 @@ export function HostedAssistant({
     setQuestion("");
     setError(null);
     setIsSending(false);
+    setStreamingId(null);
   }
 
   async function ask(rawQuestion: string) {
@@ -295,12 +484,18 @@ export function HostedAssistant({
     setError(null);
     setIsSending(true);
 
+    const assistantId = `assistant-${crypto.randomUUID()}`;
+
     try {
       const response = await fetch(askEndpoint, {
         method: "POST",
         credentials: "omit",
         headers: {
           "content-type": "application/json",
+          // Streaming is opt-in on the server; this is the opt-in. A response
+          // the route decides to send whole still comes back as JSON and falls
+          // through to the branch below, unchanged.
+          accept: "text/event-stream, application/json",
         },
         body: JSON.stringify({
           ...(legacyWidgetKey === null ? {} : { key: legacyWidgetKey }),
@@ -310,6 +505,76 @@ export function HostedAssistant({
         }),
         signal: controller.signal,
       });
+
+      const streamed =
+        response.ok &&
+        (response.headers.get("content-type") ?? "")
+          .toLowerCase()
+          .includes("text/event-stream");
+
+      if (streamed) {
+        const completed = await readEventStream(response, {
+          onSources: (payload) => {
+            if (requestVersion.current !== version) return;
+            // The answer opens here, before a single token exists: citations
+            // and grounded visuals are already resolved, so they render while
+            // the prose is still being written instead of all landing at once.
+            setStreamingId(assistantId);
+            setMessages((current) => [
+              ...current,
+              {
+                id: assistantId,
+                role: "assistant",
+                content: "",
+                sources: parseSources(payload.sources),
+                visuals: parseVisuals(payload.parts, window.location.origin),
+              },
+            ]);
+          },
+          onDelta: (text) => {
+            if (requestVersion.current !== version) return;
+            setMessages((current) => {
+              const index = current.findIndex(
+                (message) => message.id === assistantId,
+              );
+              const existing = index === -1 ? null : current[index];
+              if (!existing || existing.role !== "assistant") {
+                // Defensive: the contract sends `sources` first, but a delta
+                // that arrives without one is still the visitor's answer and
+                // must not be dropped on the floor.
+                return [
+                  ...current,
+                  {
+                    id: assistantId,
+                    role: "assistant",
+                    content: text,
+                    sources: [],
+                    visuals: [],
+                  },
+                ];
+              }
+              const next = [...current];
+              next[index] = { ...existing, content: existing.content + text };
+              return next;
+            });
+          },
+          onDone: () => {
+            // Nothing to apply: the text is already on screen and the sources
+            // arrived first. `done` matters only as the terminal signal below.
+          },
+        });
+        if (requestVersion.current !== version) return;
+        if (!completed) {
+          // Whatever arrived stays visible -- it is real text that was
+          // streamed -- but the page says the answer did not finish rather
+          // than letting a truncated reply pass for a complete one.
+          setError(
+            "The answer stopped before it finished. Your question wasn’t lost—please try again.",
+          );
+        }
+        return;
+      }
+
       const payload = (await response.json().catch(() => null)) as unknown;
       if (requestVersion.current !== version) return;
 
@@ -331,10 +596,14 @@ export function HostedAssistant({
       setMessages((current) => [
         ...current,
         {
-          id: `assistant-${crypto.randomUUID()}`,
+          id: assistantId,
           role: "assistant",
           content: payload.message.content,
           sources: parseSources(payload.message.sources),
+          visuals: parseVisuals(
+            payload.message.parts,
+            window.location.origin,
+          ),
         },
       ]);
     } catch {
@@ -344,6 +613,7 @@ export function HostedAssistant({
       if (requestVersion.current === version) {
         requestController.current = null;
         setIsSending(false);
+        setStreamingId(null);
       }
     }
   }
@@ -457,12 +727,64 @@ export function HostedAssistant({
                       className={styles.answerProse}
                       markdown={message.content}
                     />
+                    {message.visuals.length > 0 ? (
+                      <div
+                        aria-label="Course visuals used in this answer"
+                        className={styles.answerVisuals}
+                      >
+                        {message.visuals.map((visual) =>
+                          visual.kind === "video" ? (
+                            <figure key={visual.id}>
+                              <video
+                                aria-label={visual.title}
+                                controls
+                                playsInline
+                                preload="metadata"
+                                src={visual.url}
+                              />
+                              <figcaption>{visual.title}</figcaption>
+                            </figure>
+                          ) : (
+                            <figure key={visual.id}>
+                              {/* The URL was re-checked above to be this
+                                  origin's own visual-content endpoint, which
+                                  authorises the read from the disclosure the
+                                  answer recorded. No storage URL or object key
+                                  reaches the browser. */}
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                alt={visual.caption}
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                                src={visual.url}
+                              />
+                              <figcaption>{visual.caption}</figcaption>
+                            </figure>
+                          ),
+                        )}
+                      </div>
+                    ) : null}
                     {message.sources.length > 0 ? (
-                      <section
+                      /*
+                       * Collapsed by default, like the console conversation's
+                       * own source list. This was a plain always-open section,
+                       * so every answer on the full-page assistant pushed its
+                       * citations between the reader and the next reply. A
+                       * citation is there to be checked when it matters, not
+                       * read alongside the answer.
+                       *
+                       * `<details>` without `open` is the same disclosure the
+                       * authenticated conversation already uses, so both
+                       * surfaces behave identically.
+                       */
+                      <details
                         aria-label="Sources"
                         className={styles.sources}
                       >
-                        <h2>Sources</h2>
+                        <summary>
+                          {message.sources.length}{" "}
+                          {message.sources.length === 1 ? "source" : "sources"}
+                        </summary>
                         <div className={styles.sourceGrid}>
                           {message.sources.map((source, index) => (
                             <article
@@ -486,13 +808,13 @@ export function HostedAssistant({
                             </article>
                           ))}
                         </div>
-                      </section>
+                      </details>
                     ) : null}
                   </div>
                 </article>
               ),
             )}
-            {isSending ? (
+            {isSending && streamingId === null ? (
               <div className={styles.thinking} role="status">
                 <BrandAvatar alt="" imageUrl={avatarUrl ?? logoUrl} size="turn" />
                 <span>

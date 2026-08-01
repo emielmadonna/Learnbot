@@ -287,6 +287,240 @@ export async function completeWithManagedWidgetProvider(input: {
 }
 
 // ---------------------------------------------------------------------------
+// Managed widget streaming
+// ---------------------------------------------------------------------------
+
+/**
+ * One event from the managed widget provider stream.
+ *
+ * Deliberately the same shape the provider-router's `streamChatText` yields on
+ * the authenticated path, so `api/widget/ask` and `api/learning/respond` drive
+ * their SSE loops identically and neither invents a second vocabulary.
+ */
+export type ManagedWidgetStreamEvent =
+  | { readonly type: "delta"; readonly text: string }
+  | {
+      readonly type: "done";
+      readonly provider: string;
+      readonly adapterId: string;
+      readonly model: string | null;
+      readonly providerRequestRef: string;
+    }
+  | {
+      readonly type: "error";
+      readonly code: string;
+      readonly retryable: boolean;
+    };
+
+function managedStreamErrorCode(payload: Record<string, unknown> | null) {
+  const code = typeof payload?.code === "string" ? payload.code : "";
+  return code === "provider_budget_exhausted" ||
+    code === "provider_unavailable" ||
+    code === "provider_authentication_failed" ||
+    code === "provider_not_configured" ||
+    code === "provider_response_invalid" ||
+    code === "invalid_request"
+    ? code
+    : "provider_failed";
+}
+
+/**
+ * Stream one anonymous widget turn through the server-only provider boundary.
+ *
+ * This is `completeWithManagedWidgetProvider` with `stream: true`, and it goes
+ * through the SAME Edge Function for a reason that is not stylistic: that
+ * function is the only place the widget surface's tenant id exists, so it is
+ * the only place `learning_reserve_provider_call` can run before the spend and
+ * `learning_record_provider_cost` after it. Streaming from the console directly
+ * would have made every streamed widget answer unmetered.
+ *
+ * TWO DEPLOYMENTS ARE HANDLED, and the difference is invisible to the caller:
+ *
+ *   - An Edge Function that understands `stream: true` answers with
+ *     `text/event-stream`. `functions.invoke` hands back the raw `Response` for
+ *     that content type, and its frames are re-yielded here as deltas.
+ *   - An Edge Function deployed BEFORE this change ignores the unknown field
+ *     and answers with the JSON it always has. Rather than fail, that whole
+ *     answer is yielded as a single delta followed by `done`. The visitor still
+ *     gets sources immediately and an answer that renders through the same
+ *     path; only the token-by-token reveal is missing.
+ *
+ * Edge functions on this project are deployed by hand, so the second case is
+ * the live one until `learning-provider-widget-complete` is pushed.
+ */
+export async function* streamWithManagedWidgetProvider(input: {
+  supabase: SupabaseClient;
+  context: ProviderRequestContext;
+  request: ChatCompletionInput;
+  adapterId: string;
+  widgetKey: string;
+  origin: string;
+  operationToken: string;
+  actorRef: string;
+  signal?: AbortSignal;
+}): AsyncGenerator<ManagedWidgetStreamEvent> {
+  const invoked = await input.supabase.functions.invoke(
+    "learning-provider-widget-complete",
+    {
+      body: {
+        widgetKey: input.widgetKey,
+        origin: input.origin,
+        operationToken: input.operationToken,
+        actorRef: input.actorRef,
+        provider: "openai",
+        model: input.request.model,
+        requestId: input.context.requestId,
+        messages: input.request.messages,
+        maxOutputTokens: input.request.maxOutputTokens,
+        stream: true,
+      },
+      ...(input.signal ? { signal: input.signal } : {}),
+    },
+  );
+
+  const streamed =
+    invoked.data instanceof Response &&
+    (invoked.data.headers.get("content-type") ?? "")
+      .toLowerCase()
+      .includes("text/event-stream")
+      ? invoked.data
+      : null;
+
+  if (streamed === null) {
+    // The buffered contract, unchanged. `invoked.error` covers a transport
+    // failure and a non-2xx from the function; `ok !== true` covers a named
+    // refusal the function returned with a 200, which is how it reports
+    // budget exhaustion and provider faults.
+    const payload =
+      invoked.data &&
+      typeof invoked.data === "object" &&
+      !Array.isArray(invoked.data)
+        ? (invoked.data as ManagedCompletionPayload)
+        : null;
+    if (
+      invoked.error ||
+      payload?.ok !== true ||
+      typeof payload.text !== "string" ||
+      payload.text.trim() === ""
+    ) {
+      yield {
+        type: "error",
+        code: managedStreamErrorCode(payload),
+        retryable: payload?.retryable === true,
+      };
+      return;
+    }
+    yield { type: "delta", text: payload.text.trim() };
+    yield {
+      type: "done",
+      provider:
+        typeof payload.provider === "string" ? payload.provider : "openai",
+      adapterId:
+        typeof payload.adapterId === "string" && payload.adapterId.trim()
+          ? payload.adapterId
+          : input.adapterId,
+      model:
+        typeof payload.model === "string" && payload.model.trim()
+          ? payload.model
+          : (input.request.model ?? null),
+      providerRequestRef:
+        typeof payload.providerRequestRef === "string"
+          ? payload.providerRequestRef
+          : input.context.requestId,
+    };
+    return;
+  }
+
+  const body = streamed.body;
+  if (body === null) {
+    yield { type: "error", code: "provider_response_invalid", retryable: true };
+    return;
+  }
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      // Frames are separated by a blank line; a partial frame waits for the
+      // rest of itself rather than being parsed as truncated JSON.
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary !== -1) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        boundary = buffer.indexOf("\n\n");
+        let name = "";
+        let data = "";
+        for (const line of frame.split("\n")) {
+          if (line.startsWith("event:")) name = line.slice(6).trim();
+          else if (line.startsWith("data:")) data += line.slice(5).trim();
+        }
+        if (data === "") continue;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data);
+        } catch {
+          continue;
+        }
+        const record =
+          parsed && typeof parsed === "object" && !Array.isArray(parsed)
+            ? (parsed as Record<string, unknown>)
+            : {};
+        if (name === "delta") {
+          const text = typeof record.text === "string" ? record.text : "";
+          if (text.length > 0) yield { type: "delta", text };
+          continue;
+        }
+        if (name === "error") {
+          yield {
+            type: "error",
+            code:
+              typeof record.code === "string"
+                ? record.code
+                : "provider_failed",
+            retryable: record.retryable === true,
+          };
+          return;
+        }
+        if (name === "done") {
+          yield {
+            type: "done",
+            provider:
+              typeof record.provider === "string" ? record.provider : "openai",
+            adapterId:
+              typeof record.adapterId === "string" && record.adapterId.trim()
+                ? record.adapterId
+                : input.adapterId,
+            model:
+              typeof record.model === "string" && record.model.trim()
+                ? record.model
+                : (input.request.model ?? null),
+            providerRequestRef:
+              typeof record.providerRequestRef === "string"
+                ? record.providerRequestRef
+                : input.context.requestId,
+          };
+          return;
+        }
+      }
+    }
+  } finally {
+    // A caller that stops iterating (the visitor closed the tab) releases the
+    // reader here, which cancels the Edge Function's own stream and stops the
+    // provider spend behind it.
+    try {
+      await reader.cancel();
+    } catch {
+      // Already closed by the peer.
+    }
+  }
+  // Fell off the end with no terminal frame. The caller must treat this as a
+  // failed turn and record nothing.
+}
+
+// ---------------------------------------------------------------------------
 // Operation secret health
 // ---------------------------------------------------------------------------
 
