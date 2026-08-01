@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0002_tenants_and_learning_core.
+-- The executable migration is maintained as 0002_tenants_and_learning_core.sql.

@@ -1,0 +1,374 @@
+.settings {
+  display: grid;
+  width: 100%;
+  min-height: calc(100svh - 222px);
+  border-radius: 20px;
+  background: var(--bg);
+  grid-template-columns: 236px minmax(0, 1fr);
+}
+
+.sidebar {
+  padding: 24px 14px;
+  border-right: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navItem {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 11px;
+  padding: 0 12px;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+a.navItem:hover {
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  color: var(--ink);
+}
+
+.navActive {
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.navActive svg {
+  color: var(--accent);
+}
+
+.navDisabled {
+  opacity: 0.52;
+}
+
+.content {
+  width: min(760px, 100%);
+  box-sizing: border-box;
+  padding: 0 48px 56px;
+}
+
+.header {
+  margin-bottom: 34px;
+}
+
+.header h1,
+.header p,
+.group h2,
+.rowCopy strong,
+.rowCopy small {
+  margin: 0;
+}
+
+.header h1 {
+  margin-bottom: 8px;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.header p {
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.group {
+  margin-bottom: 30px;
+}
+
+.group h2 {
+  padding-left: 18px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font: 600 10px var(--font-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.groupCard {
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.row {
+  display: flex;
+  width: 100%;
+  min-height: 54px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 16px;
+  padding: 15px 20px;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.groupCard > :last-child {
+  border-bottom: 0;
+}
+
+a.row:hover {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.avatarRow {
+  min-height: 88px;
+  padding: 18px 20px;
+}
+
+.avatar {
+  display: grid;
+  overflow: hidden;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  /* The monogram sits on a filled brand disc, so it takes the paired
+     on-brand ink rather than a literal white -- a light brand colour would
+     otherwise render an unreadable white-on-pale monogram. */
+  color: var(--brand-on-primary, var(--surface));
+  font-size: 14px;
+  font-weight: 700;
+  place-items: center;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rowCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  flex: 1;
+}
+
+.rowCopy strong,
+.rowLabel,
+.rowValue {
+  font-size: 15px;
+}
+
+.rowCopy strong {
+  font-weight: 600;
+}
+
+.rowCopy small {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.rowLabel {
+  flex: 1;
+}
+
+.rowValue {
+  max-width: 52%;
+  overflow: hidden;
+  color: var(--muted);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  color: var(--hairline);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.outlineButton {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.colorValue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.colorValue i {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.colorValue code {
+  color: var(--muted);
+  font: 12px var(--font-mono);
+}
+
+.messageRow {
+  display: grid;
+  gap: 8px;
+}
+
+.message {
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.segmentRow {
+  display: grid;
+  gap: 10px;
+}
+
+.segments {
+  display: flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 13px;
+}
+
+.segments > span {
+  padding: 7px;
+  border-radius: 8px;
+  color: var(--muted);
+  flex: 1;
+  text-align: center;
+}
+
+.segments > span[data-active] {
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/*
+ * Status readout for behaviour that is either fixed (no stored field exists
+ * to flip) or derived from other data (e.g. whether any lesson is published)
+ * rather than a stored preference. Deliberately NOT styled like a switch —
+ * a control a visitor cannot operate is a bug regardless of the mockup.
+ */
+.statusPill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--good) 16%, transparent);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.statusPill[data-tone="off"] {
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  color: var(--muted);
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--good);
+}
+
+.statusPill[data-tone="off"] .statusDot {
+  background: var(--muted);
+}
+
+.advancedNote {
+  padding-left: 18px;
+  margin: -18px 0 30px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.planRow {
+  min-height: 82px;
+}
+
+@media (max-width: 780px) {
+  .settings {
+    display: block;
+    min-height: 0;
+  }
+
+  .sidebar {
+    overflow-x: auto;
+    padding: 0 0 18px;
+    border: 0;
+    background: transparent;
+  }
+
+  .sidebar nav {
+    width: max-content;
+    flex-direction: row;
+  }
+
+  .navItem {
+    min-height: 36px;
+    padding: 0 11px;
+  }
+
+  .content {
+    padding: 0 0 40px;
+  }
+}
+
+@media (max-width: 560px) {
+  .header {
+    margin-bottom: 26px;
+  }
+
+  .header h1 {
+    font-size: 30px;
+  }
+
+  .row {
+    padding: 14px 16px;
+  }
+
+  .rowValue {
+    display: none;
+  }
+
+  .avatarRow {
+    min-height: 80px;
+  }
+
+  .message {
+    font-size: 14px;
+  }
+}

@@ -36,6 +36,18 @@ type SourceEvidence = {
   excerpt: string;
   courseTitle: string | null;
   lessonTitle: string | null;
+  visual: {
+    visualAssetId: string;
+    title: string;
+    altText: string;
+    mediaType:
+      | "image/jpeg"
+      | "image/png"
+      | "image/svg+xml"
+      | "image/webp"
+      | "video/mp4";
+    url: string;
+  } | null;
 };
 
 type ConversationMessage = {
@@ -262,8 +274,82 @@ function AssistantAnswer({ message }: { message: ConversationMessage }) {
   );
 }
 
+/**
+ * "Was that helpful?" under a finished answer.
+ *
+ * Deliberately local state plus one POST, with no optimistic rollback: a
+ * rating that fails to save shows as unsaved rather than silently pretending,
+ * because the whole value of this control is that the number it feeds is
+ * trustworthy. Re-rating is allowed and UPDATES server-side, so the tenant's
+ * score counts people rather than clicks.
+ *
+ * Only rendered for a message whose id came from the server. A locally
+ * generated fallback id (see the `crypto.randomUUID()` path in the non-stream
+ * branch) names no durable row, so rating it would always 404.
+ */
+function AnswerFeedback({ messageId }: { messageId: string }) {
+  const [rating, setRating] = useState<"helpful" | "not_helpful" | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  async function rate(next: "helpful" | "not_helpful") {
+    const previous = rating;
+    setRating(next);
+    setFailed(false);
+    try {
+      const response = await fetch("/api/learning/feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messageId, rating: next }),
+      });
+      if (!response.ok) throw new Error("rating_rejected");
+    } catch {
+      setRating(previous);
+      setFailed(true);
+    }
+  }
+
+  return (
+    <div className={styles.answerFeedback}>
+      <span>{rating === null ? "Did that help?" : "Thanks — noted."}</span>
+      <button
+        aria-pressed={rating === "helpful"}
+        className={styles.feedbackButton}
+        data-chosen={rating === "helpful" || undefined}
+        onClick={() => void rate("helpful")}
+        type="button"
+      >
+        Yes
+      </button>
+      <button
+        aria-pressed={rating === "not_helpful"}
+        className={styles.feedbackButton}
+        data-chosen={rating === "not_helpful" || undefined}
+        onClick={() => void rate("not_helpful")}
+        type="button"
+      >
+        Not really
+      </button>
+      {failed ? (
+        <small role="status">Not saved — try again.</small>
+      ) : null}
+    </div>
+  );
+}
+
 function normalizeSource(value: unknown, index: number): SourceEvidence | null {
   if (!isRecord(value)) return null;
+  const visualValue = isRecord(value.visual) ? value.visual : null;
+  const visualAssetId = stringValue(visualValue?.visualAssetId);
+  const visualUrl = stringValue(visualValue?.url);
+  const rawVisualMediaType = stringValue(visualValue?.mediaType);
+  const visualMediaType =
+    rawVisualMediaType === "image/jpeg" ||
+    rawVisualMediaType === "image/png" ||
+    rawVisualMediaType === "image/svg+xml" ||
+    rawVisualMediaType === "image/webp" ||
+    rawVisualMediaType === "video/mp4"
+      ? rawVisualMediaType
+      : "image/png";
   const excerpt =
     stringValue(value.excerpt) ??
     stringValue(value.content) ??
@@ -281,7 +367,40 @@ function normalizeSource(value: unknown, index: number): SourceEvidence | null {
     excerpt,
     courseTitle: stringValue(value.courseTitle),
     lessonTitle: stringValue(value.lessonTitle),
+    visual:
+      visualAssetId &&
+      visualUrl === `/api/learning/visuals/${visualAssetId}/content` &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+        visualAssetId,
+      )
+        ? {
+            visualAssetId,
+            title:
+              stringValue(visualValue?.title) ??
+              stringValue(value.title) ??
+              "Course visual",
+            altText:
+              stringValue(visualValue?.altText) ??
+              "Course visual",
+            mediaType: visualMediaType,
+            url: visualUrl,
+          }
+        : null,
   };
+}
+
+function uniqueVisualSources(sources: readonly SourceEvidence[]) {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    if (
+      source.visual === null ||
+      seen.has(source.visual.visualAssetId)
+    ) {
+      return false;
+    }
+    seen.add(source.visual.visualAssetId);
+    return true;
+  });
 }
 
 function normalizeMessage(
@@ -498,6 +617,8 @@ export default function ConversationClient({
   initialCourseId,
   initialLessonId,
   courses,
+  surface = "page",
+  suggestedQuestion = null,
 }: {
   assistantName: string;
   tenantName: string;
@@ -507,6 +628,8 @@ export default function ConversationClient({
   initialCourseId: string | null;
   initialLessonId: string | null;
   courses: CourseOption[];
+  surface?: "page" | "panel";
+  suggestedQuestion?: { id: string; text: string } | null;
 }) {
   const [mode, setMode] = useState<"text" | "voice">(initialMode);
   const [learningIntent, setLearningIntent] =
@@ -558,6 +681,13 @@ export default function ConversationClient({
   const [brandAccent, setBrandAccent] = useState<string | null>(null);
   const [brandGlyph, setBrandGlyph] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!suggestedQuestion) return;
+    setMode("text");
+    setDraft(suggestedQuestion.text);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [suggestedQuestion]);
   const feedEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -1904,8 +2034,8 @@ export default function ConversationClient({
       heading: "Opening your microphone…",
       description:
         realtimeAvailable
-          ? "Connecting a private WebRTC session with automatic turn detection. Raw audio is not stored by LearningBot."
-          : "Your browser will ask for permission. Raw audio is sent for transcription and is not stored by LearningBot.",
+          ? "Connecting a private WebRTC session with automatic turn detection. Raw audio is not stored by Corso."
+          : "Your browser will ask for permission. Raw audio is sent for transcription and is not stored by Corso.",
     },
     reconnecting: {
       eyebrow: "RECONNECTING",
@@ -2044,7 +2174,12 @@ export default function ConversationClient({
             : "idle";
 
   return (
-    <div className={styles.workspace} data-mode={mode} style={brandVars}>
+    <div
+      className={styles.workspace}
+      data-mode={mode}
+      data-surface={surface}
+      style={brandVars}
+    >
       <div
         className={`${styles.spectralEdge} ${
           intelligenceActive ? styles.spectralEdgeActive : ""
@@ -2112,6 +2247,19 @@ export default function ConversationClient({
         </div>
 
         <div className={styles.navActions}>
+          {/* `resetConversationContext` has always existed and done exactly
+              this, but nothing called it directly — it only ever fired as a
+              side effect of changing the course or lesson. So a learner who
+              wanted a clean thread had no way to ask for one. */}
+          {messages.length > 0 ? (
+            <button
+              className={styles.startOver}
+              onClick={resetConversationContext}
+              type="button"
+            >
+              Start over
+            </button>
+          ) : null}
           <div className={styles.modeSwitch} aria-label="Conversation mode">
             <button
               className={mode === "text" ? styles.modeActive : ""}
@@ -2321,6 +2469,42 @@ export default function ConversationClient({
                             asking again.
                           </p>
                         ) : null}
+                        {message.role === "assistant" &&
+                        message.sources.some((source) => source.visual) ? (
+                          <div
+                            className={styles.answerVisuals}
+                            aria-label="Course visuals used in this answer"
+                          >
+                            {uniqueVisualSources(message.sources).map((source) => {
+                              const visual = source.visual!;
+                              return (
+                                    <figure key={visual.visualAssetId}>
+                                      {/* The authenticated route resolves a
+                                          private stream; no object key or
+                                          storage URL reaches the browser. */}
+                                      {visual.mediaType === "video/mp4" ? (
+                                        <video
+                                          aria-label={visual.altText}
+                                          controls
+                                          playsInline
+                                          preload="metadata"
+                                          src={visual.url}
+                                        />
+                                      ) : (
+                                        <img
+                                          alt={visual.altText}
+                                          loading="lazy"
+                                          src={visual.url}
+                                        />
+                                      )}
+                                      <figcaption>
+                                        {visual.title}
+                                      </figcaption>
+                                    </figure>
+                              );
+                            })}
+                          </div>
+                        ) : null}
                         {message.richParts.length ? (
                           <div className={styles.richParts}>
                             {message.richParts.map((part) =>
@@ -2396,6 +2580,13 @@ export default function ConversationClient({
                               ))}
                             </div>
                           </details>
+                        ) : null}
+                        {/* Never on a half-arrived or truncated answer: rating
+                            those would measure the transport, not the answer. */}
+                        {message.role === "assistant" &&
+                        !message.streaming &&
+                        !message.streamError ? (
+                          <AnswerFeedback messageId={message.messageId} />
                         ) : null}
                       </div>
                   </article>

@@ -49,6 +49,12 @@ export type { FileDropProps, FileDropStatus } from "./file-drop";
 export { PanelFrame } from "./panel-frame";
 export type { PanelFrameProps, PanelSide } from "./panel-frame";
 
+export { SegmentedControl } from "./segmented-control";
+export type {
+  SegmentedControlOption,
+  SegmentedControlProps,
+} from "./segmented-control";
+
 export { StateBadge, StatTile } from "./stat-tile";
 export type { StateBadgeProps, StatState, StatTileProps } from "./stat-tile";
 

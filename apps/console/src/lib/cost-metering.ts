@@ -69,13 +69,17 @@ const UNKNOWN_MODEL_PRICE: TextPrice = {
 };
 
 const DEFAULT_TEXT_PRICES: Record<string, TextPrice> = {
-  "gpt-5.6-luna": {
-    inputPerMillionTokens: 1_250_000,
-    outputPerMillionTokens: 10_000_000,
+  "gpt-5.6-sol": {
+    inputPerMillionTokens: 5_000_000,
+    outputPerMillionTokens: 30_000_000,
   },
-  "gpt-5.6-luna-mini": {
-    inputPerMillionTokens: 250_000,
-    outputPerMillionTokens: 2_000_000,
+  "gpt-5.6-terra": {
+    inputPerMillionTokens: 2_500_000,
+    outputPerMillionTokens: 15_000_000,
+  },
+  "gpt-5.6-luna": {
+    inputPerMillionTokens: 1_000_000,
+    outputPerMillionTokens: 6_000_000,
   },
   "text-embedding-3-small": {
     inputPerMillionTokens: 20_000,

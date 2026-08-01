@@ -1,24 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { UsageSignal } from "../../app/app/usage-signal";
+import { CorsoIcon, type CorsoIconName } from "../corso/corso-icon";
+import { CorsoMark } from "../corso/corso-mark";
 import HomeSection from "../sections/home-section";
-import { brandInitial, brandStyle } from "./brand";
+import { brandStyle } from "./brand";
 import type { PanelKey, ShellPayload } from "./contract";
 import { PanelHost } from "./panel-host";
-import { panelRegistry } from "./panel-registry";
+import { PlatformClientPreviewBanner } from "./platform-client-preview-banner";
+import {
+  CONSOLE_THEME_OPTIONS,
+  groundForConsoleTheme,
+  readConsoleThemePreference,
+  type ConsoleThemePreference,
+  writeConsoleThemePreference,
+} from "./theme-preference";
 import { usePanelRouter } from "./use-panel-router";
 import styles from "./shell.module.css";
-
-const NAV_ORDER: readonly PanelKey[] = [
-  "course",
-  "agent",
-  "insights",
-  "people",
-  "widget",
-  "platform",
-] as const;
 
 const ROLE_LABELS: Record<ShellPayload["role"], string> = {
   learner: "Learner",
@@ -29,11 +36,6 @@ const ROLE_LABELS: Record<ShellPayload["role"], string> = {
   platform_owner: "Platform owner",
 };
 
-/**
- * Panel entry points are real anchors. A modified or non-primary click belongs
- * to the browser — new tab, new window, saved link — so the shell leaves it
- * alone and the href does the work.
- */
 function opensElsewhere(event: ReactMouseEvent<HTMLAnchorElement>) {
   return (
     event.metaKey ||
@@ -47,8 +49,108 @@ function opensElsewhere(event: ReactMouseEvent<HTMLAnchorElement>) {
 function accountInitials(payload: ShellPayload, accountName: string) {
   const source = accountName.trim() || payload.tenant.displayName;
   const parts = source.split(/\s+/u).filter(Boolean).slice(0, 2);
-  const initials = parts.map((part) => Array.from(part)[0] ?? "").join("");
+  const initials =
+    parts.length === 1
+      ? Array.from(parts[0] ?? "").slice(0, 2).join("")
+      : parts.map((part) => Array.from(part)[0] ?? "").join("");
   return initials.toUpperCase() || ROLE_LABELS[payload.role].slice(0, 2).toUpperCase();
+}
+
+function hasPublishedLearning(payload: ShellPayload) {
+  const workspace = payload.workspace as
+    | {
+        courses?: Array<{
+          status?: string;
+          modules?: Array<{
+            lessons?: Array<{ status?: string; blocks?: unknown[] }>;
+          }>;
+        }>;
+      }
+    | null;
+  return Boolean(
+    workspace?.courses?.some(
+      (course) =>
+        course.status === "published" &&
+        course.modules?.some((module) =>
+          module.lessons?.some(
+            (lesson) =>
+              lesson.status === "published" && (lesson.blocks?.length ?? 0) > 0,
+          ),
+        ),
+    ),
+  );
+}
+
+type DockDestination = {
+  id: string;
+  label: string;
+  icon: CorsoIconName;
+  panel: PanelKey | null;
+  extra?: Record<string, string>;
+  separator?: boolean;
+};
+
+function dockDestinations(
+  payload: ShellPayload,
+  platformMode: boolean,
+): DockDestination[] {
+  if (platformMode) {
+    const items: DockDestination[] = [
+      {
+        id: "workspaces",
+        label: "Workspaces",
+        icon: "workspaces",
+        panel: "platform",
+      },
+      { id: "home", label: "Home", icon: "home", panel: null },
+      { id: "learning", label: "Learning", icon: "learning", panel: "course" },
+      {
+        id: "results",
+        label: "Results",
+        icon: "results",
+        panel: "insights",
+        extra: { view: "insights" },
+      },
+      {
+        id: "signals",
+        label: "Signals",
+        icon: "signals",
+        panel: "insights",
+        extra: { view: "signals" },
+      },
+      {
+        id: "settings",
+        label: "Settings",
+        icon: "settings",
+        panel: "settings",
+      },
+    ];
+    return items.filter(
+      (item) => item.panel === null || payload.sections[item.panel] === true,
+    );
+  }
+
+  const items: DockDestination[] = [
+    { id: "home", label: "Home", icon: "home", panel: null },
+    { id: "learning", label: "Learning", icon: "learning", panel: "course" },
+    {
+      id: "settings",
+      label: "Settings",
+      icon: "settings",
+      panel: "settings",
+    },
+    {
+      id: "conversation",
+      label: "Talk to your bot",
+      icon: "conversation",
+      panel: "agent",
+      extra: { mode: "chat", view: "talk" },
+      separator: true,
+    },
+  ];
+  return items.filter(
+    (item) => item.panel === null || payload.sections[item.panel] === true,
+  );
 }
 
 export type AppShellProps = {
@@ -57,29 +159,56 @@ export type AppShellProps = {
   accountEmail: string | null;
 };
 
-/**
- * The one persistent surface of the product.
- *
- * `/app` never navigates: the header, nav and canvas stay mounted while every
- * other destination arrives as a slide-in panel addressed by `?panel=`.
- */
 export function AppShell({ payload, accountName, accountEmail }: AppShellProps) {
-  const { params, activePanel, openPanel, closePanel, panelHref } = usePanelRouter();
+  const { params, activePanel, openPanel, closePanel, panelHref } =
+    usePanelRouter();
   const [accountOpen, setAccountOpen] = useState(false);
+  const [themePreference, setThemePreference] =
+    useState<ConsoleThemePreference>("auto");
   const accountRef = useRef<HTMLDivElement | null>(null);
   const accountMenuId = useId();
-
-  const theme = useMemo(() => brandStyle(payload.agent), [payload.agent]);
-  const initial = brandInitial(payload.agent, payload.tenant.displayName);
-
-  const navItems = useMemo(
-    () =>
-      NAV_ORDER.filter((key) => payload.sections[key] === true).map((key) => ({
-        key,
-        label: panelRegistry[key].navLabel,
-      })),
-    [payload.sections],
+  const theme = useMemo(
+    () => ({
+      ...brandStyle(payload.agent),
+      // Product chrome follows the reference's single Corso action colour.
+      // Tenant colours are reapplied inside the assistant/widget previews and
+      // hosted learner surface, where branding actually belongs.
+      "--brand-primary": "var(--accent)",
+      "--brand-accent": "var(--accent)",
+      "--brand-on-primary": "var(--surface)",
+      "--brand-on-accent": "var(--surface)",
+    }),
+    [payload.agent],
   );
+  const answering = hasPublishedLearning(payload);
+  const platformOnly =
+    payload.role === "platform_owner" && payload.tenant.tenantId.length === 0;
+  // Platform administrators can enter a client workspace without losing their
+  // platform authority. The dark PLATFORM chrome belongs only to the
+  // cross-workspace control plane; tenant pages must still look and navigate
+  // like that client's own product.
+  const platformMode =
+    payload.role === "platform_owner" &&
+    (activePanel === "platform" || platformOnly);
+  const dockItems = useMemo(
+    () => dockDestinations(payload, platformMode),
+    [payload, platformMode],
+  );
+  // The admin dock's tiles are smaller than the creator dock's, so a single
+  // fixed icon size would render oversized inside them. Keep the same
+  // optical ratio (~icon 0.48x tile) across both variants instead.
+  const isAdminDock = payload.role === "platform_owner";
+  const dockIconSize = isAdminDock ? 21 : 26;
+
+  useEffect(() => {
+    let storage: Storage | null = null;
+    try {
+      storage = window.localStorage;
+    } catch {
+      // Storage can be unavailable in privacy-restricted browser contexts.
+    }
+    setThemePreference(readConsoleThemePreference(storage));
+  }, []);
 
   useEffect(() => {
     if (!accountOpen) return;
@@ -99,94 +228,105 @@ export function AppShell({ payload, accountName, accountEmail }: AppShellProps) 
     };
   }, [accountOpen]);
 
-  // Opening a panel from the account menu should dismiss the menu.
   const openFromMenu = useCallback(
-    (key: PanelKey) => {
+    (key: PanelKey, extra?: Record<string, string>) => {
       setAccountOpen(false);
-      openPanel(key);
+      openPanel(key, extra);
     },
     [openPanel],
   );
 
-  // Closing is something the person did: it leaves a history entry, so Back
-  // re-opens the panel they just closed.
   const handleClose = useCallback(() => closePanel(), [closePanel]);
-
-  // Dropping an address the workspace cannot honour is not a navigation, so it
-  // rewrites the current entry instead of adding one.
   const handleDiscard = useCallback(
     () => closePanel({ replace: true }),
     [closePanel],
   );
+  const selectTheme = useCallback((next: ConsoleThemePreference) => {
+    setThemePreference(next);
+    try {
+      writeConsoleThemePreference(window.localStorage, next);
+    } catch {
+      // The visual choice still applies for this session when storage is denied.
+    }
+  }, []);
 
   return (
-    <div className={styles.shell} style={theme}>
+    <div
+      className={styles.shell}
+      data-ground={
+        platformMode ? "light" : groundForConsoleTheme(themePreference)
+      }
+      data-platform={platformMode || undefined}
+      data-theme-preference={themePreference}
+      style={theme}
+    >
       <UsageSignal eventName="learning.workspace_opened" />
       <a className={styles.skipLink} href="#shell-canvas">
         Skip to content
       </a>
 
       <header className={styles.header}>
-        <a className={styles.brand} href="/app" aria-label={`${payload.agent.assistantName} home`}>
+        <a
+          className={styles.brand}
+          href={platformMode ? "/app?panel=platform" : "/app"}
+          aria-label={platformMode ? "Corso platform home" : "Corso home"}
+        >
           <span className={styles.brandMark} aria-hidden="true">
-            {payload.agent.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={payload.agent.logoUrl} alt="" />
-            ) : (
-              initial
-            )}
+            <CorsoMark color="var(--accent-ink)" size={15} />
           </span>
           <span className={styles.brandText}>
-            <b>{payload.agent.assistantName}</b>
-            <small>{payload.tenant.displayName}</small>
+            <b>{platformMode ? "Corso" : payload.tenant.displayName}</b>
+            <small>
+              {platformMode ? (
+                "PLATFORM"
+              ) : (
+                <>
+                  <span aria-hidden="true">· </span>
+                  {payload.agent.assistantName}
+                </>
+              )}
+            </small>
           </span>
         </a>
 
-        <nav className={styles.nav} aria-label="Workspace">
-          <a
-            className={styles.navItem}
-            href="/app"
-            aria-current={activePanel === null ? "page" : undefined}
-            data-active={activePanel === null || undefined}
-            onClick={(event) => {
-              if (opensElsewhere(event)) return;
-              event.preventDefault();
-              handleClose();
-            }}
-          >
-            Home
-          </a>
-          {navItems.map((item) => (
-            <a
-              key={item.key}
-              className={styles.navItem}
-              href={panelHref(item.key)}
-              aria-current={activePanel === item.key ? "page" : undefined}
-              data-active={activePanel === item.key || undefined}
-              onClick={(event) => {
-                if (opensElsewhere(event)) return;
-                event.preventDefault();
-                openPanel(item.key);
-              }}
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
-
         <div className={styles.headerActions}>
-          <a
-            className={styles.voiceAction}
-            href={panelHref("agent", { mode: "voice" })}
-            onClick={(event) => {
-              if (opensElsewhere(event)) return;
-              event.preventDefault();
-              openPanel("agent", { mode: "voice" });
-            }}
-          >
-            <span className={styles.liveDot} aria-hidden="true" />
-            Voice
-          </a>
+          {platformMode ? (
+            <nav className={styles.platformHeaderNav} aria-label="Platform">
+              <a
+                href={panelHref("platform", { view: "billing" })}
+                onClick={(event) => {
+                  if (opensElsewhere(event)) return;
+                  event.preventDefault();
+                  openPanel("platform", { view: "billing" });
+                }}
+              >
+                Billing
+              </a>
+              <a
+                href={panelHref("platform", { view: "settings" })}
+                onClick={(event) => {
+                  if (opensElsewhere(event)) return;
+                  event.preventDefault();
+                  openPanel("platform", { view: "settings" });
+                }}
+              >
+                Platform settings
+              </a>
+            </nav>
+          ) : null}
+          {platformMode ? null : (
+            <span
+              className={answering ? styles.liveStatus : styles.pendingStatus}
+              title={
+                answering
+                  ? "At least one published lesson is available to answer from."
+                  : "No published lesson with content is available yet."
+              }
+            >
+              <i aria-hidden="true" />
+              {answering ? "Answering" : "Needs learning"}
+            </span>
+          )}
 
           <div className={styles.account} ref={accountRef}>
             <button
@@ -201,7 +341,9 @@ export function AppShell({ payload, accountName, accountEmail }: AppShellProps) 
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={payload.agent.avatarUrl} alt="" />
               ) : (
-                <span aria-hidden="true">{accountInitials(payload, accountName)}</span>
+                <span aria-hidden="true">
+                  {accountInitials(payload, accountName)}
+                </span>
               )}
               <span className={styles.visuallyHidden}>Account menu</span>
             </button>
@@ -215,7 +357,9 @@ export function AppShell({ payload, accountName, accountEmail }: AppShellProps) 
                 <div className={styles.accountIdentity}>
                   <strong>{accountName}</strong>
                   {accountEmail ? <small>{accountEmail}</small> : null}
-                  <span className={styles.roleBadge}>{ROLE_LABELS[payload.role]}</span>
+                  <span className={styles.roleBadge}>
+                    {ROLE_LABELS[payload.role]}
+                  </span>
                 </div>
                 {payload.sections.settings ? (
                   <button
@@ -226,9 +370,32 @@ export function AppShell({ payload, accountName, accountEmail }: AppShellProps) 
                     Settings
                   </button>
                 ) : null}
-                <a className={styles.accountItem} href="/onboarding">
-                  Workspace setup
-                </a>
+                {platformOnly ? null : (
+                  <a className={styles.accountItem} href="/onboarding">
+                    Workspace setup
+                  </a>
+                )}
+                <div className={styles.themeGroup}>
+                  <span className={styles.themeLabel}>Appearance</span>
+                  <div
+                    aria-label="Console appearance"
+                    className={styles.themeOptions}
+                    role="radiogroup"
+                  >
+                    {CONSOLE_THEME_OPTIONS.map((option) => (
+                      <button
+                        aria-checked={themePreference === option.value}
+                        className={styles.themeOption}
+                        key={option.value}
+                        onClick={() => selectTheme(option.value)}
+                        role="radio"
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <form action="/auth/sign-out" method="post">
                   <button className={styles.accountItem} type="submit">
                     Sign out
@@ -240,9 +407,13 @@ export function AppShell({ payload, accountName, accountEmail }: AppShellProps) 
         </div>
       </header>
 
-      <main className={styles.canvas} id="shell-canvas" tabIndex={-1}>
-        <HomeSection payload={payload} accountName={accountName} />
-      </main>
+      <PlatformClientPreviewBanner tenant={payload.tenant} />
+
+      {activePanel === null ? (
+        <main className={styles.canvas} id="shell-canvas" tabIndex={-1}>
+          <HomeSection payload={payload} accountName={accountName} />
+        </main>
+      ) : null}
 
       <PanelHost
         payload={payload}
@@ -251,6 +422,49 @@ export function AppShell({ payload, accountName, accountEmail }: AppShellProps) 
         onClose={handleClose}
         onDiscard={handleDiscard}
       />
+
+      <nav
+        className={
+          isAdminDock ? `${styles.dock} ${styles.adminDock}` : styles.dock
+        }
+        aria-label="Primary"
+      >
+        {dockItems.map((item) => {
+          const itemView = item.extra?.view;
+          const activeView = params.get("view");
+          const isActive =
+            item.panel === null
+              ? activePanel === null
+              : activePanel === item.panel &&
+                (itemView === undefined || itemView === activeView);
+          const href =
+            item.panel === null ? "/app" : panelHref(item.panel, item.extra);
+          return (
+            <span
+              className={item.separator ? styles.dockSeparated : styles.dockSlot}
+              key={item.id}
+            >
+              <a
+                aria-current={isActive ? "page" : undefined}
+                aria-label={item.label}
+                className={styles.dockItem}
+                data-active={isActive || undefined}
+                data-label={item.label}
+                href={href}
+                onClick={(event) => {
+                  if (opensElsewhere(event)) return;
+                  event.preventDefault();
+                  if (item.panel === null) handleClose();
+                  else openPanel(item.panel, item.extra);
+                }}
+              >
+                <CorsoIcon name={item.icon} size={dockIconSize} />
+              </a>
+              <i className={styles.dockIndicator} aria-hidden="true" />
+            </span>
+          );
+        })}
+      </nav>
     </div>
   );
 }

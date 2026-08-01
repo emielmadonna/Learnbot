@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { createBrowserSupabaseClient } from "../../../lib/supabase/client";
 import styles from "../auth.module.css";
@@ -46,7 +47,7 @@ export function SignInForm({
   return (
     <form className={styles.form} onSubmit={submit}>
       <label className={styles.field}>
-        Work email
+        Email
         <input
           className={styles.input}
           type="email"
@@ -61,7 +62,10 @@ export function SignInForm({
         />
       </label>
       <label className={styles.field}>
-        Password
+        <span className={styles.labelRow}>
+          <span>Password</span>
+          <Link href="/auth/forgot-password">Forgot?</Link>
+        </span>
         <input
           className={styles.input}
           type="password"
@@ -80,7 +84,7 @@ export function SignInForm({
         type="submit"
         disabled={!configured || pending}
       >
-        {pending ? "Signing in…" : "Sign in"}
+        {pending ? "Finding your workspace…" : "Continue"}
       </button>
       {message ? (
         <p className={styles.notice} role="status">
@@ -88,9 +92,22 @@ export function SignInForm({
         </p>
       ) : null}
       {error ? (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
+        <div className={styles.error} role="alert">
+          <svg
+            aria-hidden="true"
+            fill="none"
+            height="16"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="2.2"
+            viewBox="0 0 24 24"
+            width="16"
+          >
+            <circle cx="12" cy="12" r="8.5" />
+            <path d="M12 8v5M12 16h.01" />
+          </svg>
+          <span>{error}</span>
+        </div>
       ) : null}
     </form>
   );

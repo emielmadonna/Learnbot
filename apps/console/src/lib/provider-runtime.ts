@@ -3,6 +3,7 @@ import type {
   ChatCompletionInput,
   ProviderOutcome,
   ProviderRequestContext,
+  UsageQuantity,
 } from "@course-ai/contracts";
 import { OpenAIResponsesAdapter } from "@course-ai/provider-router";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -75,6 +76,214 @@ export function sharedResponsesAdapter(adapterId: string) {
   });
   providerRuntime.__learningBotProviderAdapters.set(adapterId, adapter);
   return adapter;
+}
+
+type ManagedCompletionPayload = {
+  ok?: unknown;
+  code?: unknown;
+  retryable?: unknown;
+  provider?: unknown;
+  adapterId?: unknown;
+  model?: unknown;
+  text?: unknown;
+  providerRequestRef?: unknown;
+  credentialSource?: unknown;
+  usage?: unknown;
+};
+
+function managedUsage(value: unknown): readonly UsageQuantity[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const row = value as Record<string, unknown>;
+  const entries: UsageQuantity[] = [];
+  const add = (key: string, unit: string) => {
+    const quantity = row[key];
+    if (
+      typeof quantity === "number" &&
+      Number.isFinite(quantity) &&
+      quantity >= 0
+    ) {
+      entries.push({ quantity, unit });
+    }
+  };
+  add("input_tokens", "input_tokens");
+  add("output_tokens", "output_tokens");
+  add("total_tokens", "tokens");
+  return entries;
+}
+
+function managedProviderError(
+  adapterId: string,
+  payload: ManagedCompletionPayload | null,
+): ProviderOutcome<ChatCompletion> {
+  const code =
+    payload?.code === "provider_authentication_failed"
+      ? "authentication_failed"
+      : payload?.code === "access_denied"
+        ? "permission_denied"
+        : payload?.code === "provider_unavailable"
+          ? "provider_unavailable"
+          : payload?.code === "provider_not_configured" ||
+              payload?.code === "tenant_credential_not_configured"
+            ? "capability_unavailable"
+            : payload?.code === "invalid_request"
+              ? "invalid_request"
+              : "provider_error";
+  return {
+    ok: false,
+    error: {
+      code,
+      message: "The managed learning provider could not complete the request.",
+      retryable: payload?.retryable === true || code === "provider_unavailable",
+      adapterId,
+    },
+    attempts: [],
+  };
+}
+
+/**
+ * Use the linked Supabase project's server-held provider credential when the
+ * console process does not have a local OpenAI key. The Edge Function verifies
+ * the signed-in user and their selected tenant before reading either a
+ * tenant-owned Vault key or the platform-managed fallback.
+ */
+export async function completeWithManagedProvider(input: {
+  supabase: SupabaseClient;
+  context: ProviderRequestContext;
+  request: ChatCompletionInput;
+  adapterId: string;
+}): Promise<ProviderOutcome<ChatCompletion>> {
+  const startedAt = Date.now();
+  const invoked = await input.supabase.functions.invoke(
+    "learning-provider-complete",
+    {
+      body: {
+        tenantId: input.context.tenantId,
+        provider: "openai",
+        model: input.request.model,
+        requestId: input.context.requestId,
+        messages: input.request.messages,
+        maxOutputTokens: input.request.maxOutputTokens,
+      },
+    },
+  );
+  const payload =
+    invoked.data && typeof invoked.data === "object" && !Array.isArray(invoked.data)
+      ? (invoked.data as ManagedCompletionPayload)
+      : null;
+  if (invoked.error || payload?.ok !== true || typeof payload.text !== "string") {
+    return managedProviderError(input.adapterId, payload);
+  }
+  const adapterId =
+    typeof payload.adapterId === "string" && payload.adapterId.trim()
+      ? payload.adapterId
+      : input.adapterId;
+  const model =
+    typeof payload.model === "string" && payload.model.trim()
+      ? payload.model
+      : input.request.model;
+  const responseId =
+    typeof payload.providerRequestRef === "string"
+      ? payload.providerRequestRef
+      : input.context.requestId;
+  return {
+    ok: true,
+    result: {
+      value: {
+        message: { role: "assistant", content: payload.text.trim() },
+        finishReason: "stop",
+      },
+      provider: typeof payload.provider === "string" ? payload.provider : "openai",
+      adapterId,
+      ...(model ? { modelOrSku: model } : {}),
+      latencyMs: Math.max(0, Date.now() - startedAt),
+      usage: managedUsage(payload.usage),
+      estimatedCost: { amount: 0, currency: "USD" },
+      providerMetadata: {
+        providerRequestId: responseId,
+        credentialSource:
+          payload.credentialSource === "tenant_vault"
+            ? "tenant_vault"
+            : "platform_managed",
+        costEstimated: false,
+      },
+    },
+  };
+}
+
+/**
+ * Complete an anonymous widget turn through the server-only provider boundary.
+ * The Edge Function revalidates the widget key, exact Origin and rotating
+ * operation token before it resolves any tenant or credential.
+ */
+export async function completeWithManagedWidgetProvider(input: {
+  supabase: SupabaseClient;
+  context: ProviderRequestContext;
+  request: ChatCompletionInput;
+  adapterId: string;
+  widgetKey: string;
+  origin: string;
+  operationToken: string;
+  actorRef: string;
+}): Promise<ProviderOutcome<ChatCompletion>> {
+  const startedAt = Date.now();
+  const invoked = await input.supabase.functions.invoke(
+    "learning-provider-widget-complete",
+    {
+      body: {
+        widgetKey: input.widgetKey,
+        origin: input.origin,
+        operationToken: input.operationToken,
+        actorRef: input.actorRef,
+        provider: "openai",
+        model: input.request.model,
+        requestId: input.context.requestId,
+        messages: input.request.messages,
+        maxOutputTokens: input.request.maxOutputTokens,
+      },
+    },
+  );
+  const payload =
+    invoked.data && typeof invoked.data === "object" && !Array.isArray(invoked.data)
+      ? (invoked.data as ManagedCompletionPayload)
+      : null;
+  if (invoked.error || payload?.ok !== true || typeof payload.text !== "string") {
+    return managedProviderError(input.adapterId, payload);
+  }
+  const adapterId =
+    typeof payload.adapterId === "string" && payload.adapterId.trim()
+      ? payload.adapterId
+      : input.adapterId;
+  const model =
+    typeof payload.model === "string" && payload.model.trim()
+      ? payload.model
+      : input.request.model;
+  const responseId =
+    typeof payload.providerRequestRef === "string"
+      ? payload.providerRequestRef
+      : input.context.requestId;
+  return {
+    ok: true,
+    result: {
+      value: {
+        message: { role: "assistant", content: payload.text.trim() },
+        finishReason: "stop",
+      },
+      provider: typeof payload.provider === "string" ? payload.provider : "openai",
+      adapterId,
+      ...(model ? { modelOrSku: model } : {}),
+      latencyMs: Math.max(0, Date.now() - startedAt),
+      usage: managedUsage(payload.usage),
+      estimatedCost: { amount: 0, currency: "USD" },
+      providerMetadata: {
+        providerRequestId: responseId,
+        credentialSource:
+          payload.credentialSource === "tenant_vault"
+            ? "tenant_vault"
+            : "platform_managed",
+        costEstimated: false,
+      },
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +406,7 @@ export async function runMeteredCompletion(
   input: MeteredCompletionInput,
 ): Promise<MeteredCompletion> {
   const adapter = sharedResponsesAdapter(input.adapterId);
-  if (!adapter) {
+  if (!adapter && !input.supabase) {
     throw new ProviderRuntimeError(
       "provider_not_configured",
       false,
@@ -225,7 +434,14 @@ export async function runMeteredCompletion(
   }
 
   const model = input.request.model ?? null;
-  const outcome = await adapter.complete(input.context, input.request);
+  const outcome = adapter
+    ? await adapter.complete(input.context, input.request)
+    : await completeWithManagedProvider({
+        supabase: input.supabase,
+        context: input.context,
+        request: input.request,
+        adapterId: input.adapterId,
+      });
   let costMicro = 0;
   if (outcome.ok) {
     const usage = readTokenUsage(outcome.result.usage);
@@ -271,7 +487,7 @@ export async function runMeteredCompletion(
 export const ANSWER_ADAPTER_ID = "openai-responses-production-v1";
 
 const DEFAULT_AGENT_MODEL =
-  process.env.LEARNINGBOT_LLM_MODEL?.trim() || "gpt-5.6-luna";
+  process.env.LEARNINGBOT_LLM_MODEL?.trim() || "gpt-5.6-terra";
 const DEFAULT_TEMPERATURE = 0.4;
 const DEFAULT_TOP_P = 1.0;
 const DEFAULT_MAX_OUTPUT_TOKENS = 800;

@@ -63,7 +63,12 @@ export type WidgetBootstrapWidget = {
   presentation: "launcher" | "panel";
   launcherPosition: "bottom-left" | "bottom-right";
   launcherLabel: string;
+  launcherShape: "bubble" | "pill" | "tab";
   greeting: string | null;
+  greetingBubbleEnabled: boolean;
+  greetingBubbleDelaySeconds: number;
+  showPoweredBy: boolean;
+  appearanceMode: "auto" | "light" | "dark";
   anonymousQuestions: boolean;
   courses: WidgetBootstrapCourse[];
 };
@@ -294,7 +299,12 @@ export type WidgetSettings = {
   presentation: "launcher" | "panel";
   launcherPosition: "bottom-left" | "bottom-right";
   launcherLabel: string;
+  launcherShape: "bubble" | "pill" | "tab";
   greeting: string | null;
+  greetingBubbleEnabled: boolean;
+  greetingBubbleDelaySeconds: number;
+  showPoweredBy: boolean;
+  appearanceMode: "auto" | "light" | "dark";
   allowedOrigins: string[];
   anonymousQuestions: boolean;
   showCourseList: boolean;
@@ -375,7 +385,13 @@ export async function updateWidgetSettings(
     requested_presentation: input.presentation,
     requested_launcher_position: input.launcherPosition,
     requested_launcher_label: input.launcherLabel,
+    requested_launcher_shape: input.launcherShape,
     requested_greeting: input.greeting,
+    requested_greeting_bubble_enabled: input.greetingBubbleEnabled,
+    requested_greeting_bubble_delay_seconds:
+      input.greetingBubbleDelaySeconds,
+    requested_show_powered_by: input.showPoweredBy,
+    requested_appearance_mode: input.appearanceMode,
     requested_allowed_origins: input.allowedOrigins,
     requested_anonymous_questions: input.anonymousQuestions,
     requested_show_course_list: input.showCourseList,
@@ -402,4 +418,82 @@ export async function updateWidgetSettings(
     throw new WidgetRpcError("request_denied");
   }
   return result as unknown as WidgetSettingsWrite;
+}
+
+/**
+ * A visual the assistant already showed this visitor, resolved for delivery.
+ *
+ * The read is scoped by disclosure, not by membership: the database returns a
+ * row only when this exact (widget key, origin, conversationRef) triple has
+ * already been shown this exact asset. See the header of
+ * 20260731060000_widget_visual_media_disclosure.sql for why a widget key --
+ * which ships publicly in a <script> tag -- cannot be allowed to stand in for
+ * "may read any of this tenant's media".
+ *
+ * `privateObjectKey` never reaches a browser. The route signs and streams it
+ * server-side, exactly as the authenticated visual route does.
+ */
+export type WidgetVisualAsset = {
+  visualAssetId: string;
+  title: string;
+  altText: string;
+  mediaType: string;
+  sizeBytes: number;
+  privateObjectKey: string;
+};
+
+export async function widgetGetVisualAsset(
+  supabase: SupabaseClient,
+  input: {
+    widgetKey: string;
+    origin: string;
+    conversationRef: string;
+    visualAssetId: string;
+  },
+): Promise<WidgetVisualAsset> {
+  const response = await supabase.rpc("widget_get_visual_asset_for_read", {
+    widget_key: input.widgetKey,
+    origin: input.origin,
+    conversation_ref: input.conversationRef,
+    target_visual_asset_id: input.visualAssetId,
+  });
+  if (response.error) throw new WidgetRpcError("request_failed");
+  const result = requireWidgetRpcSuccess(response.data);
+  if (
+    result.dataMode !== "durable" ||
+    typeof result.privateObjectKey !== "string" ||
+    typeof result.mediaType !== "string" ||
+    typeof result.sizeBytes !== "number"
+  ) {
+    throw new WidgetRpcError("request_denied");
+  }
+  return result as unknown as WidgetVisualAsset;
+}
+
+/**
+ * Records that an answer surfaced these visuals, which is what later authorises
+ * the visitor to read them. Requires the server-held
+ * `conversation.answer.record` operation token, so a browser can never grant
+ * itself access to an asset it was not shown.
+ */
+export async function widgetRecordVisualDisclosure(
+  supabase: SupabaseClient,
+  input: {
+    widgetKey: string;
+    origin: string;
+    conversationRef: string;
+    visualAssetIds: readonly string[];
+    operationToken: string;
+  },
+): Promise<void> {
+  if (input.visualAssetIds.length === 0) return;
+  const response = await supabase.rpc("widget_record_visual_disclosure", {
+    widget_key: input.widgetKey,
+    origin: input.origin,
+    conversation_ref: input.conversationRef,
+    visual_asset_ids: input.visualAssetIds,
+    operation_token: input.operationToken,
+  });
+  if (response.error) throw new WidgetRpcError("request_failed");
+  requireWidgetRpcSuccess(response.data);
 }

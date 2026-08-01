@@ -82,9 +82,7 @@ const CLASSIFIER_ADAPTER_ID = "openai-responses-question-classifier-v1";
 
 /** Cheap tier by default; the answer model is deliberately not reused. */
 function classifierModel(): string {
-  return (
-    process.env.LEARNINGBOT_CLASSIFIER_MODEL?.trim() || "gpt-5.6-luna-mini"
-  );
+  return process.env.LEARNINGBOT_CLASSIFIER_MODEL?.trim() || "gpt-5.6-luna";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -210,7 +208,7 @@ export async function classifyLearnerQuestion(
   if (question.length < 2) return null;
 
   const adapter = sharedResponsesAdapter(CLASSIFIER_ADAPTER_ID);
-  if (adapter === null) return null;
+  if (adapter === null && !input.supabase) return null;
 
   const model = classifierModel();
   const context: ProviderRequestContext = {
@@ -258,7 +256,7 @@ export async function classifyLearnerQuestion(
             subjectKey: `${input.tenantId}:${input.actorId}`,
           })
         ).outcome
-      : await adapter.complete(context, request);
+      : await adapter!.complete(context, request);
   } catch {
     // A transport, adapter or budget fault is a missing label, never a guessed
     // one.

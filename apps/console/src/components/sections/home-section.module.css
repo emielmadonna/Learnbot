@@ -1,644 +1,791 @@
-/*
-  Home canvas — the first surface after sign-in.
-
-  Layout and hierarchy only. Every colour is either a neutral design token from
-  globals.css or one of the five `--brand-*` custom properties the shell
-  publishes from the tenant AgentConfig. No brand colour is hardcoded here, and
-  nothing restyles the internals of a shared UI primitive.
-
-  Structure: one confident headline block, then scannable sections that step
-  down in weight — section head, then tiles or cards, then supporting notes.
-*/
-
-/*
-  Sections are separated by space, not by rules or boxes. The gap between
-  them is deliberately larger than any padding inside them, so the page reads
-  as a sequence of ideas rather than a stack of panels.
-*/
 .page {
   display: grid;
-  gap: var(--gap-section);
-  min-width: 0;
+  gap: 16px;
+  color: var(--ink);
 }
-
-/* --------------------------------------------------------------- notices */
 
 .notice,
 .alert {
   margin: 0;
-  padding: var(--space-4) var(--space-5);
-  border-radius: var(--radius-md);
-  font-size: var(--text-md);
-  line-height: var(--leading-normal);
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  font-size: 13px;
 }
 
-/* Status surface: the hue carries the meaning, so it must not read as brand. */
 .notice {
-  border: 1px solid color-mix(in srgb, var(--warn) 24%, var(--hairline));
-  background: var(--ui-notice-soft);
-  color: var(--ink);
+  color: var(--good);
 }
 
 .alert {
-  border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--hairline));
-  background: var(--ui-critical-soft);
-  color: var(--warn);
+  color: var(--alert);
 }
 
-/* ------------------------------------------------------------------ hero
-   The one focal point of the view.
-
-   Deliberately not a card. The landing page earns its confidence by setting
-   large, tightly-tracked type directly on the page ground with room around
-   it, and the signed-in home does the same: no border, no gradient panel, no
-   shadow. The only object in this block is the evidence card on the right.
-*/
+.welcome {
+  /* 20px here + the .page grid gap (16px) reproduces the mockup's 36px
+     gap between the hero heading and the "one thing" card below it. */
+  padding-bottom: 20px;
+}
 
 .hero {
   display: grid;
-  gap: var(--gap-block);
-  align-items: center;
-  min-width: 0;
-  padding-bottom: var(--space-4);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 16px;
 }
 
-@media (min-width: 880px) {
-  .hero {
-    grid-template-columns: minmax(0, 1.75fr) minmax(16rem, 0.85fr);
-    gap: clamp(var(--space-8), 5vw, var(--space-10));
-  }
+.heroCopy,
+.heroPanel,
+.oneThing,
+.section {
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.heroCopy,
+.heroPanel {
+  padding: 32px 36px;
 }
 
 .heroCopy {
-  display: grid;
-  gap: var(--space-4);
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
 }
 
-.heroEyebrow {
-  margin: 0 0 var(--space-1);
-  color: color-mix(in srgb, var(--brand-primary) 72%, var(--muted));
-  font-size: var(--text-xs);
-  font-weight: var(--weight-heavy);
-  letter-spacing: var(--tracking-wide);
+/* SectionHead's generic eyebrow (e.g. "Learner activity", "Clients") stays
+   semibold — only the hero eyebrow ("Today's one thing") is regular weight,
+   matching the mockup. Kept as two rules, not one shared selector, so the
+   two can diverge without re-coupling them later. */
+.eyebrow {
+  margin: 0 0 14px;
+  color: var(--accent);
+  font: 600 10px var(--font-mono);
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
-/*
-  Display step, tight tracking, near-solid leading. This is the only element
-  on the page allowed to be this large.
-*/
+.heroEyebrow {
+  margin: 0 0 14px;
+  color: var(--accent);
+  font: 10px var(--font-mono);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
 .heroTitle {
-  max-width: 20ch;
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--text-display);
-  font-weight: var(--weight-strong);
-  letter-spacing: var(--tracking-display);
-  line-height: var(--leading-display);
-  overflow-wrap: break-word;
-  text-wrap: balance;
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: clamp(32px, 4vw, 38px);
+  font-weight: 700;
+  letter-spacing: -0.032em;
+  line-height: 1.05;
 }
 
 .heroLede {
-  max-width: 56ch;
+  max-width: 680px;
   margin: 0;
   color: var(--muted);
-  font-size: var(--text-lg);
-  line-height: var(--leading-relaxed);
+  font-size: 17px;
+  line-height: 1.55;
 }
 
 .heroSigned {
-  margin: 0;
+  margin: 14px 0 0;
   color: var(--muted);
-  font-size: var(--text-sm);
+  font-size: 13px;
 }
 
 .heroActions {
   display: flex;
   flex-wrap: wrap;
+  gap: 10px;
   align-items: center;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
+  margin-top: 24px;
 }
 
-/*
-  Hero side card: one honest figure, never a substituted number. It is the
-  only bordered surface in the hero, which is what lets it carry weight.
-*/
-.heroPanel {
+.oneThing {
+  padding: 32px 36px;
+}
+
+.oneThing h2 {
+  max-width: 640px;
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.026em;
+  line-height: 1.2;
+}
+
+.oneThing > p:not(.heroEyebrow) {
+  max-width: 620px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.activityGrid {
   display: grid;
-  gap: var(--space-3);
-  align-content: start;
-  min-width: 0;
-  padding: var(--space-6);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+}
+
+.weekCard,
+.topicCard,
+.activityUnavailable,
+.courseSummary {
+  border-radius: 20px;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
 
-.heroPanelLabel {
+.weekCard,
+.topicCard {
+  min-width: 0;
+  padding: 28px 32px;
+}
+
+.cardTopline,
+.courseSummaryHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.cardTopline {
+  margin-bottom: 26px;
+}
+
+.cardTopline h2,
+.topicCard h2,
+.courseSummaryHead h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+}
+
+.metricRow {
+  display: grid;
+  gap: 24px;
+  margin-bottom: 28px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metricRow > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.metricRow strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(30px, 4vw, 38px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  text-overflow: ellipsis;
+}
+
+.metricRow span {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Tone is picked by the caller via data-tone, never assumed here — a
+   caption reading "4 refused" is not automatically good news the way
+   "+18%" is, so home-section.tsx decides per metric instead of every
+   caption inheriting a hardcoded green. */
+.metricRow small {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metricRow small[data-tone="good"] {
+  color: var(--good);
+}
+
+.metricRow small[data-tone="muted"] {
+  color: var(--muted);
+}
+
+.miniBars {
+  display: flex;
+  height: 88px;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.miniBars i {
+  display: block;
+  min-height: 8px;
+  border-radius: 4px 4px 0 0;
+  /* --hairline reads as too strong for an idle bar sitting next to the
+     accent-filled ones — mix it toward the card surface for the fainter
+     idle tone the mockup uses, without hardcoding a hex value. */
+  background: color-mix(in srgb, var(--hairline) 50%, var(--surface) 50%);
+  flex: 1;
+}
+
+.miniBars i[data-current] {
+  background: var(--accent);
+}
+
+.barLabels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.noChart,
+.noTopics {
   margin: 0;
   color: var(--muted);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-heavy);
-  letter-spacing: var(--tracking-wide);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.noChart {
+  display: grid;
+  min-height: 98px;
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+}
+
+.topicCard {
+  display: flex;
+  flex-direction: column;
+}
+
+.topicCard h2 {
+  margin-bottom: 22px;
+}
+
+.topicList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.topic {
+  display: grid;
+  gap: 7px;
+}
+
+.topic > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.topic > div span:last-child {
+  color: var(--muted);
+}
+
+.topic > i {
+  display: block;
+  overflow: hidden;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg);
+}
+
+.topic > i > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.topicLink {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 18px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  margin-top: auto;
+}
+
+.activityUnavailable {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 32px;
+  grid-column: 1 / -1;
+}
+
+.activityUnavailable h2,
+.activityUnavailable p {
+  margin: 0;
+}
+
+.activityUnavailable h2 {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.activityUnavailable p {
+  max-width: 680px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.courseSummary {
+  padding: 28px 32px;
+}
+
+.courseSummaryHead {
+  margin-bottom: 20px;
+}
+
+.courseFacts {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.courseFact {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: var(--bg);
+}
+
+.factIcon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 20px;
+  line-height: 1;
+  place-items: center;
+}
+
+.factIcon[data-tone="good"] {
+  color: var(--good);
+}
+
+.factIcon[data-tone="muted"] {
+  color: var(--muted);
+}
+
+.courseFact > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.courseFact strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.courseFact small {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.link {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 22px;
+  border-radius: 12px;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+/* Only the primary call to action is semibold in the mockup — a secondary
+   action like "Read what they asked" stays regular weight so it doesn't
+   compete with it. */
+.linkPrimary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.linkSecondary {
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.linkQuiet {
+  min-height: auto;
+  padding: 4px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* "Dismiss for a week" — pinned to the far right of the action row and
+   deliberately muted rather than accented: it is an escape hatch, not
+   something we want competing with the primary/secondary actions. */
+.dismissAction {
+  min-height: auto;
+  margin-left: auto;
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.dismissAction:hover,
+.dismissAction:focus-visible {
+  color: var(--ink);
+}
+
+.heroPanel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.heroPanelLabel {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font: 600 10px var(--font-mono);
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
 .heroPanelValue {
   display: flex;
-  flex-wrap: wrap;
+  gap: 10px;
   align-items: baseline;
-  gap: var(--space-2);
   margin: 0;
-  color: var(--ink);
-  font-size: var(--text-3xl);
-  font-weight: var(--weight-strong);
-  letter-spacing: var(--tracking-display);
-  line-height: var(--leading-display);
+  font-family: var(--font-display);
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -0.032em;
 }
 
-.heroPanelValue > span {
-  color: var(--muted);
-  font-size: var(--text-md);
-  font-weight: var(--weight-regular);
-  letter-spacing: 0;
-  overflow-wrap: anywhere;
-}
-
+.heroPanelValue span,
 .heroPanelAbsent {
-  margin: 0;
   color: var(--muted);
-  font-size: var(--text-xl);
-  font-weight: var(--weight-medium);
-  letter-spacing: var(--tracking-snug);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
 }
 
 .heroPanelFoot {
-  margin: 0;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--hairline);
+  margin: auto 0 0;
   color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
+  font-size: 13px;
 }
-
-/* --------------------------------------------------------------- sections */
 
 .section {
-  display: grid;
-  gap: var(--gap-block);
-  min-width: 0;
+  padding: 28px 32px;
 }
 
-/*
-  A section head is a hairline and a size step — no filled bar, no chevron
-  furniture. The rule sits well below the text so the heading has air.
-*/
 .sectionHead {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  gap: 20px;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-3) var(--space-6);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 22px;
 }
 
 .sectionHeading {
-  display: grid;
-  gap: var(--space-2);
   min-width: 0;
-}
-
-.sectionAside {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.eyebrow {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-heavy);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
 }
 
 .sectionTitle {
   margin: 0;
-  color: var(--ink);
-  font-size: var(--text-2xl);
-  font-weight: var(--weight-strong);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--leading-tight);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
 }
 
 .lede {
-  max-width: 68ch;
-  margin: 0;
+  max-width: 70ch;
+  margin: 7px 0 0;
   color: var(--muted);
-  font-size: var(--text-md);
-  line-height: var(--leading-relaxed);
+  font-size: 13px;
 }
 
-.sectionFoot {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-5);
+.sectionAside {
+  flex: 0 0 auto;
 }
-
-.status {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-md);
-}
-
-.footnote {
-  max-width: 68ch;
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: var(--leading-relaxed);
-}
-
-.countChip {
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-pill);
-  background: var(--bg);
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-strong);
-  white-space: nowrap;
-}
-
-/* ------------------------------------------------------------------ grids */
 
 .tiles {
   display: grid;
-  gap: var(--space-4);
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
 }
 
-.courseGrid {
-  display: grid;
-  gap: var(--space-4);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
-}
-
+.courseGrid,
 .quickGrid {
   display: grid;
-  gap: var(--space-4);
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
-
-/* ------------------------------------------------------------ panel links */
-
-.link {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-5);
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-strong);
-  letter-spacing: var(--tracking-snug);
-  line-height: 1;
-  text-decoration: none;
-  transition:
-    background var(--motion-fast) var(--motion-ease),
-    border-color var(--motion-fast) var(--motion-ease),
-    color var(--motion-fast) var(--motion-ease);
-}
-
-.linkPrimary {
-  background: var(--brand-primary);
-  color: var(--brand-on-primary);
-}
-
-.linkPrimary:hover {
-  background: color-mix(in srgb, var(--brand-primary) 86%, var(--ink));
-}
-
-.linkSecondary {
-  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
-  background: var(--surface);
-  color: var(--ink);
-}
-
-/* Secondary buttons are chrome: neutral at rest and neutral on hover. */
-.linkSecondary:hover {
-  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
-  background: var(--bg);
-}
-
-.linkQuiet {
-  padding-inline: var(--space-2);
-  background: transparent;
-  color: color-mix(in srgb, var(--brand-primary) 82%, var(--ink));
-}
-
-.linkQuiet:hover {
-  background: color-mix(in srgb, var(--brand-primary) 8%, transparent);
-}
-
-/* --------------------------------------------------------- quick actions */
-
-.quickAction {
-  display: grid;
-  gap: var(--space-3);
-  align-content: start;
-  min-width: 0;
-  padding: var(--space-6);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--ink);
-  text-decoration: none;
-  transition:
-    border-color var(--motion-fast) var(--motion-ease),
-    box-shadow var(--motion-fast) var(--motion-ease);
-}
-
-/* Hover lifts the card; it does not tint it. */
-.quickAction:hover {
-  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
-  box-shadow: var(--shadow-md);
-}
-
-.quickTitle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-strong);
-  letter-spacing: var(--tracking-snug);
-}
-
-.quickTitle > span {
-  color: color-mix(in srgb, var(--brand-primary) 78%, var(--ink));
-}
-
-.quickCopy {
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: var(--leading-relaxed);
-}
-
-/* ------------------------------------------------------- needs attention */
-
-.attentionList {
-  display: grid;
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/*
-  Severity is carried by the leading edge and the copy, not by a full border
-  box around every row. Blocking items additionally take a tinted ground, so
-  the distinction survives without relying on colour alone.
-*/
-.attentionItem {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3) var(--space-5);
-  min-width: 0;
-  padding: var(--space-5);
-  border: 1px solid var(--hairline);
-  border-left: 3px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
-.attentionBlocking {
-  border-left-color: var(--warn);
-  background: color-mix(in srgb, var(--ui-critical-soft) 55%, var(--surface));
-}
-
-.attentionCopy {
-  display: grid;
-  gap: var(--space-1);
-  min-width: min(100%, 18rem);
-  flex: 1 1 22rem;
-}
-
-.attentionHeadline {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--text-md);
-  font-weight: var(--weight-strong);
-  letter-spacing: var(--tracking-snug);
-  overflow-wrap: break-word;
-}
-
-.attentionDetail {
-  max-width: 68ch;
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: var(--leading-relaxed);
-}
-
-/* ------------------------------------------------------------ course card */
 
 .card {
-  display: grid;
-  gap: var(--space-4);
-  align-content: start;
+  display: flex;
   min-width: 0;
-  padding: var(--space-6);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--elev);
   color: var(--ink);
-  text-align: left;
   text-decoration: none;
 }
 
 .cardLink {
   transition:
-    border-color var(--motion-fast) var(--motion-ease),
-    box-shadow var(--motion-fast) var(--motion-ease),
-    transform var(--motion-fast) var(--motion-ease);
+    transform 160ms var(--motion-ease),
+    box-shadow 160ms var(--motion-ease);
 }
 
 .cardLink:hover {
-  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   transform: translateY(-2px);
 }
 
 .cardHead {
   display: flex;
-  flex-wrap: wrap;
-  align-items: start;
+  gap: 12px;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-2);
 }
 
 .cardTitle {
-  min-width: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--weight-strong);
-  letter-spacing: var(--tracking-snug);
-  line-height: var(--leading-snug);
-  overflow-wrap: break-word;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
 }
 
 .cardCopy {
-  display: -webkit-box;
-  overflow: hidden;
   color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: var(--leading-relaxed);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  font-size: 13px;
 }
 
 .cardFacts {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-5);
-  padding-top: var(--space-1);
+  gap: 8px 16px;
   color: var(--muted);
-  font-size: var(--text-xs);
-}
-
-.cardFacts b {
-  color: var(--ink);
-  font-weight: var(--weight-strong);
+  font-size: 12px;
 }
 
 .cardWarn {
   color: var(--warn);
 }
 
-.cardWarn b {
-  color: var(--warn);
-}
-
-/* ------------------------------------------------------------------ pills */
-
-.pill {
+.pill,
+.countChip {
   display: inline-flex;
+  width: fit-content;
   align-items: center;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-heavy);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
+  padding: 5px 9px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .pillLive {
-  background: var(--ui-positive-soft);
+  background: color-mix(in srgb, var(--good) 10%, transparent);
   color: var(--good);
 }
 
-.pillDraft {
-  background: var(--bg);
-  color: var(--ink);
-}
-
-/* --------------------------------------------------- learner assistant dock */
-
-.assistantDock {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  width: 100%;
-  min-width: 0;
-  padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--ink);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  transition:
-    border-color var(--motion-fast) var(--motion-ease),
-    box-shadow var(--motion-fast) var(--motion-ease);
-}
-
-.assistantDock:hover {
-  border-color: color-mix(in srgb, var(--brand-primary) 34%, var(--hairline));
-  box-shadow: var(--shadow-md);
-}
-
-.orb {
-  width: 2.5rem;
-  height: 2.5rem;
-  flex: none;
-  border-radius: var(--radius-pill);
-  background:
-    radial-gradient(
-      circle at 32% 28%,
-      color-mix(in srgb, var(--brand-accent) 82%, var(--bg)) 0,
-      var(--brand-primary) 74%
-    );
-}
-
-.dockCopy {
-  display: grid;
-  gap: 2px;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.dockCopy b {
-  font-size: var(--text-md);
-  font-weight: var(--weight-strong);
-  letter-spacing: var(--tracking-snug);
-}
-
-.dockCopy small {
+.pillDraft,
+.countChip {
+  background: color-mix(in srgb, var(--muted) 14%, var(--surface));
   color: var(--muted);
-  font-size: var(--text-sm);
 }
-
-/* --------------------------------------------------------------- progress */
 
 .progressTrack {
   display: block;
   overflow: hidden;
-  width: 100%;
   height: 6px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--brand-primary) 12%, var(--bg));
+  border-radius: 100px;
+  background: var(--hairline);
 }
 
 .progressTrack > span {
   display: block;
   height: 100%;
-  border-radius: var(--radius-pill);
-  background: var(--brand-primary);
+  border-radius: inherit;
+  background: var(--accent);
 }
 
-/* ------------------------------------------------------------ preferences */
+.quickAction {
+  display: grid;
+  gap: 5px;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--elev);
+  color: var(--ink);
+  text-decoration: none;
+}
 
-@media (prefers-reduced-motion: reduce) {
-  .link,
-  .card,
-  .cardLink,
-  .quickAction,
-  .assistantDock {
-    transition: none;
+.quickTitle {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.quickCopy {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sectionFoot {
+  display: flex;
+  gap: 16px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.assistantDock {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.orb {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: var(--accent);
+}
+
+.dockCopy {
+  display: grid;
+  gap: 1px;
+}
+
+.dockCopy small {
+  color: var(--muted);
+}
+
+.status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 820px) {
+  .hero {
+    grid-template-columns: 1fr;
   }
 
-  .cardLink:hover {
-    transform: none;
+  .activityGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .courseFacts {
+    grid-template-columns: 1fr;
+  }
+
+  .tiles {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .welcome {
+    padding-bottom: 8px;
+  }
+
+  .heroTitle {
+    font-size: 30px;
+  }
+
+  .heroLede {
+    font-size: 15px;
+  }
+
+  .oneThing,
+  .section,
+  .weekCard,
+  .topicCard,
+  .activityUnavailable,
+  .courseSummary,
+  .heroCopy,
+  .heroPanel {
+    padding: 22px 20px;
+    border-radius: 18px;
+  }
+
+  .oneThing h2 {
+    font-size: 22px;
+  }
+
+  .tiles,
+  .courseGrid,
+  .quickGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .metricRow {
+    gap: 12px;
+  }
+
+  .metricRow strong {
+    font-size: 28px;
+  }
+
+  .metricRow small {
+    font-size: 10px;
+  }
+
+  .activityUnavailable {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sectionHead {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sectionAside {
+    align-self: stretch;
   }
 }

@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0017_durable_learning_workspace.
+-- The executable migration is maintained as 0017_durable_learning_workspace.sql.

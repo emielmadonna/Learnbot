@@ -11,6 +11,9 @@ const safeCodes = new Set([
   "security_scan_pending",
   "course_not_found",
   "unsupported_media_type",
+  "document_extraction_failed",
+  "document_has_no_extractable_text",
+  "document_page_limit_exceeded",
   "object_not_found",
   // Phase 17 scan checkpoint. Each of these means "the gate stayed shut", and
   // a creator staring at a stuck upload deserves to know which one it was --

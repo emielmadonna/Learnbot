@@ -13,15 +13,10 @@ import {
   validDeclaredDuration,
 } from "../policy";
 import {
-  enforceVoiceQuota,
-  meterVoiceUsage,
-  voiceTraceId,
-} from "../../../../../lib/voice-runtime";
-
-const OPENAI_TRANSCRIPTION_URL =
-  "https://api.openai.com/v1/audio/transcriptions";
-const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
-const REQUEST_DEADLINE_MS = 45_000;
+  forwardManagedVoiceFailure,
+  invokeManagedVoice,
+  managedVoiceHeaders,
+} from "../../../../../lib/supabase/managed-voice";
 
 function jsonError(
   code: string,
@@ -34,11 +29,6 @@ function jsonError(
     { ok: false, code, message, retryable },
     { status, headers: { "Cache-Control": "no-store", ...headers } },
   );
-}
-
-function providerCredential() {
-  const credential = process.env.OPENAI_API_KEY?.trim();
-  return credential && credential.length >= 20 ? credential : null;
 }
 
 async function voiceTenantContext(request: Request, mutation: boolean) {
@@ -54,9 +44,7 @@ async function voiceTenantContext(request: Request, mutation: boolean) {
   }
   return {
     supabase,
-    quotaSubject: `${context.tenantId}:${context.principalId}`,
     tenantId: context.tenantId,
-    principalId: context.principalId,
   };
 }
 
@@ -70,11 +58,19 @@ export async function GET(request: Request) {
         "Select a workspace before using voice.",
       );
     }
-    if (!providerCredential()) {
-      return jsonError(
-        "voice_provider_not_configured",
-        503,
-        "Voice is not configured for this environment.",
+    const readiness = await invokeManagedVoice(
+      request,
+      context.supabase,
+      JSON.stringify({
+        action: "readiness",
+        tenantId: context.tenantId,
+      }),
+      "application/json",
+    );
+    if (!readiness.ok) {
+      return forwardManagedVoiceFailure(
+        readiness,
+        "Voice readiness could not be verified.",
       );
     }
     return NextResponse.json(
@@ -118,15 +114,6 @@ export async function POST(request: Request) {
         "Select a workspace before using voice.",
       );
     }
-    const credential = providerCredential();
-    if (!credential) {
-      return jsonError(
-        "voice_provider_not_configured",
-        503,
-        "Voice transcription is not configured.",
-      );
-    }
-
     const headerError = multipartHeaderError(request.headers);
     if (headerError === "invalid_content_type") {
       return jsonError(
@@ -150,26 +137,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Durable, cross-instance quota. The previous per-process map reset on
-    // every serverless cold start, so it bounded nothing in production.
-    const quota = await enforceVoiceQuota(context.supabase, {
-      kind: "transcribe",
-      tenantId: context.tenantId,
-      principalId: context.principalId,
-    });
-    if (!quota.allowed) {
-      return jsonError(
-        quota.code,
-        429,
-        quota.message,
-        quota.retryAfterSeconds > 0,
-        {
-          "Retry-After": String(Math.max(1, quota.retryAfterSeconds)),
-          "X-Voice-RateLimit-Scope": quota.scope,
-        },
-      );
-    }
-
     const input = await request.formData();
     const audio = input.get("audio");
     const durationMs = validDeclaredDuration(input.get("durationMs"));
@@ -189,73 +156,34 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = new FormData();
-    body.set(
-      "file",
+    const managedBody = new FormData();
+    managedBody.set(
+      "audio",
       new File([audio], `voice-turn.${mediaType.extension}`, {
         type: mediaType.providerType,
       }),
     );
-    body.set("model", TRANSCRIPTION_MODEL);
-    body.set("response_format", "json");
-
-    const providerResponse = await fetch(OPENAI_TRANSCRIPTION_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${credential}` },
-      body,
-      signal: AbortSignal.timeout(REQUEST_DEADLINE_MS),
-    });
-    if (!providerResponse.ok) {
-      return jsonError(
-        "transcription_failed",
-        502,
-        "The voice turn could not be transcribed. Try again or continue in text.",
-        providerResponse.status === 408 || providerResponse.status === 429,
-      );
-    }
-
-    const result = (await providerResponse.json()) as unknown;
-    const transcript =
-      result &&
-      typeof result === "object" &&
-      "text" in result &&
-      typeof result.text === "string"
-        ? result.text.trim()
-        : "";
-    if (!transcript || transcript.length > 8_000) {
-      return jsonError(
-        "transcription_empty",
-        422,
-        "I did not catch that. Please try the voice turn again.",
-      );
-    }
-
-    // Transcription is billed by audio duration, which the client declared and
-    // the policy bounded. Metering is best effort and never throws.
-    await meterVoiceUsage(context.supabase, {
-      kind: "transcribe",
-      model: TRANSCRIPTION_MODEL,
-      quantity: durationMs / 1_000,
-      fallbackUnit: "audio_seconds",
-      traceId: voiceTraceId("transcribe"),
-      idempotencyKey: `voice-transcribe:${crypto.randomUUID()}`,
-    });
-
-    return NextResponse.json(
-      {
-        ok: true,
-        transcript,
-        model: TRANSCRIPTION_MODEL,
-        rawAudioStored: false,
-        durationPolicyMs: MAX_VOICE_TURN_MS,
-      },
-      {
-        headers: {
-          "Cache-Control": "no-store",
-          "X-Voice-RateLimit-Scope": quota.scope,
-        },
-      },
+    managedBody.set("durationMs", String(durationMs));
+    const managedResponse = await invokeManagedVoice(
+      request,
+      context.supabase,
+      managedBody,
+      undefined,
+      { "x-learningbot-tenant-id": context.tenantId },
     );
+    if (!managedResponse.ok) {
+      return forwardManagedVoiceFailure(
+        managedResponse,
+        "The voice turn could not be transcribed.",
+      );
+    }
+    return new NextResponse(managedResponse.body, {
+      status: 200,
+      headers: managedVoiceHeaders(managedResponse, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      }),
+    });
   } catch (error) {
     if (error instanceof AuthenticationBoundaryError) {
       return jsonError(

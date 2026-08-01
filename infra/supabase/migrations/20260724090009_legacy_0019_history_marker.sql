@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0019_preprovisioned_tenant_owner_claims.
+-- The executable migration is maintained as 0019_preprovisioned_tenant_owner_claims.sql.

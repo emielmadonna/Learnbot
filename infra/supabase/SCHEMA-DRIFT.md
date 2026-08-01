@@ -415,6 +415,47 @@ immediately. `LEDGER_RECONCILE.sql` was extended with both versions and re-run
 The repository and the ledger have not diverged. That is the whole point of this
 document, and it is the first time it has been true at the end of an apply.
 
+## Awaiting hand-apply: widget visual media and answer feedback
+
+Two migrations are committed to this repository and **not yet applied** to the
+live database. Recorded here before the apply rather than after it, which is the
+standard this ledger has been trying to reach.
+
+| Version | Name | Purpose |
+|---|---|---|
+| 20260731060000 | `widget_visual_media_disclosure` | Public/hosted widget inline images and video |
+| 20260731061000 | `answer_feedback_and_lesson_reception` | helpful/not-helpful ratings and per-lesson reception |
+
+Until they are applied:
+
+- `/api/widget/visuals/[visualAssetId]/content` returns 404 for every request,
+  because `widget_get_visual_asset_for_read` does not exist. The widget degrades
+  to text-only answers, which is exactly its behaviour today, so nothing
+  regresses -- the feature simply stays dark.
+- `/api/learning/feedback` and `/api/widget/feedback` return `request_failed`.
+  The surfaces that read these figures already render "Not known" with a reason,
+  so they keep doing that rather than showing a zero.
+
+Both files are pure ASCII on purpose: the Supabase SQL editor mangles non-ASCII
+on paste, and an em-dash arriving corrupted inside a `$$`-quoted function body
+is a silent behaviour change rather than a syntax error.
+
+Neither migration alters an existing table or function. Both are additive:
+new tables, new indexes, new functions, new grants. Rolling back is dropping
+what they created.
+
+### Why the widget one took a design rather than a flag
+
+The launch note said public visual media was "pending an exact widget-scoped
+media capability". The reason it could not simply reuse the authenticated rule
+is that a widget key is PUBLIC -- it ships in a `<script>` tag on the customer's
+page -- so "any answerable asset belonging to the tenant this key names" would
+let any visitor on any allowed origin enumerate the tenant's entire media
+library by walking uuids. The migration replaces membership with DISCLOSURE: a
+visitor may read exactly what the assistant already showed them, in their own
+conversation, and the asset conditions from the authenticated path are kept on
+top of that rather than replaced by it.
+
 ## Outstanding
 
 - Backups remain disabled (Free plan). The next hand-apply will again have no

@@ -438,6 +438,99 @@
   background: var(--pp-surface);
 }
 
+/*
+ * A row that looks like a Toggle but is not one — used for the one section
+ * (the assistant) that can never be switched off, and for the "what the
+ * client can change themselves" capabilities that have no persistence to
+ * back them yet. Neither belongs behind the shared Toggle: the first must
+ * never accept a click, the second must be visibly inert rather than a
+ * control that silently does nothing.
+ */
+.lockedSwitch {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  opacity: 0.62;
+}
+
+.lockedSwitchBordered {
+  border-bottom: 1px solid var(--pp-line);
+}
+
+.lockedSwitchCopy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.lockedSwitchLabelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lockedSwitchLabel {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.lockedSwitchBadge {
+  border: 1px solid var(--pp-line);
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: var(--pp-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.lockedSwitchBadgeWarn {
+  border-color: color-mix(in srgb, var(--pp-danger) 34%, transparent);
+  background: color-mix(in srgb, var(--pp-danger) 12%, transparent);
+  color: var(--pp-danger);
+}
+
+.lockedSwitchDescription {
+  max-width: 60ch;
+  color: var(--pp-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.lockedSwitchTrack {
+  display: flex;
+  width: 44px;
+  height: 26px;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--pp-sunken);
+}
+
+.lockedSwitchTrack i {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--pp-surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
+}
+
+/* The capability rows have no known state at all yet, so their track draws
+   as "off" (thumb left) rather than borrowing the assistant row's "on"
+   position — showing them "on" would assert a fact this panel doesn't have. */
+.lockedSwitchTrackOff {
+  justify-content: flex-start;
+}
+
 .sessions {
   display: flex;
   flex-direction: column;
@@ -694,5 +787,909 @@
 
   .formRow {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * Corso v2 platform composition
+ * ------------------------------------------------------------------ */
+
+.root {
+  /* Platform controls use Corso's fixed graphite-blue action colour. Tenant
+     branding belongs inside the client workspace and learner surfaces; it
+     must never recolour the platform control plane. */
+  --brand-primary: #4a637f;
+  --brand-accent: #4a637f;
+  --brand-on-primary: #fff;
+  --brand-on-accent: #fff;
+  --pp-primary: #4a637f;
+  --pp-accent: #4a637f;
+  --pp-surface: #fff;
+  --pp-canvas: #f5f5f7;
+  --pp-text: #1d1d1f;
+  --pp-muted: #6e6e73;
+  --pp-faint: #6e6e73;
+  --pp-line: rgb(0 0 0 / 8%);
+  --pp-raised: #f5f5f7;
+  --pp-sunken: #e8e8ed;
+  --pp-danger: #c53030;
+  --pp-danger-soft: rgb(197 48 48 / 8%);
+  --pp-positive: #1d7a33;
+
+  gap: 22px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    sans-serif;
+}
+
+.root[data-view="workspaces"] {
+  padding-top: 0;
+}
+
+.root[data-view="client"] {
+  max-width: 1040px;
+  margin-inline: auto;
+}
+
+.platformPage {
+  display: grid;
+  gap: 22px;
+}
+
+.billingTotals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.billingTotals article,
+.platformPolicies article {
+  min-width: 0;
+  padding: 22px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 7%);
+}
+
+.billingTotals span,
+.billingTotals strong,
+.billingTotals small,
+.platformPolicies span,
+.platformPolicies strong {
+  display: block;
+}
+
+.billingTotals span,
+.platformPolicies span {
+  color: #6e6e73;
+  font-size: 13px;
+}
+
+.billingTotals strong {
+  margin-top: 10px;
+  color: #1d1d1f;
+  font-size: 27px;
+  letter-spacing: -0.03em;
+}
+
+.billingTotals small {
+  margin-top: 7px;
+  color: #6e6e73;
+  font-size: 12px;
+}
+
+.billingTenants {
+  overflow: hidden;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 7%);
+}
+
+.billingTenants article {
+  display: grid;
+  min-height: 76px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgb(0 0 0 / 7%);
+}
+
+.billingTenants article:last-child {
+  border-bottom: 0;
+}
+
+.billingTenants b,
+.billingTenants span {
+  display: block;
+}
+
+.billingTenants b {
+  color: #1d1d1f;
+  font-size: 15px;
+}
+
+.billingTenants span {
+  margin-top: 2px;
+  color: #6e6e73;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.billingTenants strong {
+  color: #1d1d1f;
+  font-size: 14px;
+}
+
+.billingTenants button {
+  border: 0;
+  background: transparent;
+  color: #4a637f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.platformPolicies {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.platformPolicies strong {
+  margin-top: 8px;
+  color: #1d1d1f;
+  font-size: 17px;
+}
+
+.platformPolicies p {
+  margin: 9px 0 0;
+  color: #6e6e73;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.intro {
+  align-items: flex-end;
+  gap: 18px;
+}
+
+.introCopy {
+  gap: 8px;
+}
+
+.title {
+  font-size: clamp(32px, 4vw, 36px);
+  font-weight: 700;
+  letter-spacing: -0.032em;
+  line-height: 1.08;
+}
+
+.lede {
+  color: #6e6e73;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.introActions :global(button) {
+  min-height: 40px;
+  border-radius: 11px;
+  padding-inline: 18px;
+  font-size: 14px;
+}
+
+.workspaceTools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.workspaceSearch {
+  display: flex;
+  width: min(280px, 100%);
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+  color: #8e8e93;
+}
+
+.workspaceSearch input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #1d1d1f;
+  font: inherit;
+  font-size: 14px;
+}
+
+.workspaceSearch input::placeholder {
+  color: #8e8e93;
+  opacity: 1;
+}
+
+.workspaceFilters {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+
+.workspaceFilters button,
+.reload {
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #6e6e73;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 13px;
+}
+
+.workspaceFilters button[aria-pressed="true"] {
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-weight: 600;
+}
+
+.workspaceFilters button:focus-visible,
+.reload:focus-visible,
+.openClient:focus-visible,
+.addClientCard:focus-visible,
+.createBack:focus-visible {
+  outline: 3px solid rgb(74 99 127 / 34%);
+  outline-offset: 2px;
+}
+
+.reload {
+  margin-left: auto;
+  background: rgb(255 255 255 / 64%);
+}
+
+.reload:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.clients {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.client {
+  gap: 0;
+  min-height: 176px;
+  padding: 22px;
+  border: 0;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 7%);
+}
+
+.client[data-entered="true"] {
+  outline: 2px solid rgb(74 99 127 / 32%);
+  outline-offset: -2px;
+  border: 0;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 7%);
+}
+
+/* A live-but-struggling workspace gets a red ring instead of the blue
+   "you are inside this one" ring above — ordered after it so, in the rare
+   case both apply, the ring that needs a human's attention wins. */
+.client[data-review="true"] {
+  outline: 2px solid color-mix(in srgb, var(--pp-danger) 35%, transparent);
+  outline-offset: -2px;
+  border: 0;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 7%);
+}
+
+.client[data-status="suspended"] {
+  background: #fff;
+  opacity: 0.62;
+}
+
+/* Paused monograms read as muted text rather than full ink — the workspace
+   itself has gone quiet, and the initials should say so before you even
+   reach the "Paused" label. */
+.client[data-status="suspended"] .clientMonogram {
+  color: var(--pp-muted);
+}
+
+.clientHead {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 18px;
+}
+
+.clientHead > div {
+  min-width: 0;
+}
+
+.clientMonogram {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 11px;
+  background: #e3e3e8;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.clientMonogram[data-live] {
+  background: #4a637f;
+  color: #fff;
+}
+
+.clientName {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clientHead .meta {
+  overflow: hidden;
+  margin-top: 3px;
+  color: #6e6e73;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1d7a33;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.workspaceState i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.workspaceState[data-state="setup"] {
+  color: #8a5a00;
+}
+
+.workspaceState[data-state="review"] {
+  color: var(--pp-danger);
+}
+
+.workspaceState[data-state="paused"] {
+  color: var(--pp-muted);
+}
+
+/* The paused dot reads slightly lighter than its own label text — a small
+   distinction the mockup makes (#8e8e93 dot vs #6e6e73 text) that gets lost
+   if the dot just inherits currentColor. */
+.workspaceState[data-state="paused"] i {
+  background: color-mix(in srgb, var(--pp-muted) 65%, var(--pp-surface));
+}
+
+.clientSummary {
+  min-height: 46px;
+  margin: 0 0 16px;
+  color: #1d1d1f;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.insideTag {
+  margin: -8px 0 12px;
+  background: rgb(74 99 127 / 11%);
+  color: #4a637f;
+}
+
+.clientFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid rgb(0 0 0 / 7%);
+}
+
+.clientFoot .meta {
+  overflow: hidden;
+  color: #6e6e73;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openClient {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: #4a637f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 4px 0;
+}
+
+.addClientCard {
+  display: flex;
+  min-height: 176px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 22px;
+  border: 2px dashed rgb(0 0 0 / 12%);
+  border-radius: 18px;
+  background: rgb(255 255 255 / 50%);
+  color: #1d1d1f;
+  cursor: pointer;
+  font: inherit;
+  text-align: center;
+}
+
+.addClientCard > span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+  color: #4a637f;
+  font-size: 17px;
+}
+
+.addClientCard strong {
+  font-size: 15px;
+}
+
+.addClientCard small {
+  max-width: 200px;
+  color: #6e6e73;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.root[data-view="workspaces"] > .detailGroup {
+  margin-top: 6px;
+  padding: 20px 22px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+}
+
+/* --- add-client wizard ------------------------------------------------ */
+
+.createPage {
+  display: flex;
+  width: min(680px, 100%);
+  flex-direction: column;
+  gap: 20px;
+  margin-inline: auto;
+}
+
+.createPageIntro {
+  display: grid;
+  gap: 6px;
+}
+
+.createCard {
+  overflow: hidden;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 7%);
+}
+
+.createHeader {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 17px 22px;
+  border-bottom: 1px solid rgb(0 0 0 / 8%);
+}
+
+.createBack {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: #f5f5f7;
+  color: #6e6e73;
+  cursor: pointer;
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.createHeaderTitle {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.createCount {
+  color: #6e6e73;
+  font-size: 13px;
+}
+
+.createProgress {
+  display: flex;
+  gap: 5px;
+  padding: 14px 22px 0;
+}
+
+.createProgress i {
+  height: 4px;
+  flex: 1;
+  border-radius: 2px;
+  background: #e3e3e8;
+}
+
+.createProgress i[data-complete] {
+  background: #4a637f;
+}
+
+.createBody {
+  display: flex;
+  min-height: 380px;
+  flex-direction: column;
+  padding: 22px;
+}
+
+.createKicker {
+  margin: 0 0 12px;
+  color: #6e6e73;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.createTitle {
+  margin: 0 0 6px;
+  color: #1d1d1f;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+}
+
+.createDescription {
+  max-width: 54ch;
+  margin: 0 0 22px;
+  color: #6e6e73;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.addressPreview {
+  margin: -8px 0 0;
+  color: #6e6e73;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.knowledgeChoices {
+  display: grid;
+  gap: 8px;
+}
+
+.knowledgeChoice {
+  display: flex;
+  min-height: 66px;
+  cursor: pointer;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 15px;
+  border: 1px solid #e3e3e8;
+  border-radius: 14px;
+  background: #fff;
+  color: #1d1d1f;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
+}
+
+.knowledgeChoice:hover {
+  border-color: #9ba9b9;
+}
+
+.knowledgeChoice[data-selected] {
+  border-color: var(--pp-primary);
+  background: #f7f9fb;
+  box-shadow: 0 0 0 2px var(--pp-primary);
+}
+
+.knowledgeChoice input {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  accent-color: #4a637f;
+}
+
+.knowledgeChoice span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.knowledgeChoice strong {
+  font-size: 14px;
+}
+
+.knowledgeChoice small {
+  color: #6e6e73;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.createInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 15px 16px;
+  border-radius: 13px;
+  background: #f5f5f7;
+  color: #6e6e73;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.createInfo strong {
+  color: #1d1d1f;
+  font-size: 14px;
+}
+
+.createReview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.createReview div {
+  min-width: 0;
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: #f5f5f7;
+}
+
+.createReview dt {
+  margin-bottom: 4px;
+  color: #6e6e73;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.createReview dd {
+  overflow: hidden;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.createFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 22px;
+  border-top: 1px solid rgb(0 0 0 / 8%);
+}
+
+.createFooter :global(button) {
+  min-height: 40px;
+  border-radius: 11px;
+  padding-inline: 18px;
+}
+
+.createFooterRight {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.createdCard {
+  display: flex;
+  min-height: 470px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 34px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 7%);
+  text-align: center;
+}
+
+.createdCheck {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 16px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(29 122 51 / 12%);
+  color: #1d7a33;
+  font-size: 23px;
+  font-weight: 700;
+}
+
+.createdTitle {
+  margin: 0 0 8px;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.createdCopy {
+  max-width: 48ch;
+  margin: 0 0 18px;
+  color: #6e6e73;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.tokenRow {
+  display: flex;
+  width: min(480px, 100%);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 7px;
+  border: 1px solid rgb(0 0 0 / 14%);
+  border-radius: 11px;
+  background: #fff;
+}
+
+.tokenRow .token {
+  min-width: 0;
+  flex: 1;
+  padding: 4px 7px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+  text-align: left;
+}
+
+.createdCard .issuedNote {
+  max-width: 54ch;
+  text-align: center;
+}
+
+.createdCard .issuedActions {
+  justify-content: center;
+  margin-top: 18px;
+}
+
+@media (max-width: 760px) {
+  .billingTotals,
+  .platformPolicies {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .billingTenants article {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .billingTenants button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .workspaceTools {
+    flex-wrap: wrap;
+  }
+
+  .workspaceSearch {
+    width: 100%;
+  }
+
+  .workspaceFilters {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .reload {
+    margin-left: 0;
+  }
+
+  .clients {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .createBody {
+    min-height: 340px;
+  }
+}
+
+@media (max-width: 520px) {
+  .intro {
+    align-items: stretch;
+  }
+
+  .introActions :global(button) {
+    width: 100%;
+  }
+
+  .workspaceFilters {
+    width: 100%;
+  }
+
+  .workspaceFilters button {
+    flex: 1;
+    white-space: nowrap;
+  }
+
+  .clientHead {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .workspaceState {
+    grid-column: 2;
+  }
+
+  .clientFoot {
+    align-items: flex-end;
+  }
+
+  .createHeader,
+  .createProgress,
+  .createBody,
+  .createFooter {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .createReview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .createdCard {
+    min-height: 420px;
+    padding: 26px 18px;
   }
 }

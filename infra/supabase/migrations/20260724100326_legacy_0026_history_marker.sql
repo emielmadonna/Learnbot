@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0026_authenticated_quarantine_uploads.
+-- The executable migration is maintained as 0026_authenticated_quarantine_uploads.sql.

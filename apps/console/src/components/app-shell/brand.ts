@@ -11,10 +11,10 @@ import type { AgentConfig } from "./contract";
 
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/iu;
 
-const FALLBACK_PRIMARY = "#234f40";
-const FALLBACK_ACCENT = "#d2a85f";
-const FALLBACK_SURFACE = "#f5f4ef";
-const FALLBACK_TEXT = "#14231d";
+const FALLBACK_PRIMARY = "#4a637f";
+const FALLBACK_ACCENT = "#4a637f";
+const FALLBACK_SURFACE = "#ffffff";
+const FALLBACK_TEXT = "#1d1d1f";
 
 /** Dark counterpart used when a brand color is too light for white text. */
 const ON_LIGHT = "#101614";

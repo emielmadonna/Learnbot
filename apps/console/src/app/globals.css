@@ -20,11 +20,12 @@
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at 90% 0%, var(--accent-wash) 0, transparent 28rem),
-    var(--canvas);
+  background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -149,11 +150,11 @@ h1 {
   --gap-chapter: clamp(var(--space-10), 7vw, var(--space-12));
 
   /* Radius */
-  --radius-sm: 8px;
+  --radius-sm: 10px;
   --radius-md: 12px;
-  --radius-lg: 18px;
-  --radius-xl: 24px;
-  --radius-2xl: 28px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
   --radius-pill: 999px;
 
   /* ------------------------------------------------------------------ type
@@ -163,15 +164,19 @@ h1 {
      carries the legibility. The display steps are fluid and tightly
      tracked — one of them, once per view. */
   --font-ui:
-    -apple-system, blinkmacsystemfont, "SF Pro Text", inter, "Segoe UI",
-    sans-serif;
-  --text-2xs: 11px;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    system-ui, sans-serif;
+  --font-display:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue",
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  --text-2xs: 10px;
   --text-xs: 12px;
   --text-sm: 13px;
   --text-md: 15px;
   --text-lg: 17px;
   --text-xl: 21px;
-  --text-2xl: clamp(24px, 2.2vw, 28px);
+  --text-2xl: 27px;
   --text-3xl: clamp(28px, 2.8vw, 34px);
 
   /*
@@ -180,18 +185,18 @@ h1 {
     to sit above real content rather than fill a viewport. Around two lines at
     the shell's max width is the target.
   */
-  --text-display: clamp(32px, 3.6vw, 46px);
+  --text-display: clamp(32px, 4vw, 38px);
 
   --weight-regular: 400;
-  --weight-medium: 520;
+  --weight-medium: 500;
   --weight-strong: 600;
-  --weight-heavy: 680;
+  --weight-heavy: 700;
 
   /* Tracking tightens as type grows — the display steps must never sit at 0. */
-  --tracking-display: -0.045em;
-  --tracking-tight: -0.03em;
-  --tracking-snug: -0.015em;
-  --tracking-wide: 0.1em;
+  --tracking-display: -0.032em;
+  --tracking-tight: -0.026em;
+  --tracking-snug: -0.018em;
+  --tracking-wide: 0.07em;
 
   --leading-display: 1.05;
   --leading-tight: 1.2;
@@ -202,13 +207,9 @@ h1 {
   /* -------------------------------------------------------------- elevation
      Layered and low-contrast: a wide soft pool plus a tight contact shadow.
      Never a single heavy drop shadow. */
-  --shadow-sm: 0 1px 2px rgb(var(--shadow-tint) / 5%);
-  --shadow-md:
-    0 2px 6px rgb(var(--shadow-tint) / 4%),
-    0 12px 30px rgb(var(--shadow-tint) / 7%);
-  --shadow-lg:
-    0 4px 14px rgb(var(--shadow-tint) / 5%),
-    0 28px 70px rgb(var(--shadow-tint) / 10%);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 6%);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 12%);
+  --shadow-lg: 0 24px 60px rgb(0 0 0 / 18%);
 
   /* Motion — 160ms default, 220ms for sheets (08-UI-DESIGN-SYSTEM). */
   --motion-fast: 160ms;
@@ -217,9 +218,9 @@ h1 {
   --motion-ease: cubic-bezier(0.32, 0.72, 0, 1);
 
   /* Layout */
-  --shell-header-height: 72px;
-  --shell-max-width: 1120px;
-  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--brand-primary);
+  --shell-header-height: 52px;
+  --shell-max-width: 1080px;
+  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 
   /* ---------------------------------------------------------------- brand
      Fallbacks only — the shell root overrides these from the tenant's

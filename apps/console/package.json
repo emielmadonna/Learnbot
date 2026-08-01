@@ -14,9 +14,11 @@
     "@course-ai/provider-router": "workspace:*",
     "@supabase/ssr": "0.12.3",
     "@supabase/supabase-js": "2.110.8",
+    "mammoth": "1.10.0",
     "next": "^16.2.11",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "unpdf": "1.0.6"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

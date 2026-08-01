@@ -29,6 +29,19 @@ export type GroundingSource = {
   lessonId: string | null;
   lessonTitle: string | null;
   sectionName: string | null;
+  /** Private visual metadata; the URL is an authenticated same-origin route. */
+  visual?: {
+    visualAssetId: string;
+    title: string;
+    altText: string;
+    mediaType:
+      | "image/jpeg"
+      | "image/png"
+      | "image/svg+xml"
+      | "image/webp"
+      | "video/mp4";
+    url: string;
+  } | null;
   /**
    * Cosine-style semantic similarity in the retrieval RPC's own scale
    * (present only for hybrid/semantic matches; `null` for a lexical-only
@@ -88,6 +101,12 @@ function sourceContext(sources: readonly GroundingSource[]) {
           `<source index="${index + 1}" chunk_id="${source.chunkId}" content_hash="${source.contentHash}">`,
           `Course: ${source.courseTitle}`,
           `Lesson: ${source.lessonTitle ?? source.documentTitle}`,
+          ...(source.visual
+            ? [
+                `Available visual: ${source.visual.title}`,
+                `Visual alt text: ${source.visual.altText}`,
+              ]
+            : []),
           source.excerpt,
           "</source>",
         ].join("\n"),
@@ -176,6 +195,10 @@ export async function answerGroundedLearningQuestion(input: {
   supabase?: SupabaseClient | null;
   conversationId?: string | null;
   operationToken?: string | null;
+  completion?: (
+    context: ProviderRequestContext,
+    request: ChatCompletionInput,
+  ) => Promise<ProviderOutcome<ChatCompletion>>;
 }) {
   const directive: ResolvedAgentDirective =
     isResolvedAgentDirective(input.agentDirective)
@@ -240,7 +263,9 @@ export async function answerGroundedLearningQuestion(input: {
   };
 
   let outcome: ProviderOutcome<ChatCompletion>;
-  if (input.supabase) {
+  if (input.completion) {
+    outcome = await input.completion(context, request);
+  } else if (input.supabase) {
     try {
       outcome = (
         await runMeteredCompletion({

@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for platform_admin_control_plane.
+-- The executable migration is maintained as 20260724182939_platform_admin_control_plane.sql.

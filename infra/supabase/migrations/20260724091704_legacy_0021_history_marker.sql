@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0021_durable_learning_conversations.
+-- The executable migration is maintained as 0021_durable_learning_conversations.sql.

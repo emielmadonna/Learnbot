@@ -15,6 +15,8 @@ import { brandStyle } from "../app-shell/brand";
 import type { AgentConfig, PanelProps, ShellPayload } from "../app-shell/contract";
 import { asWorkspace, useDataVersion } from "../app-shell/shell-data";
 import { usePanelRouter } from "../app-shell/use-panel-router";
+import { ProviderCredentialCard } from "./provider-credential-card";
+import type { TenantPlanUsage } from "../../lib/settings/tenant-settings-rpc";
 import {
   Button,
   ColorField,
@@ -24,14 +26,21 @@ import {
   TextAreaField,
   TextField,
   Toggle,
+  contrastRatio,
   normalizeHex,
+  passesAA,
 } from "../ui";
 import sectionStyles from "./sections.module.css";
 import styles from "./agent-panel.module.css";
 
 /* ------------------------------------------------------------------ types */
 
-type Draft = {
+/**
+ * Exported so the Settings index (settings-panel.tsx) can drive the same
+ * durable configuration record — e.g. the plain-language Length control —
+ * without re-implementing defaulting or the save payload shape.
+ */
+export type Draft = {
   assistantName: string;
   iconGlyph: string;
   logoStorageKey: string | null;
@@ -112,6 +121,11 @@ type FieldKey =
 type Errors = Partial<Record<FieldKey, string>>;
 
 type UploadedAsset = { key: string; url: string } | null;
+type LearnerPrompt = {
+  id: string;
+  question: string;
+  groundingOutcome: string;
+};
 
 /* -------------------------------------------------------------- constants */
 
@@ -139,15 +153,27 @@ const TONE_HELP: Record<string, string> = {
 /** Mirrors app_private.agent_allowed_models(). A creator picks from this set
  * only — there is no field anywhere in this panel for an arbitrary model id. */
 const FALLBACK_MODELS = [
+  "gpt-5.6-terra",
   "gpt-5.6-luna",
-  "gpt-5.6-luna-mini",
-  "gpt-5.6-luna-pro",
+  "gpt-5.6-sol",
 ] as const;
 
 const MODEL_HELP: Record<string, string> = {
-  "gpt-5.6-luna": "The platform default. Balanced quality and latency.",
-  "gpt-5.6-luna-mini": "Faster and cheaper; best for short, direct answers.",
-  "gpt-5.6-luna-pro": "Slower and more capable; best for dense material.",
+  "gpt-5.6-terra": "The platform default. Balanced quality and cost.",
+  "gpt-5.6-luna": "Fast and economical; best for short, direct answers.",
+  "gpt-5.6-sol": "Highest capability; best for dense or difficult material.",
+};
+
+/**
+ * Plain-language names for the same allowed-model set MODEL_HELP describes.
+ * These are curated copy, not measurements — no dollar figure or latency
+ * number is attached because neither is exposed to the browser today (see
+ * the "Effect of this change" panel below for what IS sourced honestly).
+ */
+const MODEL_LABEL: Record<string, string> = {
+  "gpt-5.6-terra": "Balanced",
+  "gpt-5.6-luna": "Fastest",
+  "gpt-5.6-sol": "Most capable",
 };
 
 const FALLBACK_ESCALATION_TRIGGERS = [
@@ -214,7 +240,7 @@ const CODE_SENTENCES: Record<string, string> = {
 
 const CONFLICT_SENTENCE = CODE_SENTENCES.version_conflict ?? "";
 
-function sentenceFor(code: string | null): string {
+export function sentenceFor(code: string | null): string {
   const sentence = code === null ? undefined : CODE_SENTENCES[code];
   return sentence ?? "The change could not be completed. Nothing was saved.";
 }
@@ -247,7 +273,7 @@ function boolOr(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function codeOf(value: unknown): string | null {
+export function codeOf(value: unknown): string | null {
   return isRecord(value) && typeof value.code === "string" ? value.code : null;
 }
 
@@ -281,7 +307,7 @@ async function readJson(response: Response): Promise<unknown> {
  * values, and colours are canonicalised so a lowercase edit of an uppercase
  * stored value does not read as a change.
  */
-function toDraft(
+export function toDraft(
   active: Record<string, unknown> | null,
   defaults: Record<string, unknown>,
 ): Draft {
@@ -324,7 +350,7 @@ function toDraft(
   };
 }
 
-function versionOf(row: Record<string, unknown> | null): number | null {
+export function versionOf(row: Record<string, unknown> | null): number | null {
   return row !== null && typeof row.version === "number" ? row.version : null;
 }
 
@@ -333,7 +359,7 @@ function versionOf(row: Record<string, unknown> | null): number | null {
  * the previous live row but leaves older drafts behind, so "draft ?? published"
  * alone would resurrect a stale draft after publishing.
  */
-function pickHead(
+export function pickHead(
   draftRow: Record<string, unknown> | null,
   publishedRow: Record<string, unknown> | null,
   expectedVersion: number,
@@ -352,6 +378,63 @@ function fingerprint(draft: Draft): string {
     ...draft,
     courseIds: draft.scopeAll ? [] : [...draft.courseIds].sort(),
   });
+}
+
+/**
+ * The exact `/api/agent` POST body for one draft. Exported so any other
+ * editor of this same durable record — e.g. the Length control on the
+ * Settings index — writes the identical shape `save()` below does, instead
+ * of a hand-rolled partial body that could omit a required field.
+ */
+export function buildAgentSaveBody(
+  draft: Draft,
+  options: {
+    readonly publish: boolean;
+    readonly expectedVersion: number;
+    readonly idempotencyKey: string;
+  },
+): Record<string, unknown> {
+  return {
+    assistantName: draft.assistantName.trim(),
+    iconGlyph: draft.iconGlyph.trim() === "" ? null : draft.iconGlyph.trim(),
+    primaryColor: draft.primaryColor,
+    accentColor: draft.accentColor,
+    surfaceColor: draft.surfaceColor,
+    textColor: draft.textColor,
+    welcomeMessage: draft.welcomeMessage.trim(),
+    personaInstructions:
+      draft.personaInstructions.trim() === ""
+        ? null
+        : draft.personaInstructions.trim(),
+    tone: draft.tone,
+    voice: draft.voice.trim() === "" ? null : draft.voice.trim().toLowerCase(),
+    courseScope: draft.scopeAll ? "all" : draft.courseIds,
+    logoStorageKey: draft.logoStorageKey,
+    avatarStorageKey: draft.avatarStorageKey,
+    model: draft.model,
+    temperature: draft.temperature,
+    topP: draft.topP,
+    maxOutputTokens: draft.maxOutputTokens,
+    extendedInstructions:
+      draft.extendedInstructions.trim() === ""
+        ? null
+        : draft.extendedInstructions.trim(),
+    voiceEnabled: draft.voiceEnabled,
+    voiceSpeakingRate: draft.voiceSpeakingRate,
+    voiceBargeInEnabled: draft.voiceBargeInEnabled,
+    retrievalCount: draft.retrievalCount,
+    retrievalSimilarityFloor: draft.retrievalSimilarityFloor,
+    noResultsMessage: draft.noResultsMessage.trim(),
+    escalationEnabled: draft.escalationEnabled,
+    escalationTrigger: draft.escalationTrigger,
+    escalationMessage:
+      draft.escalationMessage.trim() === ""
+        ? null
+        : draft.escalationMessage.trim(),
+    publish: options.publish,
+    expectedVersion: options.expectedVersion,
+    idempotencyKey: options.idempotencyKey,
+  };
 }
 
 /* --------------------------------------------------------------- validation */
@@ -498,6 +581,67 @@ function AssistantView({
 }) {
   const workspace = asWorkspace(payload);
   const mode = params.get("mode") === "voice" ? "voice" : "text";
+  const [learnerPrompts, setLearnerPrompts] = useState<
+    { state: "loading" | "ready" | "unavailable"; questions: LearnerPrompt[] }
+  >({ state: "loading", questions: [] });
+  const [suggestedQuestion, setSuggestedQuestion] = useState<{
+    id: string;
+    text: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/analytics/question-intelligence", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as unknown;
+        if (!response.ok || !isRecord(payload) || payload.ok !== true) {
+          throw new Error("question_intelligence_unavailable");
+        }
+        const labels = isRecord(payload.labels) ? payload.labels : null;
+        const metrics = labels && isRecord(labels.metrics) ? labels.metrics : null;
+        const important =
+          metrics && isRecord(metrics.importantQuestions)
+            ? metrics.importantQuestions
+            : null;
+        const value = important && isRecord(important.value) ? important.value : null;
+        const candidates = value && Array.isArray(value.questions)
+          ? value.questions
+          : [];
+        const questions = candidates
+          .flatMap<LearnerPrompt>((candidate): LearnerPrompt[] => {
+            if (!isRecord(candidate)) return [];
+            const id =
+              typeof candidate.messageId === "string"
+                ? candidate.messageId
+                : "";
+            const question =
+              typeof candidate.question === "string"
+                ? candidate.question.trim()
+                : "";
+            if (!id || !question) return [];
+            return [
+              {
+                id,
+                question,
+                groundingOutcome:
+                  typeof candidate.groundingOutcome === "string"
+                    ? candidate.groundingOutcome
+                    : "unknown",
+              },
+            ];
+          })
+          .slice(0, 3);
+        setLearnerPrompts({ state: "ready", questions });
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setLearnerPrompts({ state: "unavailable", questions: [] });
+      });
+    return () => controller.abort();
+  }, []);
 
   if (!workspace) {
     return (
@@ -510,36 +654,105 @@ function AssistantView({
 
   return (
     <>
-      {onConfigure !== null ? (
-        <div className={styles.viewSwitch}>
-          <Button onClick={onConfigure} size="sm">
-            Configure this assistant
-          </Button>
+      <header className={styles.talkHeader}>
+        <div>
+          <p>Talk to your bot</p>
+          <h2>{payload.agent.assistantName}</h2>
+          <span>
+            This is the real grounded conversation. Replies, citations,
+            refusals and voice use the same services your learners receive.
+          </span>
         </div>
-      ) : null}
-      <div className={sectionStyles.agentFrame}>
-        <UsageSignal eventName="conversation.started" />
-        <ConversationClient
-          assistantName={payload.agent.assistantName}
-          tenantName={payload.tenant.displayName}
-          welcomeMessage={payload.agent.welcomeMessage}
-          role={workspace.identity.role}
-          initialMode={mode}
-          initialCourseId={params.get("courseId")}
-          initialLessonId={params.get("lessonId")}
-          courses={workspace.courses.map((course) => ({
-            courseId: course.courseId,
-            title: course.title,
-            modules: course.modules.map((module) => ({
-              moduleId: module.moduleId,
-              title: module.title,
-              lessons: module.lessons.map((lesson) => ({
-                lessonId: lesson.lessonId,
-                title: lesson.title,
+        {onConfigure !== null ? (
+          <Button onClick={onConfigure} size="sm">
+            Configure
+          </Button>
+        ) : null}
+      </header>
+      <div className={styles.talkLayout}>
+        <div className={`${sectionStyles.agentFrame} ${styles.talkFrame}`}>
+          <UsageSignal eventName="conversation.started" />
+          <ConversationClient
+            assistantName={payload.agent.assistantName}
+            tenantName={payload.tenant.displayName}
+            welcomeMessage={payload.agent.welcomeMessage}
+            role={workspace.identity.role}
+            initialMode={mode}
+            initialCourseId={params.get("courseId")}
+            initialLessonId={params.get("lessonId")}
+            surface="panel"
+            courses={workspace.courses.map((course) => ({
+              courseId: course.courseId,
+              title: course.title,
+              modules: course.modules.map((module) => ({
+                moduleId: module.moduleId,
+                title: module.title,
+                lessons: module.lessons.map((lesson) => ({
+                  lessonId: lesson.lessonId,
+                  title: lesson.title,
+                })),
               })),
-            })),
-          }))}
-        />
+            }))}
+            suggestedQuestion={suggestedQuestion}
+          />
+        </div>
+        <aside className={styles.talkAside}>
+          <section>
+            <p>Try what they tried</p>
+            <h3>Learner questions</h3>
+            {learnerPrompts.state === "loading" ? (
+              <div className={styles.talkUnavailable}>Loading recorded questions…</div>
+            ) : learnerPrompts.state === "unavailable" ? (
+              <div className={styles.talkUnavailable}>
+                Recorded learner questions could not be loaded.
+              </div>
+            ) : learnerPrompts.questions.length === 0 ? (
+              <div className={styles.talkUnavailable}>
+                No privacy-reviewed learner questions were recorded in this
+                range.
+              </div>
+            ) : (
+              <div className={styles.talkQuestionList}>
+                {learnerPrompts.questions.map((entry) => (
+                  <button
+                    key={entry.id}
+                    onClick={() =>
+                      setSuggestedQuestion({
+                        id: `${entry.id}:${Date.now()}`,
+                        text: entry.question,
+                      })
+                    }
+                    type="button"
+                  >
+                    <span data-outcome={entry.groundingOutcome} aria-hidden="true" />
+                    <q>{entry.question}</q>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+          <section>
+            <p>Grounding</p>
+            <h3>
+              {workspace.courses.length === 0
+                ? "No courses yet"
+                : `${workspace.courses.length} ${workspace.courses.length === 1 ? "course" : "courses"}`}
+            </h3>
+            <ul className={styles.talkCourseList}>
+              {workspace.courses.slice(0, 4).map((course) => (
+                <li key={course.courseId}>
+                  <span>{course.title}</span>
+                  <small>{course.status}</small>
+                </li>
+              ))}
+            </ul>
+            {workspace.courses.length > 4 ? (
+              <span className={styles.talkMore}>
+                +{workspace.courses.length - 4} more
+              </span>
+            ) : null}
+          </section>
+        </aside>
       </div>
     </>
   );
@@ -696,6 +909,100 @@ function LivePreview({
 
       <p className={styles.previewFoot}>
         The learner question above is sample text, not a stored conversation.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ effect panel */
+
+/**
+ * The mockup's "Effect of this change" column, built only from numbers this
+ * workspace already has: `tenant_get_billing_summary` (via the same route
+ * PlanUsageSettings reads) for volume and durable billed spend. Two numbers
+ * the mockup shows are deliberately absent rather than guessed:
+ *   - "If you switch to X" costs nothing without real average tokens per
+ *     answer per model, which isn't tracked anywhere queryable here.
+ *   - "Median response" is `answerLatencyMs` in the analytics RPC, and that
+ *     metric's own type is `AnalyticsMetric<never>` with the comment "Never
+ *     known today: no request-start timestamp is persisted." Printing a
+ *     number for it would be inventing one outright.
+ */
+function ModelEffectPanel() {
+  const [usage, setUsage] = useState<TenantPlanUsage | "loading" | "error">(
+    "loading",
+  );
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/settings/plan-usage", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await readJson(response);
+        if (!response.ok || !isRecord(body) || body.ok !== true) {
+          throw new Error();
+        }
+        if (active) setUsage(body as TenantPlanUsage);
+      })
+      .catch(() => {
+        if (active) setUsage("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const money =
+    usage !== "loading" && usage !== "error"
+      ? (micro: number) =>
+          new Intl.NumberFormat(undefined, {
+            style: "currency",
+            currency: usage.currency,
+            maximumFractionDigits: 2,
+          }).format(micro / usage.microUnitsPerMajorUnit)
+      : null;
+
+  return (
+    <div className={styles.previewColumn}>
+      <div className={styles.previewHead}>
+        <p className={styles.previewEyebrow}>Effect of this change</p>
+        <p className={styles.previewNote}>
+          What this workspace has actually spent and run this month, read from
+          the same durable ledger Plan &amp; usage shows.
+        </p>
+      </div>
+      <div className={styles.effectCard}>
+        <div className={styles.effectRow}>
+          <span>Operations this month</span>
+          <strong>
+            {usage === "loading"
+              ? "…"
+              : usage === "error"
+                ? "Not known"
+                : usage.callsThisMonth.toLocaleString()}
+          </strong>
+        </div>
+        <div className={styles.effectRow}>
+          <span>Billed this month</span>
+          <strong>
+            {usage === "loading"
+              ? "…"
+              : usage === "error" || money === null
+                ? "Not known"
+                : money(usage.monthToDateBilledMicro)}
+          </strong>
+        </div>
+        <div className={styles.effectRow}>
+          <span>Median response</span>
+          <strong className={styles.effectUnknown}>
+            Not known — no per-answer response time is recorded yet
+          </strong>
+        </div>
+      </div>
+      <p className={styles.previewFoot}>
+        Operations and billed cost cover every provider call this workspace
+        makes this month — chat, classification, voice and embeddings — not
+        chat answers alone, because the ledger does not split spend by
+        capability for this readout.
       </p>
     </div>
   );
@@ -1029,18 +1336,23 @@ function RevisionHistory({
 
 /* -------------------------------------------------------------- the editor */
 
+type ConfigView = "overview" | "bot" | "appearance" | "model";
+
 function AgentConfigurator({
   payload,
   close,
   refresh,
   onOpenAssistant,
+  view,
 }: {
   payload: ShellPayload;
   close: () => void;
   refresh: () => Promise<void>;
   onOpenAssistant: () => void;
+  view: ConfigView;
 }) {
   const dataVersion = useDataVersion();
+  const { openPanel, panelHref } = usePanelRouter();
   const headingId = useId();
   const workspace = asWorkspace(payload);
   const courses = useMemo(
@@ -1295,47 +1607,6 @@ function AgentConfigurator({
     async (publish: boolean) => {
       if (draft === null || server === null) return;
       if (Object.keys(validate(draft)).length > 0) return;
-      const body = {
-        assistantName: draft.assistantName.trim(),
-        iconGlyph: draft.iconGlyph.trim() === "" ? null : draft.iconGlyph.trim(),
-        primaryColor: draft.primaryColor,
-        accentColor: draft.accentColor,
-        surfaceColor: draft.surfaceColor,
-        textColor: draft.textColor,
-        welcomeMessage: draft.welcomeMessage.trim(),
-        personaInstructions:
-          draft.personaInstructions.trim() === ""
-            ? null
-            : draft.personaInstructions.trim(),
-        tone: draft.tone,
-        voice:
-          draft.voice.trim() === "" ? null : draft.voice.trim().toLowerCase(),
-        courseScope: draft.scopeAll ? "all" : draft.courseIds,
-        logoStorageKey: draft.logoStorageKey,
-        avatarStorageKey: draft.avatarStorageKey,
-        model: draft.model,
-        temperature: draft.temperature,
-        topP: draft.topP,
-        maxOutputTokens: draft.maxOutputTokens,
-        extendedInstructions:
-          draft.extendedInstructions.trim() === ""
-            ? null
-            : draft.extendedInstructions.trim(),
-        voiceEnabled: draft.voiceEnabled,
-        voiceSpeakingRate: draft.voiceSpeakingRate,
-        voiceBargeInEnabled: draft.voiceBargeInEnabled,
-        retrievalCount: draft.retrievalCount,
-        retrievalSimilarityFloor: draft.retrievalSimilarityFloor,
-        noResultsMessage: draft.noResultsMessage.trim(),
-        escalationEnabled: draft.escalationEnabled,
-        escalationTrigger: draft.escalationTrigger,
-        escalationMessage:
-          draft.escalationMessage.trim() === ""
-            ? null
-            : draft.escalationMessage.trim(),
-        publish,
-        expectedVersion: server.expectedVersion,
-      };
 
       // One key per distinct payload: a retry of the same save replays the
       // prior write instead of appending a second configuration version, while
@@ -1348,6 +1619,12 @@ function AgentConfigurator({
           : `save-${crypto.randomUUID()}`;
       operationRef.current = { key: idempotencyKey, fingerprint: stamp };
 
+      const body = buildAgentSaveBody(draft, {
+        publish,
+        expectedVersion: server.expectedVersion,
+        idempotencyKey,
+      });
+
       setSaving(publish ? "publish" : "draft");
       setSaveError(null);
       setStatus(publish ? "Publishing…" : "Saving draft…");
@@ -1355,7 +1632,7 @@ function AgentConfigurator({
         const response = await fetch("/api/agent", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...body, idempotencyKey }),
+          body: JSON.stringify(body),
         });
         const result = await readJson(response);
         if (!response.ok) {
@@ -1518,13 +1795,16 @@ function AgentConfigurator({
     server.liveVersion === null
       ? "Never published"
       : `Live · version ${server.liveVersion}`;
+  const showAppearance = view === "overview" || view === "appearance";
+  const showBot = view === "overview" || view === "bot";
+  const showModel = view === "overview" || view === "model";
 
   return (
     <div className={styles.editorRoot} ref={rootRef}>
       <PanelFrame
         autoFocus={false}
         className={styles.frame}
-        description="Everything here is stored per workspace. Colours, logo and copy apply to the whole app the moment you publish — a saved draft is kept for you alone and changes nothing a learner or the assistant sees."
+        description="Everything here is stored per workspace. Publish makes the selected identity, behaviour and grounding live; a saved draft stays private."
         eyebrow="Assistant configuration"
         footer={
           <>
@@ -1578,6 +1858,45 @@ function AgentConfigurator({
         side="inline"
         title={draft.assistantName.trim() || "Your assistant"}
       >
+        <nav className={styles.subnav} aria-label="Assistant settings">
+          {[
+            { key: "overview", label: "Overview" },
+            { key: "bot", label: "The bot" },
+            { key: "appearance", label: "Appearance" },
+            { key: "model", label: "Model & grounding" },
+          ].map((item) => {
+            const href = panelHref(
+              "agent",
+              item.key === "overview" ? undefined : { view: item.key },
+            );
+            return (
+              <a
+                aria-current={view === item.key ? "page" : undefined}
+                className={styles.subnavLink}
+                href={href}
+                key={item.key}
+                onClick={(event) => {
+                  if (
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey ||
+                    event.button !== 0
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  openPanel(
+                    "agent",
+                    item.key === "overview" ? undefined : { view: item.key },
+                  );
+                }}
+              >
+                {item.label}
+              </a>
+            );
+          })}
+        </nav>
         <div className={styles.layout}>
           <div className={styles.form}>
             {conflict ? (
@@ -1623,7 +1942,11 @@ function AgentConfigurator({
               </p>
             ) : null}
 
-            <section className={styles.group} aria-labelledby={`${headingId}-identity`}>
+            <section
+              className={styles.group}
+              aria-labelledby={`${headingId}-identity`}
+              hidden={!(showAppearance || showBot)}
+            >
               <h3 className={styles.groupTitle} id={`${headingId}-identity`}>
                 Identity
               </h3>
@@ -1688,23 +2011,127 @@ function AgentConfigurator({
               </div>
             </section>
 
-            <AvatarStudio
-              assistantName={draft.assistantName}
-              disabled={busy}
-              monogram={
-                (draft.assistantName.trim().charAt(0) ||
-                  draft.iconGlyph.trim().charAt(0) ||
-                  "A").toUpperCase()
-              }
-            />
+            <section
+              className={styles.group}
+              aria-labelledby={`${headingId}-icon`}
+              hidden={!showAppearance}
+            >
+              <h3 className={styles.groupTitle} id={`${headingId}-icon`}>
+                Icon
+              </h3>
+              <p className={styles.groupNote}>
+                Shown wherever there is no logo image — prefer an uploaded
+                logo above for a wordmark or crest; these are single-glyph
+                presets for everyone else.
+              </p>
+              <div className={styles.iconGrid} role="radiogroup" aria-label="Icon preset">
+                {[
+                  { glyph: "💬", label: "Chat bubble" },
+                  { glyph: "✉️", label: "Message" },
+                  { glyph: "📖", label: "Book" },
+                  { glyph: "❓", label: "Help" },
+                  { glyph: "👤", label: "Person" },
+                  { glyph: "💡", label: "Idea" },
+                  { glyph: "◎", label: "Corso brand mark (default)" },
+                ].map((option) => (
+                  <button
+                    aria-label={option.label}
+                    aria-pressed={draft.iconGlyph.trim() === option.glyph || undefined}
+                    className={styles.iconChip}
+                    data-selected={
+                      draft.iconGlyph.trim() === option.glyph || undefined
+                    }
+                    disabled={busy}
+                    key={option.glyph}
+                    onClick={() => update("iconGlyph", option.glyph)}
+                    type="button"
+                  >
+                    {option.glyph}
+                  </button>
+                ))}
+              </div>
+            </section>
 
-            <section className={styles.group} aria-labelledby={`${headingId}-colour`}>
+            <div hidden={!showAppearance}>
+              <AvatarStudio
+                assistantName={draft.assistantName}
+                disabled={busy}
+                monogram={
+                  (draft.assistantName.trim().charAt(0) ||
+                    draft.iconGlyph.trim().charAt(0) ||
+                    "A").toUpperCase()
+                }
+              />
+            </div>
+
+            <section
+              className={styles.group}
+              aria-labelledby={`${headingId}-colour`}
+              hidden={!showAppearance}
+            >
               <h3 className={styles.groupTitle} id={`${headingId}-colour`}>
                 Colour
               </h3>
               <p className={styles.groupNote}>
                 These four values theme the entire product, not just the chat.
               </p>
+              {/*
+               * Curated preset values a creator can click instead of typing a
+               * hex — content, not UI chrome, so the "never hardcode a hex"
+               * rule (which protects this file's own theme surfaces) does not
+               * apply to the swatches themselves. They set Primary, the one
+               * colour that reaches the launcher, header and chat bubbles.
+               */}
+              <div className={styles.swatchRow} role="group" aria-label="Preset colours">
+                {[
+                  "#4a637f",
+                  "#1d7a33",
+                  "#b45309",
+                  "#c53030",
+                  "#7b3fa0",
+                  "#0e7490",
+                  "#1d1d1f",
+                ].map((hex) => (
+                  <button
+                    aria-label={`Use ${hex} as the primary colour`}
+                    aria-pressed={
+                      normalizeHex(draft.primaryColor) === hex || undefined
+                    }
+                    className={styles.swatch}
+                    data-selected={
+                      normalizeHex(draft.primaryColor) === hex || undefined
+                    }
+                    disabled={busy}
+                    key={hex}
+                    onClick={() => update("primaryColor", hex)}
+                    style={{ background: hex }}
+                    type="button"
+                  />
+                ))}
+              </div>
+              {(() => {
+                const ratio = contrastRatio(draft.primaryColor, "#ffffff");
+                return (
+                  <p className={styles.contrastReadout}>
+                    <span
+                      className={styles.contrastDot}
+                      data-pass={
+                        ratio !== undefined && passesAA(ratio, "ui")
+                          ? "true"
+                          : "false"
+                      }
+                      aria-hidden="true"
+                    />
+                    {ratio === undefined
+                      ? "Contrast against white could not be measured — the primary colour is not a readable hex value."
+                      : `Contrast against white: ${ratio.toFixed(1)}:1 — ${
+                          passesAA(ratio, "ui")
+                            ? "clears the 3:1 minimum for UI elements."
+                            : "below the 3:1 minimum for UI elements. Darken it for readable buttons and the launcher."
+                        }`}
+                  </p>
+                );
+              })()}
               <div className={styles.pair}>
                 <ColorField
                   contrastAgainst={draft.surfaceColor}
@@ -1743,73 +2170,152 @@ function AgentConfigurator({
 
             <section
               className={styles.group}
+              aria-labelledby={`${headingId}-provider`}
+              hidden={!showModel}
+            >
+              <h3 className={styles.groupTitle} id={`${headingId}-provider`}>
+                Provider
+              </h3>
+              <p className={styles.groupNote}>
+                OpenAI is available as a platform-managed service or with this
+                workspace&apos;s own encrypted key. Removing a workspace key
+                returns the assistant to the managed provider automatically.
+              </p>
+              <ProviderCredentialCard />
+            </section>
+
+            <section
+              className={styles.group}
               aria-labelledby={`${headingId}-generation`}
+              hidden={!showModel}
             >
               <h3 className={styles.groupTitle} id={`${headingId}-generation`}>
                 Generation
               </h3>
               <p className={styles.groupNote}>
-                The defaults are tuned for this assistant already — most
-                workspaces never need to touch these.
+                Retrieval is identical whichever model you pick — only the
+                writing changes. The defaults are tuned for this assistant
+                already; most workspaces never need to touch these.
               </p>
-              <SelectField
-                disabled={busy}
-                help={
-                  MODEL_HELP[draft.model] ??
-                  "Chosen from the platform-allowed set only."
-                }
-                label="Model"
-                onChange={(event) => update("model", event.target.value)}
-                options={modelOptions}
-                value={draft.model}
-              />
-              <div className={styles.pair}>
-                <TextField
+              <div
+                aria-label="Model"
+                className={styles.modelCards}
+                role="radiogroup"
+              >
+                {modelOptions.map((option) => {
+                  const isDefault = server.defaults.model === option.value;
+                  return (
+                    <label
+                      className={styles.modelCard}
+                      data-selected={draft.model === option.value || undefined}
+                      key={option.value}
+                    >
+                      <input
+                        checked={draft.model === option.value}
+                        disabled={busy}
+                        name={`${headingId}-model`}
+                        onChange={() => update("model", option.value)}
+                        type="radio"
+                      />
+                      <span className={styles.modelCardBody}>
+                        <strong>
+                          {MODEL_LABEL[option.value] ?? option.label}
+                          {isDefault ? " — recommended" : ""}
+                        </strong>
+                        <small>
+                          {MODEL_HELP[option.value] ??
+                            "Chosen from the platform-allowed set only."}
+                        </small>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className={styles.groupNote}>
+                Cost and typical response time aren&rsquo;t shown per option:
+                neither the price book (<code>cost-metering.ts</code>) nor
+                per-answer timing is exposed to this panel today, and a
+                guessed figure would be worse than none.
+              </p>
+
+              <div className={styles.sliderField}>
+                <div className={styles.sliderHead}>
+                  <span className={styles.sliderLabel}>Creativity</span>
+                  <span className={styles.sliderValue}>
+                    {draft.temperature.toFixed(2)}
+                  </span>
+                </div>
+                <input
+                  aria-describedby={`${headingId}-creativity-note`}
+                  aria-label="Creativity"
+                  className={styles.slider}
                   disabled={busy}
-                  error={errors.temperature}
-                  help="0 is the most literal and repeatable; 2 is the most varied."
-                  label="Temperature"
                   max={2}
                   min={0}
                   onChange={(event) =>
                     update("temperature", Number(event.target.value))
                   }
                   step={0.05}
-                  type="number"
+                  type="range"
                   value={draft.temperature}
                 />
-                <TextField
-                  disabled={busy}
-                  error={errors.topP}
-                  help="Narrows how many candidate words the model considers. Leave at 1 unless you know you want less."
-                  label="Top-p"
-                  max={1}
-                  min={0.01}
-                  onChange={(event) =>
-                    update("topP", Number(event.target.value))
-                  }
-                  step={0.01}
-                  type="number"
-                  value={draft.topP}
-                />
-                <TextField
-                  disabled={busy}
-                  error={errors.maxOutputTokens}
-                  help="Upper bound on how long a single answer can run."
-                  label="Max output tokens"
-                  max={4000}
-                  min={64}
-                  onChange={(event) =>
-                    update("maxOutputTokens", Number(event.target.value))
-                  }
-                  step={1}
-                  type="number"
-                  value={draft.maxOutputTokens}
-                />
+                <p className={styles.sliderCaption} id={`${headingId}-creativity-note`}>
+                  Low is right for a course bot. Above about 1.0 it starts
+                  paraphrasing your lessons instead of quoting them.
+                </p>
+                {errors.temperature !== undefined ? (
+                  <p className={styles.error} role="alert">
+                    {errors.temperature}
+                  </p>
+                ) : null}
               </div>
+
+              <TextField
+                disabled={busy}
+                error={errors.topP}
+                help="Narrows how many candidate words the model considers. Leave at 1 unless you know you want less."
+                label="Top-p"
+                max={1}
+                min={0.01}
+                onChange={(event) =>
+                  update("topP", Number(event.target.value))
+                }
+                step={0.01}
+                type="number"
+                value={draft.topP}
+              />
+
+              <details className={styles.disclosureRow}>
+                <summary>
+                  <span>Longest answer</span>
+                  <span className={styles.disclosureValue}>
+                    {draft.maxOutputTokens.toLocaleString()} tokens
+                  </span>
+                </summary>
+                <div className={styles.disclosureBody}>
+                  <TextField
+                    disabled={busy}
+                    error={errors.maxOutputTokens}
+                    help="Upper bound on how long a single answer can run, in tokens (there is no honest words-per-token conversion to show instead)."
+                    label="Max output tokens"
+                    max={4000}
+                    min={64}
+                    onChange={(event) =>
+                      update("maxOutputTokens", Number(event.target.value))
+                    }
+                    step={1}
+                    type="number"
+                    value={draft.maxOutputTokens}
+                  />
+                </div>
+              </details>
             </section>
 
-            <section className={styles.group} aria-labelledby={`${headingId}-voice`}>
+            <section
+              className={styles.group}
+              aria-labelledby={`${headingId}-voice`}
+              hidden={!showBot}
+            >
               <h3 className={styles.groupTitle} id={`${headingId}-voice`}>
                 How it speaks
               </h3>
@@ -1907,7 +2413,11 @@ function AgentConfigurator({
               ) : null}
             </section>
 
-            <section className={styles.group} aria-labelledby={`${headingId}-scope`}>
+            <section
+              className={styles.group}
+              aria-labelledby={`${headingId}-scope`}
+              hidden={!showBot}
+            >
               <h3 className={styles.groupTitle} id={`${headingId}-scope`}>
                 What it can answer about
               </h3>
@@ -1957,6 +2467,7 @@ function AgentConfigurator({
             <section
               className={styles.group}
               aria-labelledby={`${headingId}-grounding`}
+              hidden={!showModel}
             >
               <h3 className={styles.groupTitle} id={`${headingId}-grounding`}>
                 Grounding
@@ -1967,26 +2478,20 @@ function AgentConfigurator({
                 Refusing on an empty search is not optional here — only the
                 wording of that refusal is yours to set.
               </p>
-              <div className={styles.pair}>
-                <TextField
+              <div className={styles.sliderField}>
+                <div className={styles.sliderHead}>
+                  <span className={styles.sliderLabel}>
+                    Source match threshold
+                  </span>
+                  <span className={styles.sliderValue}>
+                    {draft.retrievalSimilarityFloor.toFixed(2)}
+                  </span>
+                </div>
+                <input
+                  aria-describedby={`${headingId}-threshold-note`}
+                  aria-label="Source match threshold"
+                  className={styles.slider}
                   disabled={busy}
-                  error={errors.retrievalCount}
-                  help="How many passages are retrieved for each question."
-                  label="Passages retrieved"
-                  max={20}
-                  min={1}
-                  onChange={(event) =>
-                    update("retrievalCount", Number(event.target.value))
-                  }
-                  step={1}
-                  type="number"
-                  value={draft.retrievalCount}
-                />
-                <TextField
-                  disabled={busy}
-                  error={errors.retrievalSimilarityFloor}
-                  help="Passages scoring below this are treated as not found. Higher is stricter."
-                  label="Similarity floor"
                   max={1}
                   min={0}
                   onChange={(event) =>
@@ -1996,10 +2501,45 @@ function AgentConfigurator({
                     )
                   }
                   step={0.05}
-                  type="number"
+                  type="range"
                   value={draft.retrievalSimilarityFloor}
                 />
+                <p className={styles.sliderCaption} id={`${headingId}-threshold-note`}>
+                  Below this, a passage is treated as not found and the
+                  assistant refuses instead of answering. Lower it and you get
+                  more answers — and more wrong ones.
+                </p>
+                {errors.retrievalSimilarityFloor !== undefined ? (
+                  <p className={styles.error} role="alert">
+                    {errors.retrievalSimilarityFloor}
+                  </p>
+                ) : null}
               </div>
+
+              <details className={styles.disclosureRow}>
+                <summary>
+                  <span>Sources per answer</span>
+                  <span className={styles.disclosureValue}>
+                    Up to {draft.retrievalCount}
+                  </span>
+                </summary>
+                <div className={styles.disclosureBody}>
+                  <TextField
+                    disabled={busy}
+                    error={errors.retrievalCount}
+                    help="How many passages are retrieved for each question."
+                    label="Passages retrieved"
+                    max={20}
+                    min={1}
+                    onChange={(event) =>
+                      update("retrievalCount", Number(event.target.value))
+                    }
+                    step={1}
+                    type="number"
+                    value={draft.retrievalCount}
+                  />
+                </div>
+              </details>
               <TextAreaField
                 disabled={busy}
                 error={errors.noResultsMessage}
@@ -2018,6 +2558,7 @@ function AgentConfigurator({
             <section
               className={styles.group}
               aria-labelledby={`${headingId}-escalation`}
+              hidden={!showBot}
             >
               <h3 className={styles.groupTitle} id={`${headingId}-escalation`}>
                 Escalation
@@ -2062,38 +2603,44 @@ function AgentConfigurator({
               ) : null}
             </section>
 
-            <PreviewRunner disabled={busy} draft={draft} />
+            <div hidden={view === "appearance"}>
+              <PreviewRunner disabled={busy} draft={draft} />
+            </div>
 
-            <RevisionHistory
-              busy={busy}
-              expectedVersion={server.expectedVersion}
-              onRestored={async (nextExpectedVersion, configuration) => {
-                setServer((current) =>
-                  current === null
-                    ? current
-                    : {
-                        ...current,
-                        expectedVersion: nextExpectedVersion,
-                        baseline: toDraft(configuration, current.defaults),
-                        liveVersion:
-                          configuration !== null && configuration.status === "published"
-                            ? nextExpectedVersion
-                            : current.liveVersion,
-                        draftVersion:
-                          configuration !== null && configuration.status === "draft"
-                            ? nextExpectedVersion
-                            : current.draftVersion,
-                      },
-                );
-                setDraft(
-                  configuration === null
-                    ? null
-                    : toDraft(configuration, server.defaults),
-                );
-                setStatus(`Restored version ${nextExpectedVersion}.`);
-                await refresh();
-              }}
-            />
+            <div hidden={view !== "overview"}>
+              <RevisionHistory
+                busy={busy}
+                expectedVersion={server.expectedVersion}
+                onRestored={async (nextExpectedVersion, configuration) => {
+                  setServer((current) =>
+                    current === null
+                      ? current
+                      : {
+                          ...current,
+                          expectedVersion: nextExpectedVersion,
+                          baseline: toDraft(configuration, current.defaults),
+                          liveVersion:
+                            configuration !== null &&
+                            configuration.status === "published"
+                              ? nextExpectedVersion
+                              : current.liveVersion,
+                          draftVersion:
+                            configuration !== null &&
+                            configuration.status === "draft"
+                              ? nextExpectedVersion
+                              : current.draftVersion,
+                        },
+                  );
+                  setDraft(
+                    configuration === null
+                      ? null
+                      : toDraft(configuration, server.defaults),
+                  );
+                  setStatus(`Restored version ${nextExpectedVersion}.`);
+                  await refresh();
+                }}
+              />
+            </div>
 
             <p className={styles.boundary}>
               <strong>Nothing here is invented.</strong> Every field is read from
@@ -2108,13 +2655,17 @@ function AgentConfigurator({
             </div>
           </div>
 
-          <LivePreview
-            avatarUrl={avatarUrl}
-            draft={draft}
-            logoUrl={logoUrl}
-            scopeSummary={scopeSummary}
-            tenantName={payload.tenant.displayName}
-          />
+          {view === "model" ? (
+            <ModelEffectPanel />
+          ) : (
+            <LivePreview
+              avatarUrl={avatarUrl}
+              draft={draft}
+              logoUrl={logoUrl}
+              scopeSummary={scopeSummary}
+              tenantName={payload.tenant.displayName}
+            />
+          )}
         </div>
       </PanelFrame>
     </div>
@@ -2138,7 +2689,15 @@ export function AgentPanel({ payload, params, close, refresh }: PanelProps) {
   const role = workspace?.identity.role ?? payload.role;
   const canConfigure = ADMIN_ROLES.has(role);
   const mode = params.get("mode");
-  const wantsConversation = mode === "voice" || mode === "chat";
+  const requestedView = params.get("view");
+  const wantsConversation =
+    mode === "voice" || mode === "chat" || requestedView === "talk";
+  const view: ConfigView =
+    requestedView === "bot" ||
+    requestedView === "appearance" ||
+    requestedView === "model"
+      ? requestedView
+      : "overview";
 
   if (!canConfigure || wantsConversation) {
     return (
@@ -2158,6 +2717,7 @@ export function AgentPanel({ payload, params, close, refresh }: PanelProps) {
       onOpenAssistant={() => openPanel("agent", { mode: "chat" })}
       payload={payload}
       refresh={refresh}
+      view={view}
     />
   );
 }

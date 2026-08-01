@@ -4,6 +4,10 @@ import {
   type GroundingSource,
 } from "../../../../lib/learning-provider";
 import {
+  ANSWER_ADAPTER_ID,
+  completeWithManagedWidgetProvider,
+} from "../../../../lib/provider-runtime";
+import {
   createWidgetSupabaseClient,
   isConversationRef,
   isCourseRef,
@@ -135,6 +139,17 @@ export async function POST(request: Request) {
       tone: asked.directive?.tone ?? null,
       history: [],
       sources,
+      completion: (context, providerRequest) =>
+        completeWithManagedWidgetProvider({
+          supabase,
+          context,
+          request: providerRequest,
+          adapterId: ANSWER_ADAPTER_ID,
+          widgetKey: key,
+          origin,
+          operationToken,
+          actorRef: conversationRef,
+        }),
     });
 
     const evidence = sources.map((source) => ({

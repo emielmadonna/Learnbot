@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { extractPlainText } from "../src/lib/ingestion/extract";
+import {
+  DocumentExtractionError,
+  extractPlainText,
+  extractionFromParsedDocument,
+} from "../src/lib/ingestion/extract";
 
 function bytes(text: string): Uint8Array {
   return new TextEncoder().encode(text);
@@ -51,4 +55,31 @@ test("content hash is stable for identical bytes", () => {
   const b = extractPlainText(bytes("hello world"), "text/plain");
   assert.equal(a.contentHash, b.contentHash);
   assert.equal(a.contentHash.length, 64);
+});
+
+test("parsed PDF text carries durable page anchors", () => {
+  const result = extractionFromParsedDocument(
+    "First page\n\nSecond page",
+    "pdf_text_v1",
+    [
+      { offset: 0, page: 1, line: 1 },
+      { offset: 12, page: 2, line: 3 },
+    ],
+  );
+  assert.equal(result.extractor, "pdf_text_v1");
+  assert.deepEqual(
+    result.sourceLocations
+      .filter((location) => location.value.startsWith("Page "))
+      .map((location) => location.value),
+    ["Page 1", "Page 2"],
+  );
+});
+
+test("parsed documents with no text are refused", () => {
+  assert.throws(
+    () => extractionFromParsedDocument(" \n ", "docx_raw_text_v1"),
+    (error: unknown) =>
+      error instanceof DocumentExtractionError &&
+      error.code === "document_has_no_extractable_text",
+  );
 });

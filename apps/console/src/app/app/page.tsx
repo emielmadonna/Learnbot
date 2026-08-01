@@ -17,6 +17,7 @@ import {
   parseTenantSections,
 } from "../../lib/supabase/platform-rpc";
 import { createServerSupabaseClient } from "../../lib/supabase/server";
+import { resolveAppAccessMode } from "./access-mode";
 
 const TENANT_ADMIN_ROLES = ["tenant_owner", "tenant_admin"];
 
@@ -80,6 +81,14 @@ async function resolveSections(
     for (const section of sections) {
       if (!isPlatformSectionKey(section.sectionKey)) continue;
       const key = section.sectionKey as PanelKey;
+      // Platform administration is an account-level entitlement. A client's
+      // own section catalogue must never hide the operator control plane from
+      // an authorized platform administrator who also has a tenant
+      // membership.
+      if (key === "platform" && access.canManagePlatform) {
+        permitted.platform = true;
+        continue;
+      }
       // A tenant may switch a section off, but never on past its role gate.
       permitted[key] = permitted[key] && section.enabled;
     }
@@ -90,6 +99,11 @@ async function resolveSections(
 }
 
 function toShellRole(identityRole: string, canManagePlatform: boolean): ShellRole {
+  // Platform authority takes precedence over any tenant membership. The same
+  // human may legitimately own a client workspace, but that must not collapse
+  // the platform dock into the client-only creator dock.
+  if (canManagePlatform) return "platform_owner";
+
   switch (identityRole) {
     case "tenant_owner":
       return "tenant_owner";
@@ -100,8 +114,7 @@ function toShellRole(identityRole: string, canManagePlatform: boolean): ShellRol
     case "creator":
       return "creator";
     default:
-      // A platform operator without a tenant-scoped role is a platform owner.
-      return canManagePlatform ? "platform_owner" : "learner";
+      return "learner";
   }
 }
 
@@ -127,8 +140,67 @@ export default async function AuthenticatedAppPage() {
     redirect("/auth/sign-in?error=authentication_required&next=/app");
   }
 
+  const platformAuthorization = await supabase.rpc(
+    "platform_admin_is_authorized",
+  );
+  const canManagePlatform =
+    !platformAuthorization.error && platformAuthorization.data === true;
   const context = await getCurrentTenantContext(supabase);
-  if (!context.selected || !context.tenantId) redirect("/onboarding");
+  const accessMode = resolveAppAccessMode({
+    platformAuthorized: canManagePlatform,
+    selectedTenant: context.selected && context.tenantId !== null,
+  });
+
+  const accountName =
+    (typeof user.user_metadata?.full_name === "string"
+      ? user.user_metadata.full_name.trim().split(/\s+/u)[0]
+      : "") ||
+    user.email?.split("@")[0] ||
+    "there";
+
+  if (accessMode === "onboarding") redirect("/onboarding");
+  if (accessMode === "platform_control_plane") {
+    const payload: ShellPayload = {
+      role: "platform_owner",
+      tenant: {
+        tenantId: "",
+        slug: "",
+        displayName: "Corso",
+      },
+      agent: {
+        assistantName: "Platform",
+        logoUrl: null,
+        avatarUrl: null,
+        iconGlyph: "◎",
+        primaryColor: "#4a637f",
+        accentColor: "#4a637f",
+        surfaceColor: "#ffffff",
+        textColor: "#1d1d1f",
+        welcomeMessage: "Manage Corso client workspaces.",
+        personaInstructions: "",
+        tone: "",
+        voice: "Default",
+        courseScope: "all",
+      },
+      sections: {
+        agent: false,
+        course: false,
+        insights: false,
+        people: false,
+        platform: true,
+        widget: false,
+        settings: false,
+      },
+      workspace: null,
+    };
+    return (
+      <AppShell
+        payload={payload}
+        accountName={accountName}
+        accountEmail={user.email ?? null}
+      />
+    );
+  }
 
   let workspace;
   try {
@@ -136,12 +208,6 @@ export default async function AuthenticatedAppPage() {
   } catch {
     redirect("/onboarding?error=selection_failed");
   }
-
-  const platformAuthorization = await supabase.rpc(
-    "platform_admin_is_authorized",
-  );
-  const canManagePlatform =
-    !platformAuthorization.error && platformAuthorization.data === true;
 
   const identityRole = workspace.identity.role || context.identityRole || "";
   const canAdminister = TENANT_ADMIN_ROLES.includes(identityRole);
@@ -153,7 +219,7 @@ export default async function AuthenticatedAppPage() {
   // from non-admins. Both paths degrade to workspace values, so the shell
   // themes correctly whether or not the agent migration has been applied.
   const agent: AgentConfig = {
-    assistantName: brand?.assistantName ?? "LearningBot",
+    assistantName: brand?.assistantName ?? "Corso",
     logoUrl: await signedBrandAsset(supabase, brand?.logoStorageKey),
     avatarUrl: await signedBrandAsset(supabase, brand?.avatarStorageKey),
     iconGlyph: brand?.iconGlyph ?? "◎",
@@ -162,10 +228,10 @@ export default async function AuthenticatedAppPage() {
     // chosen colours should look like an unbranded product, not like somebody
     // else's: these used to be one client's green and gold, which is how that
     // palette ended up painting the whole console.
-    primaryColor: brand?.primaryColor ?? "#2c3230",
-    accentColor: brand?.accentColor ?? "#5f6764",
-    surfaceColor: brand?.surfaceColor ?? "#f7f8f8",
-    textColor: brand?.textColor ?? "#181d1b",
+    primaryColor: brand?.primaryColor ?? "#4a637f",
+    accentColor: brand?.accentColor ?? "#4a637f",
+    surfaceColor: brand?.surfaceColor ?? "#ffffff",
+    textColor: brand?.textColor ?? "#1d1d1f",
     welcomeMessage:
       brand?.welcomeMessage ??
       "Ask a question about your learning and I’ll help you find the answer.",
@@ -195,13 +261,6 @@ export default async function AuthenticatedAppPage() {
     sections,
     workspace,
   };
-
-  const accountName =
-    (typeof user.user_metadata?.full_name === "string"
-      ? user.user_metadata.full_name.trim().split(/\s+/u)[0]
-      : "") ||
-    user.email?.split("@")[0] ||
-    "there";
 
   return (
     <AppShell

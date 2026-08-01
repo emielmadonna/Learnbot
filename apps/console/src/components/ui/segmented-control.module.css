@@ -1,0 +1,64 @@
+/*
+  A segmented control is one small, fixed choice rendered as pills inside a
+  recessed track — never a form of navigation, never more than a handful of
+  options. The active segment reads as a raised chip, not a colour change.
+*/
+
+.segmented {
+  display: inline-flex;
+  min-width: 0;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: var(--text-sm);
+}
+
+.segment {
+  min-height: 30px;
+  padding: 7px 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-snug);
+  line-height: 1;
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease);
+}
+
+.segment:hover:not(:disabled):not(.active) {
+  color: var(--ink);
+}
+
+.segment:focus-visible {
+  position: relative;
+  z-index: 1;
+  box-shadow: var(--focus-ring);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.segment:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.active {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: var(--weight-strong);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segment {
+    transition: none;
+  }
+}

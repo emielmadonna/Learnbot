@@ -4,12 +4,20 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AnalyticsRpcError,
+  parseAnalyticsAnswerQuality,
   parseAnalyticsLearnerProgress,
+  parseAnalyticsQuestionDistribution,
   parseAnalyticsTenantOverview,
+  type AnalyticsAnswerQuality,
   type AnalyticsLearnerProgress,
+  type AnalyticsQuestionDistribution,
   type AnalyticsTenantOverview,
 } from "../../lib/supabase/analytics-rpc";
 import type { LearningCourse } from "../../lib/supabase/learning-rpc";
+import {
+  parseAnalyticsQuestionLabels,
+  type AnalyticsQuestionLabels,
+} from "../../lib/supabase/question-intelligence-rpc";
 import {
   PlatformRpcError,
   parsePlatformOverview,
@@ -82,15 +90,6 @@ export function HomeSection({
     );
   }
 
-  if (payload.role === "platform_owner") {
-    return (
-      <div className={styles.page}>
-        {notices}
-        <PlatformHome accountName={accountName} payload={payload} />
-      </div>
-    );
-  }
-
   return (
     <div className={styles.page}>
       {notices}
@@ -131,22 +130,6 @@ function formatMoment(value: string | null | undefined): string | null {
     minute: "2-digit",
     month: "short",
   });
-}
-
-const ROLE_LABELS: Record<ShellPayload["role"], string> = {
-  learner: "Learner",
-  creator: "Creator",
-  teacher: "Teacher",
-  tenant_admin: "Workspace admin",
-  tenant_owner: "Workspace owner",
-  platform_owner: "Platform owner",
-};
-
-/** Possessive form of a workspace name: "Estie" → "Estie's". */
-function possessive(name: string) {
-  const trimmed = name.trim();
-  if (trimmed === "") return "This workspace's";
-  return trimmed.endsWith("s") ? `${trimmed}'` : `${trimmed}'s`;
 }
 
 /**
@@ -474,7 +457,10 @@ const ACTIVITY_DAYS = 30;
 
 type ActivitySnapshot = {
   overview: AnalyticsTenantOverview;
+  distribution: AnalyticsQuestionDistribution;
+  answerQuality: AnalyticsAnswerQuality;
   progress: AnalyticsLearnerProgress;
+  questionLabels: AnalyticsQuestionLabels | null;
 };
 
 type ActivityFailure = "unavailable" | "denied" | "authentication" | "unverifiable";
@@ -562,9 +548,32 @@ async function loadActivity(days: number): Promise<ActivitySnapshot> {
     throw new AnalyticsRpcError("unverifiable");
   }
 
+  const questionLabels = await fetch(
+    `/api/analytics/question-intelligence?${query.toString()}`,
+    {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { accept: "application/json" },
+    },
+  )
+    .then(async (intelligenceResponse) => {
+      if (!intelligenceResponse.ok) return null;
+      const intelligenceBody: unknown = await intelligenceResponse
+        .json()
+        .catch(() => null);
+      if (!isRecord(intelligenceBody) || intelligenceBody.ok !== true) {
+        return null;
+      }
+      return parseAnalyticsQuestionLabels(intelligenceBody.labels);
+    })
+    .catch(() => null);
+
   return {
     overview: parseAnalyticsTenantOverview(body.overview),
+    distribution: parseAnalyticsQuestionDistribution(body.distribution),
+    answerQuality: parseAnalyticsAnswerQuality(body.answerQuality),
     progress: parseAnalyticsLearnerProgress(body.learnerProgress),
+    questionLabels,
   };
 }
 
@@ -598,6 +607,40 @@ function useActivity(): ActivityState {
 }
 
 /* ------------------------------------------------------------------ *
+ * "Dismiss for a week" — a local, non-authoritative snooze
+ * ------------------------------------------------------------------ */
+
+const ONE_THING_DISMISS_MS = 7 * DAY_MS;
+
+/** Scoped per tenant so a platform owner moving between client workspaces
+ *  never has one tenant's dismissal hide a different tenant's attention item. */
+function oneThingDismissKey(tenantId: string): string {
+  return `corso.console.home.oneThingDismissedUntil.${tenantId}`;
+}
+
+function readOneThingDismissedUntil(tenantId: string): number | null {
+  try {
+    const raw = window.localStorage.getItem(oneThingDismissKey(tenantId));
+    if (raw === null) return null;
+    const until = Number(raw);
+    return Number.isFinite(until) ? until : null;
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts —
+    // fall through to "not dismissed" rather than throwing.
+    return null;
+  }
+}
+
+function writeOneThingDismissedUntil(tenantId: string, until: number) {
+  try {
+    window.localStorage.setItem(oneThingDismissKey(tenantId), String(until));
+  } catch {
+    // The dismissal still applies for the rest of this session via React
+    // state even when it cannot be persisted.
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * Operator canvas — teacher, creator, tenant admin, tenant owner
  * ------------------------------------------------------------------ */
 
@@ -619,272 +662,118 @@ function OperatorHome({
   );
 
   const tenantName = payload.tenant.displayName;
-  const firstDraft = facts.drafts[0];
-
-  const headline =
-    facts.courses.length === 0
-      ? "Nothing has been built here yet."
+  const rawFirstName =
+    accountName.trim().split(/\s+/u).filter(Boolean)[0] ?? accountName;
+  const firstName =
+    rawFirstName.length === 0
+      ? "there"
+      : rawFirstName.charAt(0).toUpperCase() + rawFirstName.slice(1);
+  const primaryAttention = attention[0] ?? null;
+  const tenantId = payload.tenant.tenantId;
+  const [dismissedUntil, setDismissedUntil] = useState<number | null>(null);
+  useEffect(() => {
+    setDismissedUntil(readOneThingDismissedUntil(tenantId));
+  }, [tenantId]);
+  const oneThingDismissed =
+    dismissedUntil !== null && dismissedUntil > Date.now();
+  const dismissOneThingForAWeek = () => {
+    const until = Date.now() + ONE_THING_DISMISS_MS;
+    writeOneThingDismissedUntil(tenantId, until);
+    setDismissedUntil(until);
+  };
+  const activity = useActivity();
+  const volume =
+    activity.status === "ready"
+      ? activity.snapshot.overview.metrics.questionVolume
+      : null;
+  const quality =
+    activity.status === "ready"
+      ? activity.snapshot.answerQuality.metrics.groundingCoverage
+      : null;
+  const summary =
+    volume !== null && volume.state !== "unknown"
+      ? `${assistantName} answered ${count(
+          volume.value.totalQuestions,
+        )} ${plural(volume.value.totalQuestions, "question")} in the last ${
+          ACTIVITY_DAYS
+        } days${
+          quality !== null && quality.state !== "unknown"
+            ? ` and refused ${count(quality.value.ungroundedAnswers)} safely.`
+            : "."
+        }`
       : facts.citableLessons === 0
-        ? `${assistantName} has nothing published to answer from.`
-        : attention.length > 0
-          ? `${count(facts.published.length)} ${plural(
-              facts.published.length,
-              "course is",
-              "courses are",
-            )} live — and ${count(attention.length)} ${plural(
-              attention.length,
-              "thing needs",
-              "things need",
-            )} your attention.`
-          : `${count(facts.published.length)} ${plural(
-              facts.published.length,
-              "course is",
-              "courses are",
-            )} live and complete.`;
-
-  const lede =
-    facts.courses.length === 0
-      ? `Create the first course and ${assistantName} will start answering from it. Nothing is published, so learners currently see an empty workspace.`
-      : facts.citableLessons === 0
-        ? `${count(facts.courses.length)} ${plural(
-            facts.courses.length,
-            "course exists",
-            "courses exist",
-          )}, but no published lesson carries content yet — so every answer ${assistantName} gives is ungrounded.`
-        : `${count(facts.citableLessons)} published ${plural(
+        ? `${assistantName} has nothing published to answer from yet.`
+        : `${assistantName} can answer from ${count(
             facts.citableLessons,
-            "lesson",
-          )} across ${count(facts.published.length)} ${plural(
-            facts.published.length,
-            "course",
-          )} ${plural(
-            facts.citableLessons,
-            "is",
-            "are",
-          )} live for learners and available to ${assistantName}.`;
-
-  const libraryItems: DistributionItem[] = [
-    {
-      id: "published",
-      label: "Published",
-      value: facts.published.length,
-      sublabel: `${count(facts.publishedLessons)} published ${plural(
-        facts.publishedLessons,
-        "lesson",
-      )}`,
-      emphasis: true,
-    },
-    {
-      id: "draft",
-      label: "Draft",
-      value: facts.drafts.length,
-      sublabel: "Not visible to learners",
-    },
-  ];
+          )} published ${plural(facts.citableLessons, "lesson")}.`;
 
   return (
     <>
-      <section className={styles.hero}>
-        <div className={styles.heroCopy}>
-          <p className={styles.heroEyebrow}>
-            {ROLE_LABELS[payload.role]} · {possessive(tenantName)} workspace
+      <section className={styles.welcome}>
+        <h1 className={styles.heroTitle}>Good morning, {firstName}</h1>
+        <p className={styles.heroLede}>{summary}</p>
+      </section>
+
+      {oneThingDismissed ? null : (
+        <section className={styles.oneThing} aria-labelledby="home-one-thing">
+          <p className={styles.heroEyebrow}>Today&apos;s one thing</p>
+          <h2 id="home-one-thing">
+            {primaryAttention?.headline ??
+              (facts.citableLessons === 0
+                ? `Publish the first lesson ${assistantName} can use`
+                : "Everything published is ready for students")}
+          </h2>
+          <p>
+            {primaryAttention?.detail ??
+              (facts.citableLessons === 0
+                ? "The assistant refuses rather than inventing an answer. One published lesson gives it a safe place to start."
+                : "There are no structural gaps in the course right now. Review real student questions for the next opportunity.")}
           </p>
-          <h1 className={styles.heroTitle}>{headline}</h1>
-          <p className={styles.heroLede}>{lede}</p>
-          <p className={styles.heroSigned}>Signed in as {accountName}</p>
           <div className={styles.heroActions}>
-            {facts.courses.length === 0 && canAuthor ? (
-              <PanelLink
-                extra={{ intent: "create" }}
-                panel="course"
-                payload={payload}
-                variant="primary"
-              >
-                Create the first course <span aria-hidden="true">→</span>
-              </PanelLink>
-            ) : firstDraft !== undefined && canAuthor ? (
-              <PanelLink
-                extra={{ id: firstDraft.courseId }}
-                panel="course"
-                payload={payload}
-                variant="primary"
-              >
-                Review {firstDraft.title} <span aria-hidden="true">→</span>
-              </PanelLink>
-            ) : (
-              <PanelLink panel="course" payload={payload} variant="primary">
-                Open learning <span aria-hidden="true">→</span>
-              </PanelLink>
-            )}
-            <PanelLink panel="agent" payload={payload}>
-              Configure {assistantName}
+            <PanelLink
+              extra={
+                primaryAttention?.courseId
+                  ? { id: primaryAttention.courseId }
+                  : facts.courses.length === 0 && canAuthor
+                    ? { intent: "create" }
+                    : undefined
+              }
+              panel="course"
+              payload={payload}
+              variant="primary"
+            >
+              {primaryAttention?.actionLabel ??
+                (facts.courses.length === 0 && canAuthor
+                  ? "Create the first course"
+                  : "Open Learning")}
             </PanelLink>
-            <PanelLink panel="insights" payload={payload} variant="quiet">
-              See insights
+            <PanelLink
+              extra={{ view: "insights" }}
+              panel="insights"
+              payload={payload}
+            >
+              Read what they asked
             </PanelLink>
+            <button
+              className={styles.dismissAction}
+              onClick={dismissOneThingForAWeek}
+              type="button"
+            >
+              Dismiss for a week
+            </button>
           </div>
+        </section>
+      )}
+
+      <OperatorActivityGrid activity={activity} payload={payload} />
+
+      <section aria-labelledby="home-courses" className={styles.courseSummary}>
+        <div className={styles.courseSummaryHead}>
+          <h2 id="home-courses">Your course</h2>
+          <PanelLink panel="course" payload={payload} variant="quiet">
+            Open Learning <span aria-hidden="true">›</span>
+          </PanelLink>
         </div>
-
-        <aside className={styles.heroPanel} aria-label="Course library">
-          <p className={styles.heroPanelLabel}>Course library</p>
-          <p className={styles.heroPanelValue}>
-            {count(facts.courses.length)}
-            <span>{plural(facts.courses.length, "course", "courses")}</span>
-          </p>
-          <DistributionBar
-            ariaLabel="Courses by publication status"
-            emptyMessage="No course has been created in this workspace yet."
-            items={libraryItems}
-            rank={false}
-            total={facts.courses.length}
-          />
-          <p className={styles.heroPanelFoot}>
-            {count(facts.modules)} {plural(facts.modules, "module")} ·{" "}
-            {count(facts.lessons)} {plural(facts.lessons, "lesson")} in total
-          </p>
-        </aside>
-      </section>
-
-      <section aria-labelledby="home-live" className={styles.section}>
-        <SectionHead
-          eyebrow="What's live"
-          id="home-live"
-          lede="Counted from this workspace's own courses, modules and lessons. These figures do not depend on the analytics functions."
-          title={`What learners can reach in ${tenantName}`}
-        />
-        <div className={styles.tiles}>
-          <StatTile
-            eyebrow="Courses"
-            label="Published courses"
-            sublabel={
-              facts.drafts.length === 0
-                ? "No course is sitting in draft"
-                : `${count(facts.drafts.length)} still in draft`
-            }
-            value={count(facts.published.length)}
-          />
-          <StatTile
-            eyebrow="Lessons"
-            label="Published lessons"
-            sublabel={`of ${count(facts.lessons)} ${plural(
-              facts.lessons,
-              "lesson",
-            )} across ${count(facts.modules)} ${plural(facts.modules, "module")}`}
-            value={count(facts.publishedLessons)}
-          />
-          <StatTile
-            eyebrow="Assistant grounding"
-            footnote={`Published lessons carrying at least one content block, inside a published course.`}
-            label={`Material ${assistantName} can cite`}
-            sublabel={
-              facts.citableLessons === 0
-                ? "Nothing published yet, so every answer is ungrounded"
-                : `${count(facts.lessonsWithoutContent)} ${plural(
-                    facts.lessonsWithoutContent,
-                    "lesson",
-                  )} still ${plural(
-                    facts.lessonsWithoutContent,
-                    "has",
-                    "have",
-                  )} no content block`
-            }
-            value={count(facts.citableLessons)}
-          />
-        </div>
-
-        {facts.citableLessons === 0 ? (
-          <EmptyState
-            action={
-              <PanelLink
-                extra={canAuthor ? { intent: "create" } : undefined}
-                panel="course"
-                payload={payload}
-                variant="primary"
-              >
-                {canAuthor ? "Create a course" : "Open learning"}
-              </PanelLink>
-            }
-            description={`No course has been published with content yet, so ${assistantName} has nothing to answer from. Publish a lesson with at least one content block and answers become grounded in it.`}
-            headline="The assistant has no grounded material"
-          />
-        ) : null}
-      </section>
-
-      <ActivitySection payload={payload} />
-
-      <section aria-labelledby="home-attention" className={styles.section}>
-        <SectionHead
-          eyebrow="Needs attention"
-          id="home-attention"
-          lede="Derived from the workspace itself, so every line here is checkable in the course panel right now."
-          title="What is unfinished"
-          aside={
-            attention.length === 0 ? undefined : (
-              <span className={styles.countChip}>
-                {count(attention.length)} {plural(attention.length, "item")}
-              </span>
-            )
-          }
-        />
-
-        {attention.length === 0 ? (
-          <EmptyState
-            compact
-            description={
-              facts.courses.length === 0
-                ? "There is no course yet, so there is nothing unfinished to report. That changes as soon as the first course exists."
-                : "Every course is published, every module holds a lesson, and every lesson carries content."
-            }
-            headline="Nothing is unfinished"
-          />
-        ) : (
-          <ul className={styles.attentionList}>
-            {attention.map((item) => (
-              <li
-                className={cx(
-                  styles.attentionItem,
-                  item.severity === "blocking" && styles.attentionBlocking,
-                )}
-                key={item.id}
-              >
-                <div className={styles.attentionCopy}>
-                  <p className={styles.attentionHeadline}>{item.headline}</p>
-                  <p className={styles.attentionDetail}>{item.detail}</p>
-                </div>
-                <PanelLink
-                  extra={item.courseId === null ? undefined : { id: item.courseId }}
-                  panel="course"
-                  payload={payload}
-                  variant="quiet"
-                >
-                  {item.actionLabel}
-                </PanelLink>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <p className={styles.footnote}>
-          Upload and ingestion state is not carried in the workspace payload, so
-          stalled uploads are not listed here. Nothing on this list is inferred.
-        </p>
-      </section>
-
-      <section aria-labelledby="home-courses" className={styles.section}>
-        <SectionHead
-          eyebrow="Library"
-          id="home-courses"
-          lede="Editorial state only. Learner completion lives in insights, not on an operator's home."
-          title="Courses in this workspace"
-          aside={
-            facts.courses.length === 0 ? undefined : (
-              <span className={styles.countChip}>
-                {count(facts.courses.length)}{" "}
-                {plural(facts.courses.length, "course")}
-              </span>
-            )
-          }
-        />
 
         {facts.courses.length === 0 ? (
           <EmptyState
@@ -904,107 +793,303 @@ function OperatorHome({
             headline="No course has been created yet"
           />
         ) : (
-          <div className={styles.courseGrid}>
-            {facts.courses.map((course) => (
-              <CourseCard course={course} key={course.courseId} payload={payload} />
-            ))}
+          <div className={styles.courseFacts}>
+            <div className={styles.courseFact}>
+              <span className={styles.factIcon} data-tone="good" aria-hidden="true">
+                <svg
+                  fill="none"
+                  height="20"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  width="20"
+                >
+                  <path d="M4.5 12.5 9.5 17.5 19.5 7" />
+                </svg>
+              </span>
+              <span>
+                <strong>
+                  {count(facts.publishedLessons)}{" "}
+                  {plural(facts.publishedLessons, "lesson")} live
+                </strong>
+                <small>Everything the assistant is allowed to use.</small>
+              </span>
+            </div>
+            <div className={styles.courseFact}>
+              <span className={styles.factIcon} aria-hidden="true">
+                <svg
+                  fill="none"
+                  height="20"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  width="20"
+                >
+                  <circle cx="12" cy="12" r="8.5" />
+                  <path d="M12 8v4.5l3 2" />
+                </svg>
+              </span>
+              <span>
+                <strong>
+                  {facts.drafts.length === 0
+                    ? "Every course is published"
+                    : `${count(facts.drafts.length)} ${plural(
+                        facts.drafts.length,
+                        "course",
+                      )} not published`}
+                </strong>
+                <small>
+                  {facts.drafts.length === 0
+                    ? "Students can use every finished course."
+                    : "Draft content stays outside student answers."}
+                </small>
+              </span>
+            </div>
+            <div className={styles.courseFact}>
+              <span className={styles.factIcon} data-tone="muted" aria-hidden="true">
+                <svg
+                  fill="none"
+                  height="20"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  width="20"
+                >
+                  <path d="M20 12a8 8 0 1 1-2.4-5.7" />
+                  <path d="M20 4v4h-4" />
+                </svg>
+              </span>
+              <span>
+                <strong>
+                  {count(facts.modules)} {plural(facts.modules, "module")} organized
+                </strong>
+                <small>
+                  {facts.emptyModules === 0
+                    ? "Every module contains learning."
+                    : `${count(facts.emptyModules)} ${plural(
+                        facts.emptyModules,
+                        "module needs",
+                        "modules need",
+                      )} a lesson.`}
+                </small>
+              </span>
+            </div>
           </div>
         )}
-      </section>
-
-      <section aria-labelledby="home-actions" className={styles.section}>
-        <SectionHead
-          eyebrow="Quick actions"
-          id="home-actions"
-          title="Go straight to the work"
-        />
-        <div className={styles.quickGrid}>
-          <QuickAction
-            description={
-              canAuthor
-                ? "Author modules and lessons, then publish when they are ready."
-                : "Read the modules and lessons learners are working through."
-            }
-            panel="course"
-            payload={payload}
-            title={canAuthor ? "Edit a course" : "Open learning"}
-          />
-          <QuickAction
-            description={`Persona, tone, voice and what ${assistantName} is allowed to answer from.`}
-            panel="agent"
-            payload={payload}
-            title={`Configure ${assistantName}`}
-          />
-          <QuickAction
-            description="Questions, grounding coverage and the completion funnel for this workspace."
-            panel="insights"
-            payload={payload}
-            title="See insights"
-          />
-          <QuickAction
-            description="Invite people, set roles and see who has access."
-            panel="people"
-            payload={payload}
-            title="Manage people"
-          />
-        </div>
       </section>
     </>
   );
 }
 
-function CourseCard({
-  course,
+function OperatorActivityGrid({
+  activity,
   payload,
 }: {
-  course: CourseFacts;
+  activity: ActivityState;
   payload: ShellPayload;
 }) {
-  const { panelHref, openPanel } = usePanelRouter();
-  const canOpen = payload.sections.course === true;
-
-  const body = (
-    <>
-      <span className={styles.cardHead}>
-        <span className={styles.cardTitle}>{course.title}</span>
-        <StatusPill status={course.status} />
-      </span>
-      <span className={styles.cardCopy}>
-        {course.description ?? "No description has been written for this course."}
-      </span>
-      <span className={styles.cardFacts}>
-        <span>
-          <b>{count(course.modules)}</b> {plural(course.modules, "module")}
-        </span>
-        <span>
-          <b>{count(course.publishedLessons)}</b> of {count(course.lessons)}{" "}
-          {plural(course.lessons, "lesson")} published
-        </span>
-        {course.lessonsWithoutContent > 0 ? (
-          <span className={styles.cardWarn}>
-            <b>{count(course.lessonsWithoutContent)}</b> without content
-          </span>
-        ) : null}
-      </span>
-    </>
-  );
-
-  if (!canOpen) {
-    return <div className={styles.card}>{body}</div>;
+  if (activity.status === "loading") {
+    return (
+      <div className={styles.activityGrid}>
+        <section className={styles.weekCard} aria-live="polite">
+          <p className={styles.status}>Reading workspace activity…</p>
+        </section>
+        <section className={styles.topicCard}>
+          <p className={styles.status}>Reading question topics…</p>
+        </section>
+      </div>
+    );
   }
 
+  if (activity.status === "failed") {
+    return (
+      <section className={styles.activityUnavailable}>
+        <div>
+          <h2>{activityFailureCopy[activity.failure].headline}</h2>
+          <p>{activityFailureCopy[activity.failure].description}</p>
+        </div>
+        <PanelLink panel="insights" payload={payload}>
+          Open insights
+        </PanelLink>
+      </section>
+    );
+  }
+
+  const volume = activity.snapshot.overview.metrics.questionVolume;
+  const learners = activity.snapshot.overview.metrics.activeLearners;
+  const coverage =
+    activity.snapshot.answerQuality.metrics.groundingCoverage;
+  const distribution = activity.snapshot.distribution.distribution;
+  const topicDistribution =
+    activity.snapshot.questionLabels?.metrics.topicDistribution ?? null;
+  const questions =
+    volume.state === "unknown" ? null : volume.value.totalQuestions;
+  const people =
+    learners.state === "unknown" ? null : learners.value.learners;
+  const grounded =
+    coverage.state === "unknown" ? null : coverage.value.groundedAnswers;
+  const answers =
+    coverage.state === "unknown" ? null : coverage.value.answers;
+  const answerRate =
+    grounded === null || answers === null || answers === 0
+      ? null
+      : Math.round((grounded / answers) * 100);
+  const refused =
+    coverage.state === "unknown" ? null : coverage.value.ungroundedAnswers;
+  const recentBuckets =
+    volume.state === "unknown" ? [] : volume.value.buckets.slice(-7);
+  const tallest = Math.max(
+    1,
+    ...recentBuckets.map((bucket) => bucket.questions),
+  );
+  const attributedTopics =
+    topicDistribution === null || topicDistribution.state === "unknown"
+      ? []
+      : topicDistribution.value.topics.map((topic) => ({
+          id: topic.topicKey,
+          label: topic.topicLabel,
+          questions: topic.questions,
+        }));
+  const modules =
+    attributedTopics.length > 0
+      ? attributedTopics.slice(0, 4)
+      : distribution.state === "unknown"
+        ? []
+        : distribution.value.courses
+            .flatMap((course) =>
+              course.modules.map((module) => ({
+                id: module.moduleId,
+                label: module.moduleTitle,
+                questions: module.questions,
+              })),
+            )
+            .sort((left, right) => right.questions - left.questions)
+            .slice(0, 4);
+  const topicPeak = Math.max(1, ...modules.map((module) => module.questions));
+
   return (
-    <a
-      className={cx(styles.card, styles.cardLink)}
-      href={panelHref("course", { id: course.courseId })}
-      onClick={(event) => {
-        if (event.metaKey || event.ctrlKey || event.shiftKey) return;
-        event.preventDefault();
-        openPanel("course", { id: course.courseId });
-      }}
-    >
-      {body}
-    </a>
+    <div className={styles.activityGrid}>
+      <section className={styles.weekCard} aria-labelledby="home-week">
+        <div className={styles.cardTopline}>
+          <h2 id="home-week">This month</h2>
+          <PanelLink
+            extra={{ view: "insights" }}
+            panel="insights"
+            payload={payload}
+            variant="quiet"
+          >
+            Last {ACTIVITY_DAYS} days <span aria-hidden="true">⌄</span>
+          </PanelLink>
+        </div>
+        <div className={styles.metricRow}>
+          <div>
+            <strong>{questions === null ? "—" : count(questions)}</strong>
+            <span>questions</span>
+            <small data-tone={questions === null ? "muted" : "good"}>
+              {questions === null ? "Not measured" : "Durable total"}
+            </small>
+          </div>
+          <div>
+            <strong>{people === null ? "—" : count(people)}</strong>
+            <span>students</span>
+            <small data-tone={people === null ? "muted" : "good"}>
+              {people === null ? "Not measured" : "Active learners"}
+            </small>
+          </div>
+          <div>
+            <strong>{answerRate === null ? "—" : `${answerRate}%`}</strong>
+            <span>grounded</span>
+            {/* Refusal count is a neutral fact, not a positive delta like the
+                two captions above it — it stays muted even when known. */}
+            <small data-tone="muted">
+              {refused === null
+                ? "Not measured"
+                : `${count(refused)} safely refused`}
+            </small>
+          </div>
+        </div>
+        {recentBuckets.length > 0 ? (
+          <>
+            <div
+              aria-label="Questions over the last seven recorded days"
+              className={styles.miniBars}
+            >
+              {recentBuckets.map((bucket, index) => (
+                <i
+                  data-current={
+                    index >= Math.max(0, recentBuckets.length - 2) || undefined
+                  }
+                  key={bucket.bucketStart}
+                  style={{
+                    height: `${Math.max(
+                      10,
+                      Math.round((bucket.questions / tallest) * 100),
+                    )}%`,
+                  }}
+                  title={`${formatDay(bucket.bucketStart) ?? bucket.bucketStart}: ${count(
+                    bucket.questions,
+                  )} questions`}
+                />
+              ))}
+            </div>
+            <div className={styles.barLabels}>
+              <span>{formatDay(recentBuckets[0]?.bucketStart) ?? "Start"}</span>
+              <span>
+                {formatDay(recentBuckets[recentBuckets.length - 1]?.bucketStart) ??
+                  "Latest"}
+              </span>
+            </div>
+          </>
+        ) : (
+          <p className={styles.noChart}>No recorded questions in this range.</p>
+        )}
+      </section>
+
+      <section className={styles.topicCard} aria-labelledby="home-topics">
+        <h2 id="home-topics">What they asked about</h2>
+        {modules.length > 0 ? (
+          <div className={styles.topicList}>
+            {modules.map((module) => (
+              <div className={styles.topic} key={module.id}>
+                <div>
+                  <span>{module.label}</span>
+                  <span>{count(module.questions)}</span>
+                </div>
+                <i>
+                  <span
+                    style={{
+                      width: `${Math.max(
+                        7,
+                        Math.round((module.questions / topicPeak) * 100),
+                      )}%`,
+                    }}
+                  />
+                </i>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className={styles.noTopics}>
+            Topic attribution is not available for this range yet.
+          </p>
+        )}
+        <PanelLink
+          className={styles.topicLink}
+          extra={{ view: "insights" }}
+          panel="insights"
+          payload={payload}
+          variant="quiet"
+        >
+          See every question <span aria-hidden="true">›</span>
+        </PanelLink>
+      </section>
+    </div>
   );
 }
 
@@ -1329,9 +1414,11 @@ function PlatformHome({
                 )} and ${count(totals.members)} ${plural(
                   totals.members,
                   "member",
-                )} across the portfolio. You are currently working inside ${
-                  payload.tenant.displayName
-                }.`}
+                )} across the portfolio.${
+                  payload.tenant.tenantId
+                    ? ` You are currently working inside ${payload.tenant.displayName}.`
+                    : " No client workspace is selected."
+                }`}
           </p>
           <p className={styles.heroSigned}>Signed in as {accountName}</p>
           <div className={styles.heroActions}>

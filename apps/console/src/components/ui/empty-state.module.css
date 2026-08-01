@@ -60,13 +60,13 @@
 
 .error {
   border-style: solid;
-  border-color: var(--warn);
+  border-color: var(--alert);
   background: var(--ui-danger-soft);
 }
 
 .error .icon {
   background: var(--surface);
-  color: var(--warn);
+  color: var(--alert);
 }
 
 .compact {

@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0005_audit_cost_and_mcp.
+-- The executable migration is maintained as 0005_audit_cost_and_mcp.sql.

@@ -19,6 +19,7 @@ import {
 } from "../../../../lib/cost-metering";
 import {
   ANSWER_ADAPTER_ID,
+  providerCredential,
   resolveAgentDirective,
   resolveEscalationOffer,
   sharedResponsesAdapter,
@@ -47,6 +48,16 @@ function isRecord(value: unknown): value is JsonRecord {
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : null;
+}
+
+function uuidValue(value: unknown) {
+  const candidate = stringValue(value);
+  return candidate !== null &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      candidate,
+    )
+    ? candidate
+    : null;
 }
 
 function requiredUuid(value: unknown) {
@@ -82,6 +93,19 @@ function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function visualMediaType(source: JsonRecord) {
+  const candidate = stringValue(source.mediaType) ?? "";
+  return (
+    [
+      "image/jpeg",
+      "image/png",
+      "image/svg+xml",
+      "image/webp",
+      "video/mp4",
+    ] as const
+  ).find((mediaType) => mediaType === candidate) ?? "image/png";
+}
+
 function normalizeSources(value: unknown): GroundingSource[] {
   if (!isRecord(value) || !Array.isArray(value.matches)) return [];
   return value.matches.flatMap((candidate) => {
@@ -97,6 +121,11 @@ function normalizeSources(value: unknown): GroundingSource[] {
       /<\/?b>/giu,
       "",
     );
+    const lessonId = stringValue(source.lessonId);
+    const lessonTitle = stringValue(source.lessonName);
+    const sectionName = stringValue(source.sectionName);
+    const visualAssetId = uuidValue(source.visualAssetId);
+    const visualAltText = stringValue(source.altText);
     if (
       !chunkId ||
       !courseId ||
@@ -117,9 +146,22 @@ function normalizeSources(value: unknown): GroundingSource[] {
         documentTitle,
         contentHash,
         excerpt,
-        lessonId: stringValue(source.lessonId),
-        lessonTitle: stringValue(source.lessonName),
-        sectionName: stringValue(source.sectionName),
+        lessonId,
+        lessonTitle,
+        sectionName,
+        ...(sectionName === "Visual knowledge" &&
+        visualAssetId !== null &&
+        visualAltText !== null
+          ? {
+              visual: {
+                visualAssetId,
+                title: lessonTitle ?? documentTitle,
+                altText: visualAltText,
+                mediaType: visualMediaType(source),
+                url: `/api/learning/visuals/${visualAssetId}/content`,
+              },
+            }
+          : {}),
         // Present only for a true semantic/hybrid match; `null` for a
         // lexical-only match, which has no comparable score. Used below to
         // apply the tenant's configured similarity floor.
@@ -220,7 +262,18 @@ function normalizeHistory(value: unknown): ConversationHistoryItem[] {
   });
 }
 
+function selectedVisualAssetIds(sources: readonly GroundingSource[]) {
+  return [
+    ...new Set(
+      sources.flatMap((source) =>
+        source.visual ? [source.visual.visualAssetId] : [],
+      ),
+    ),
+  ].slice(0, 2);
+}
+
 function publicSources(sources: readonly GroundingSource[]) {
+  const shownVisuals = new Set(selectedVisualAssetIds(sources));
   return sources.map((source) => ({
     sourceId: source.chunkId,
     chunkId: source.chunkId,
@@ -231,7 +284,14 @@ function publicSources(sources: readonly GroundingSource[]) {
     sectionName: source.sectionName,
     excerpt: source.excerpt,
     contentHash: source.contentHash,
+    ...(source.visual && shownVisuals.has(source.visual.visualAssetId)
+      ? { visual: source.visual }
+      : {}),
   }));
+}
+
+function visualAssetIds(sources: readonly GroundingSource[]) {
+  return selectedVisualAssetIds(sources);
 }
 
 // --- Streaming (SSE) mode -------------------------------------------------
@@ -283,6 +343,12 @@ function streamSourceContext(sources: readonly GroundingSource[]) {
           `<source index="${index + 1}" chunk_id="${source.chunkId}" content_hash="${source.contentHash}">`,
           `Course: ${source.courseTitle}`,
           `Lesson: ${source.lessonTitle ?? source.documentTitle}`,
+          ...(source.visual
+            ? [
+                `Available visual: ${source.visual.title}`,
+                `Visual alt text: ${source.visual.altText}`,
+              ]
+            : []),
           source.excerpt,
           "</source>",
         ].join("\n"),
@@ -366,6 +432,10 @@ function wantsEventStream(request: Request, modality: "text" | "voice") {
   // "read this back" turn), never a stream, regardless of what a caller's
   // Accept header says.
   if (modality === "voice") return false;
+  // The managed Supabase provider currently returns a complete, bounded
+  // response. When no process-local key exists, keep the exact JSON contract;
+  // the client already accepts this fallback even if it requested SSE.
+  if (!providerCredential()) return false;
   const accept = request.headers.get("accept") ?? "";
   return accept
     .split(",")
@@ -498,7 +568,7 @@ function buildStreamingResponse(params: {
 
         const adapter = streamingAdapter();
         const model =
-          process.env.LEARNINGBOT_LLM_MODEL?.trim() || "gpt-5.6-luna";
+          process.env.LEARNINGBOT_LLM_MODEL?.trim() || "gpt-5.6-terra";
         const context: ProviderRequestContext = {
           tenantId: params.tenantId,
           actorId: params.actorId,
@@ -639,6 +709,21 @@ function buildStreamingResponse(params: {
           operation_token: params.operationToken,
         },
       );
+      const usedVisuals = visualAssetIds(params.sources);
+      if (usedVisuals.length > 0) {
+        try {
+          await executeLearningRpc(
+            params.supabase,
+            "learning_record_visual_usage",
+            {
+              visual_asset_ids: usedVisuals,
+              operation_token: params.operationToken,
+            },
+          );
+        } catch {
+          // Usage is descriptive telemetry; the durable answer is authoritative.
+        }
+      }
       if (params.questionMessageId === null) return;
       const classification = await classifyLearnerQuestion({
         tenantId: params.tenantId,
@@ -649,6 +734,7 @@ function buildStreamingResponse(params: {
         question: params.question,
         answer: result.text,
         scopeLabel: params.scopeLabel,
+        supabase: params.supabase,
       });
       if (classification === null) return;
       await recordQuestionLabel(params.supabase, {
@@ -876,6 +962,9 @@ export async function POST(request: Request) {
       tone,
       history,
       sources,
+      supabase,
+      conversationId,
+      operationToken,
     });
     const recorded = await executeLearningRpc(
       supabase,
@@ -891,6 +980,24 @@ export async function POST(request: Request) {
         operation_token: operationToken,
       },
     );
+
+    const usedVisuals = visualAssetIds(sources);
+    if (usedVisuals.length > 0) {
+      after(async () => {
+        try {
+          await executeLearningRpc(
+            supabase,
+            "learning_record_visual_usage",
+            {
+              visual_asset_ids: usedVisuals,
+              operation_token: operationToken,
+            },
+          );
+        } catch {
+          // Usage never changes the recorded answer or learner response.
+        }
+      });
+    }
 
     // Classification runs after the answer is durably recorded and after this
     // response is sent, so it can never delay or fail the learner's turn. A
@@ -908,6 +1015,7 @@ export async function POST(request: Request) {
             question: message,
             answer: answer.answer,
             scopeLabel: selectedLessonLabel(workspace, lessonId),
+            supabase,
           });
           if (classification === null) return;
           await recordQuestionLabel(supabase, {

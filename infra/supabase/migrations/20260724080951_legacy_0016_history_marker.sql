@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0016_onboarding_invitation_conflict_constraint.
+-- The executable migration is maintained as 0016_onboarding_invitation_conflict_constraint.sql.

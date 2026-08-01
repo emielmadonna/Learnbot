@@ -54,6 +54,26 @@ export type CourseRevisionHistory = {
   revisions: CourseRevisionSummary[];
 };
 
+/**
+ * "This lesson in the wild" — 20260731061000_answer_feedback_and_lesson_reception.sql.
+ * A lesson absent from `lessons` was never cited, so `ratedCount` is 0 and
+ * `helpfulPercent` is null rather than a manufactured zero — the caller must
+ * render "not rated yet", never "0%".
+ */
+export type LessonReceptionEntry = {
+  citationCount: number;
+  ratedCount: number;
+  helpfulCount: number;
+  helpfulPercent: number | null;
+};
+
+export type LessonReceptionReport = {
+  ok: true;
+  dataMode: "durable";
+  windowDays: number;
+  lessons: Record<string, LessonReceptionEntry>;
+};
+
 export type AuthoringBlockType =
   | "rich_text"
   | "heading"
@@ -61,7 +81,10 @@ export type AuthoringBlockType =
   | "code"
   | "quote"
   | "list"
-  | "divider";
+  | "divider"
+  | "image"
+  | "video"
+  | "link";
 
 export type ReorderParentKind = "course" | "module";
 
@@ -146,6 +169,35 @@ export function parseCourseRevisionHistory(
     throw new LearningRpcError("invalid_response");
   }
   return result as unknown as CourseRevisionHistory;
+}
+
+function optionalNumber(value: unknown) {
+  return value === null || value === undefined ? null : requireNumber(value, "helpfulPercent");
+}
+
+export function parseLessonReceptionReport(
+  value: unknown,
+): LessonReceptionReport {
+  const result = requireLearningRpcSuccess(value);
+  if (result.dataMode !== "durable" || !isRecord(result.lessons)) {
+    throw new LearningRpcError("invalid_response");
+  }
+  const lessons: Record<string, LessonReceptionEntry> = {};
+  for (const [lessonId, raw] of Object.entries(result.lessons)) {
+    if (!isRecord(raw)) throw new LearningRpcError("invalid_response");
+    lessons[lessonId] = {
+      citationCount: requireNumber(raw.citationCount, "citationCount"),
+      ratedCount: requireNumber(raw.ratedCount, "ratedCount"),
+      helpfulCount: requireNumber(raw.helpfulCount, "helpfulCount"),
+      helpfulPercent: optionalNumber(raw.helpfulPercent),
+    };
+  }
+  return {
+    ok: true,
+    dataMode: "durable",
+    windowDays: requireNumber(result.windowDays, "windowDays"),
+    lessons,
+  };
 }
 
 /**
@@ -473,6 +525,26 @@ export async function listCourseRevisions(
   return parseCourseRevisionHistory(
     await callAuthoringRpc(supabase, "learning_list_course_revisions", {
       target_course_id: input.courseId,
+    }),
+  );
+}
+
+/**
+ * Per-lesson citation and helpfulness counts for the whole course, read by the
+ * "This lesson in the wild" rail. The RPC is defined by migration
+ * 20260731061000_answer_feedback_and_lesson_reception.sql, which may not be
+ * applied to every database yet — an undefined-function error surfaces as the
+ * ordinary `request_failed` code through `callAuthoringRpc`, and the caller is
+ * expected to render that as "not measured yet", not as a broken page.
+ */
+export async function getLessonReception(
+  supabase: SupabaseClient,
+  input: { courseId: string; windowDays: number },
+): Promise<LessonReceptionReport> {
+  return parseLessonReceptionReport(
+    await callAuthoringRpc(supabase, "learning_lesson_reception", {
+      target_course_id: input.courseId,
+      window_days: input.windowDays,
     }),
   );
 }

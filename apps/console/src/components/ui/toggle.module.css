@@ -49,13 +49,16 @@
 
 .switch {
   position: relative;
-  width: 46px;
-  height: 28px;
+  width: 44px;
+  height: 26px;
   flex: 0 0 auto;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
+  border: none;
   border-radius: var(--radius-pill);
-  background: var(--bg);
+  /* Mockup off-state (#e3e3e8) sits between --hairline (#c7c7cc) and --bg
+     (#f5f5f7) on light ground; --hairline alone reads too dark against the
+     surrounding surface, so this blends it toward --bg to match the swatch. */
+  background: color-mix(in srgb, var(--hairline) 55%, var(--bg));
   cursor: pointer;
   transition:
     background var(--motion-fast) var(--motion-ease),
@@ -78,16 +81,17 @@
 }
 
 .switch[aria-checked="true"] {
-  border-color: var(--brand-primary);
-  background: var(--brand-primary);
+  border-color: var(--good);
+  background: var(--good);
 }
 
 .switch[aria-checked="true"]::after {
-  transform: translateX(18px);
+  transform: translateX(16px);
 }
 
 .switch:focus-visible {
-  outline: 3px solid var(--ui-focus);
+  box-shadow: var(--focus-ring);
+  outline: 2px solid transparent;
   outline-offset: 2px;
 }
 

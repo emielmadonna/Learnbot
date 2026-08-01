@@ -112,7 +112,8 @@
 }
 
 .close:focus-visible {
-  outline: 3px solid var(--ui-focus);
+  box-shadow: var(--focus-ring);
+  outline: 2px solid transparent;
   outline-offset: 2px;
 }
 

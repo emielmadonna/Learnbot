@@ -7,6 +7,657 @@
  * are semantic and deliberately do not inherit the brand.
  */
 
+.suite {
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 24px;
+  box-shadow: 0 20px 55px color-mix(in srgb, var(--ink) 8%, transparent);
+  min-height: min(820px, calc(100vh - 4rem));
+  overflow: hidden;
+}
+
+.suiteHeader {
+  min-height: 52px;
+  padding: 0.55rem 1rem 0.55rem 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  border-bottom: 1px solid var(--hairline);
+  backdrop-filter: blur(52px);
+}
+
+.suiteBrand,
+.suiteBrand > span:last-child {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.suiteBrand {
+  gap: 0.65rem;
+}
+
+.suiteBrand > span:last-child {
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+}
+
+.suiteBrand b {
+  font-size: 0.88rem;
+  letter-spacing: -0.015em;
+}
+
+.suiteBrand small {
+  margin-top: 0.18rem;
+  color: var(--muted);
+  font-size: 0.67rem;
+  white-space: nowrap;
+}
+
+.suiteMark {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--surface);
+  background: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 700;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.suiteTabs {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.suiteTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.suiteTabs a {
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.42rem 0.72rem;
+  font-size: 0.76rem;
+  font-weight: 540;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.suiteTabs a:hover {
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.suiteTabs a.suiteTabActive {
+  color: var(--ink);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.suiteBody {
+  min-width: 0;
+  padding: clamp(1.15rem, 2.5vw, 2rem);
+}
+
+.surface,
+.library {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.surfaceHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.surfaceHeading > div {
+  max-width: 44rem;
+}
+
+.surfaceHeading h2,
+.libraryTitle,
+.courseTopTitle h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.65rem, 3vw, 2.35rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.surfaceHeading p:not(.kicker) {
+  margin: 0.65rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+
+.kicker,
+.railLabel {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.095em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.surfaceBadge,
+.courseStatus {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 0.35rem 0.62rem;
+  color: var(--muted);
+  background: var(--bg);
+  font-size: 0.65rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.libraryActions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.importGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.85rem;
+}
+
+.stepCard {
+  position: relative;
+  min-width: 0;
+  min-height: 30rem;
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 1px solid var(--hairline);
+  border-radius: 20px;
+  background: var(--elev);
+}
+
+.stepCard h3,
+.unavailableCard h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  letter-spacing: -0.015em;
+}
+
+.stepCard p,
+.unavailableCard p {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.stepNumber {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--surface);
+  background: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.uploadPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.uploadForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.uploadField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.uploadField select,
+.uploadField input {
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+  font-weight: 450;
+}
+
+.uploadField input[type="file"] {
+  padding: 0.44rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.uploadField input[type="file"]::file-selector-button {
+  margin-right: 0.5rem;
+  border: 0;
+  border-radius: 7px;
+  padding: 0.38rem 0.58rem;
+  color: var(--ink);
+  background: var(--bg);
+  font: inherit;
+  font-weight: 620;
+}
+
+.uploadButton {
+  min-height: 40px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--surface);
+  background: var(--accent);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.uploadButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.uploadStatus {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.uploadList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.uploadItem {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 0.55rem;
+  background: var(--surface);
+}
+
+.uploadItem > span {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 7px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.uploadItem > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.uploadItem b,
+.uploadItem small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadItem b {
+  font-size: 0.7rem;
+}
+
+.uploadItem small {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.knowledgeLayout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 1rem;
+  min-width: 0;
+}
+
+.knowledgeRail,
+.knowledgeMain,
+.statusCard {
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  background: var(--elev);
+}
+
+.knowledgeRail {
+  align-self: start;
+  padding: 1rem;
+}
+
+.railMetric {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.railMetric:last-child {
+  border-bottom: 0;
+}
+
+.railMetric span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.railMetric b {
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.knowledgeMain {
+  min-width: 0;
+  padding: 1rem;
+}
+
+.coverageCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 35%);
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+  border-radius: 14px;
+  padding: 1rem;
+  color: var(--surface);
+  background: var(--accent);
+}
+
+.coverageCard > div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.coverageCard > div > span:last-child {
+  font-size: 0.7rem;
+  opacity: 0.78;
+}
+
+.coverageValue {
+  font-size: 1.7rem;
+  font-weight: 730;
+  letter-spacing: -0.04em;
+}
+
+.coverageTrack {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 26%, transparent);
+}
+
+.coverageTrack i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--surface);
+}
+
+.knowledgeList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.knowledgeRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 0.35rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.knowledgeRow:last-child {
+  border-bottom: 0;
+}
+
+.stateDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.stateDot[data-state="ready"] {
+  background: var(--good);
+}
+
+.stateDot[data-state="stale"],
+.stateDot[data-state="empty"] {
+  background: var(--warn);
+}
+
+.knowledgeText,
+.knowledgeCounts {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.knowledgeText b {
+  overflow: hidden;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledgeText small,
+.knowledgeCounts small {
+  margin-top: 0.16rem;
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.4;
+}
+
+.knowledgeCounts {
+  align-items: flex-end;
+}
+
+.knowledgeCounts b {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.unavailableCard {
+  width: min(100%, 34rem);
+  box-sizing: border-box;
+  margin: 1.5rem auto 0;
+  padding: 2rem;
+  text-align: center;
+  border: 1px dashed color-mix(in srgb, var(--muted) 48%, transparent);
+  border-radius: 20px;
+  background: var(--elev);
+}
+
+.unavailableGlyph {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  color: var(--muted);
+  background: var(--bg);
+  font-size: 1.35rem;
+}
+
+.unavailableCard > p {
+  max-width: 27rem;
+  margin: 0.6rem auto 1.35rem;
+}
+
+.unavailableRule {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--hairline);
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-align: left;
+}
+
+.unavailableRule b {
+  color: var(--ink);
+  font-size: 0.66rem;
+}
+
+.learningDetail {
+  min-width: 0;
+}
+
+/*
+ * The editor-level top strip (back / title / save state / Manage / Publish).
+ * Mockup's own top bar sits at 52px and carries the Publish action directly —
+ * see docs reference `v2-learning.html`. This is that bar; the shell-wide
+ * `.suiteHeader` above it keeps its own height rule for the same reason.
+ */
+.courseTop {
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 262px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  margin: calc(clamp(1.15rem, 2.5vw, 2rem) * -1);
+  margin-bottom: 0;
+  padding: 0.7rem 1.25rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.courseTopTitle {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.courseTopTitle h2 {
+  overflow: hidden;
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.courseTopActions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+/* Always visible, even to a read-only viewer — the Manage panel below only
+   renders for canEdit, so this is the one place everyone can still read what
+   the course is for. */
+.courseDescription {
+  margin: 0.85rem calc(clamp(1.15rem, 2.5vw, 2rem) * -1) 0;
+  padding: 0 clamp(1.15rem, 2.5vw, 2rem);
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+/* Holds the Publish form/notice right under the top bar, matching the
+   mockup's one-click-away placement without a second page of chrome. */
+.publishTray {
+  margin: 0.85rem calc(clamp(1.15rem, 2.5vw, 2rem) * -1) 0;
+  padding: 0 clamp(1.15rem, 2.5vw, 2rem);
+}
+
+.statusCard {
+  padding: 0.85rem;
+}
+
+.statusCard > p:not(.railLabel) {
+  margin: 0 0 0.65rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.progressValue {
+  margin: -0.1rem 0 0.15rem;
+  color: var(--ink);
+  font-size: 1.75rem;
+  font-weight: 730;
+  letter-spacing: -0.045em;
+}
+
+.statusLine {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.statusLine i {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--warn);
+}
+
+.statusLine i[data-good="true"] {
+  background: var(--good);
+}
+
 .editorRoot {
   --edge: color-mix(in srgb, var(--ink) 9%, var(--bg));
   --edge-strong: color-mix(in srgb, var(--ink) 20%, var(--bg));
@@ -181,7 +832,7 @@
 }
 
 .moveButton:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--brand-primary) 42%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
   outline-offset: 1px;
 }
 
@@ -237,7 +888,7 @@
 }
 
 .disclosure:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--brand-primary) 42%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -372,6 +1023,49 @@
 .pillPositive {
   border-color: color-mix(in srgb, var(--positive) 45%, transparent);
   color: var(--positive);
+}
+
+/*
+ * The lesson document (`lesson-workspace.tsx`) renders every block through
+ * this same `BlockRow` — same edit form, same save path, same optimistic-
+ * concurrency handling — so nothing about how a block is authored forks
+ * between the two surfaces. Only the frame around it changes: the mockup is
+ * one continuous document, not a stack of bordered cards. `.docBody` strips
+ * that chrome with plain descendant selectors; `BlockRow` itself is
+ * untouched. Edit/Delete stay in the tab order at all times — only their
+ * opacity hides them, never `display`, so a keyboard user tabbing through
+ * still reaches them without having to hover anything.
+ */
+.docBody .blockCard {
+  gap: 0.4rem;
+  padding: 0.3rem 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.docBody .blockCard + .blockCard {
+  margin-top: 0.35rem;
+}
+
+.docBody .blockHead > .pill {
+  display: none;
+}
+
+.docBody .blockCard .rowActions {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.docBody .blockCard:hover .rowActions,
+.docBody .blockCard:focus-within .rowActions {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docBody .blockCard .rowActions {
+    transition: none;
+  }
 }
 
 /*
@@ -515,8 +1209,8 @@
 }
 
 .recordCurrent {
-  border-color: color-mix(in srgb, var(--brand-primary) 45%, transparent);
-  background: color-mix(in srgb, var(--brand-primary) 7%, var(--bg));
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg));
 }
 
 .scroller {
@@ -628,4 +1322,111 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+.replace {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-top: 0.45rem;
+  cursor: pointer;
+}
+
+.replace input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0.1rem 0 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+.replace span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.replace b {
+  font-size: var(--text-sm);
+}
+
+.replace small {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+@media (max-width: 1180px) {
+  .courseTop {
+    grid-template-columns: 200px minmax(0, 1fr) auto;
+  }
+
+  .importGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stepCard:last-child {
+    min-height: 0;
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 780px) {
+  .suite {
+    border-radius: 18px;
+  }
+
+  .suiteHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .suiteTabs {
+    width: 100%;
+  }
+
+  .suiteBrand small {
+    white-space: normal;
+  }
+
+  .surfaceHeading {
+    flex-direction: column;
+  }
+
+  .knowledgeLayout,
+  .importGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .courseTop {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+
+  .courseTop > button,
+  .courseTopActions {
+    grid-column: 1 / -1;
+  }
+
+  .stepCard,
+  .stepCard:last-child {
+    min-height: 0;
+    grid-column: auto;
+  }
+
+  .coverageCard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .knowledgeRow {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .knowledgeCounts,
+  .knowledgeRow > button {
+    grid-column: 2;
+    align-items: flex-start;
+    justify-self: start;
+  }
 }

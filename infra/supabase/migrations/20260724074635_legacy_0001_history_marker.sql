@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0001_extensions_and_security_helpers.
+-- The executable migration is maintained as 0001_extensions_and_security_helpers.sql.

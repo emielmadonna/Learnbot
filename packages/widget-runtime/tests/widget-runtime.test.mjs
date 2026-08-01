@@ -288,6 +288,57 @@ test("WID-04/06/07: runtime branding, identity disclosure, and honest learning c
   }
 });
 
+test("WID-04: launcher shape, delayed greeting, attribution, and appearance mode are data-driven", async () => {
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_appearance",
+    adapter: adapter(),
+    branding: {
+      assistantName: "Corso guide",
+      launcherLabel: "Ask the guide",
+      launcherShape: "pill",
+      greetingBubbleEnabled: true,
+      greetingBubbleDelaySeconds: 0,
+      showPoweredBy: false,
+      appearanceMode: "dark",
+      welcomeCopy: "Need help with this lesson?",
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+
+  const launcher = widget.shadowRoot.children[1];
+  const surface = widget.shadowRoot.children[2];
+  const greeting = widget.shadowRoot.children[3];
+  const poweredBy = findDescendant(
+    surface,
+    (element) => element.className === "poweredBy",
+  );
+
+  assert.equal(widget.getSnapshot().branding.launcherShape, "pill");
+  assert.equal(launcher.dataset.shape, "pill");
+  assert.equal(descendantText(launcher).trim(), "Ask the guide");
+  assert.equal(greeting.hidden, false);
+  assert.equal(greeting.textContent, "Need help with this lesson?");
+  assert.equal(poweredBy.hidden, true);
+  assert.equal(widget.dataset.appearance, "dark");
+
+  greeting.click();
+  assert.equal(widget.getSnapshot().presentation, "panel");
+  assert.equal(greeting.hidden, true);
+
+  widget.close();
+  widget.updateBranding({
+    launcherShape: "tab",
+    showPoweredBy: true,
+    appearanceMode: "light",
+  });
+  assert.equal(launcher.dataset.shape, "tab");
+  assert.equal(poweredBy.hidden, false);
+  assert.equal(poweredBy.textContent, "Powered by Corso");
+  assert.equal(widget.dataset.appearance, "light");
+  assert.equal(greeting.hidden, true, "the greeting nudge appears only once per load");
+});
+
 test("WID-05: text, voice, attachment, source, and diagram events stay in one ordered conversation", async () => {
   let voiceEmit;
   let stopped = false;
@@ -583,4 +634,371 @@ test("transport interruption preserves the user input and supports deterministic
   await widget.retryLastFailed();
   assert.equal(attempts, 2);
   assert.ok(widget.getSnapshot().conversation.items.some((item) => item.id === "retry-answer"));
+});
+
+test("WID-12: a second thread.item for the same id delivers the answer instead of being dropped", async () => {
+  // This is exactly what both shipped adapters do — apps/console/src/app/
+  // widget.js/embed-prelude.ts on customer sites, and the console's own live
+  // preview in components/sections/widget-panel.tsx. They announce the
+  // assistant turn as `pending` with no parts the moment the question is
+  // sent, then re-announce the SAME id with the real parts once the answer
+  // comes back. While thread.item was insert-only, that second event was
+  // discarded and every answer rendered as an empty bubble.
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_upsert",
+    adapter: adapter({
+      async sendText(input, emit) {
+        emit({
+          type: "thread.item",
+          conversationId: input.conversationId,
+          item: {
+            id: "answer-1",
+            sequence: 1,
+            role: "assistant",
+            modality: "text",
+            status: "pending",
+            parts: [],
+            createdAt: "2026-07-30T00:00:00.000Z",
+          },
+        });
+        emit({
+          type: "thread.item",
+          conversationId: input.conversationId,
+          item: {
+            id: "answer-1",
+            sequence: 2,
+            role: "assistant",
+            modality: "text",
+            status: "complete",
+            parts: [
+              { kind: "text", text: "Momentum beats intensity." },
+              { kind: "source", id: "source-1", title: "Minimum Day", url: "" },
+            ],
+            createdAt: "2026-07-30T00:00:01.000Z",
+          },
+        });
+        emit({
+          type: "response.complete",
+          conversationId: input.conversationId,
+          itemId: "answer-1",
+        });
+      },
+    }),
+  });
+
+  await widget.send("What actually keeps a habit alive?");
+
+  const items = widget.getSnapshot().conversation.items.filter((item) => item.id === "answer-1");
+  assert.equal(items.length, 1, "the update must not append a duplicate turn");
+  assert.equal(items[0].status, "complete");
+  assert.deepEqual(
+    items[0].parts.map((part) => part.kind),
+    ["text", "source"],
+  );
+  assert.equal(items[0].parts[0].text, "Momentum beats intensity.");
+
+  const surface = widget.shadowRoot.children[2];
+  assert.match(descendantText(surface), /Momentum beats intensity\./);
+});
+
+test("WID-13: a late pending thread.item never erases text already streamed for that turn", async () => {
+  // An adapter that streams deltas and then re-announces the turn must not
+  // lose the streamed text to an event that carries no parts, and must not
+  // roll a completed turn back to pending.
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_upsert_stream",
+    adapter: adapter({
+      async sendText(input, emit) {
+        emit({
+          type: "response.delta",
+          conversationId: input.conversationId,
+          itemId: "answer-2",
+          text: "Streamed first.",
+        });
+        emit({
+          type: "response.complete",
+          conversationId: input.conversationId,
+          itemId: "answer-2",
+        });
+        emit({
+          type: "thread.item",
+          conversationId: input.conversationId,
+          item: {
+            id: "answer-2",
+            sequence: 3,
+            role: "assistant",
+            modality: "text",
+            status: "pending",
+            parts: [],
+            createdAt: "2026-07-30T00:00:02.000Z",
+          },
+        });
+      },
+    }),
+  });
+
+  await widget.send("Stream it");
+
+  const item = widget.getSnapshot().conversation.items.find((candidate) => candidate.id === "answer-2");
+  assert.equal(item.parts[0].text, "Streamed first.");
+  assert.equal(item.status, "complete", "a terminal status is never rolled back to pending");
+});
+
+test("WID-14: every rich part kind renders, and a kind this build does not recognize is skipped, not thrown", async () => {
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_rich_parts",
+    adapter: adapter({
+      async sendText(input, emit) {
+        emit({
+          type: "thread.item",
+          conversationId: input.conversationId,
+          item: {
+            id: "rich-answer",
+            sequence: 1,
+            role: "assistant",
+            modality: "text",
+            status: "complete",
+            parts: [
+              { kind: "text", text: "Lead with the **value recap** first." },
+              {
+                kind: "list",
+                heading: "The order that works",
+                items: ["Name three results from last year.", "State the rate **once**.", "Give the start date."],
+              },
+              { kind: "quote", text: "My rate is £95/hr from 1 September.", attribution: "Example client email" },
+              {
+                kind: "chart",
+                id: "chart-1",
+                heading: "What actually happens when you raise",
+                sourceLabel: "Lesson 3.3",
+                bars: [
+                  { label: "Said yes", value: 72 },
+                  { label: "Negotiated", value: 21 },
+                  { label: "Walked", value: 7 },
+                ],
+                footnote: "From the 43 raises this cohort reported.",
+              },
+              { kind: "code", label: "THE SENTENCE ITSELF", code: "My rate is $95/hr from 1 September." },
+              {
+                kind: "video",
+                id: "video-1",
+                title: "Watch the 40-second version",
+                url: "https://learning.example/clip.mp4",
+                posterUrl: "https://learning.example/poster.jpg",
+                durationLabel: "0:42",
+              },
+              {
+                kind: "progress",
+                id: "progress-1",
+                moduleLabel: "Module 3 · Pricing without flinching",
+                statusLabel: "You're 2 of 4 lessons in",
+                completedSteps: 2,
+                totalSteps: 4,
+                nextLabel: "3.3 The number itself",
+              },
+              { kind: "followups", suggestions: ["What if they say no?", "Show me the email"] },
+              // An adapter ahead of this widget build may send a kind that
+              // does not exist yet here. It must be skipped, never thrown on.
+              { kind: "annotation", text: "from the future" },
+            ],
+            createdAt: "2026-07-30T00:00:00.000Z",
+          },
+        });
+        emit({ type: "response.complete", conversationId: input.conversationId, itemId: "rich-answer" });
+      },
+    }),
+  });
+
+  await widget.send("How do I raise my rate with a long-time client?");
+
+  assert.equal(widget.style.display, "", "an unrecognized part kind must not fail the whole widget");
+  const surface = widget.shadowRoot.children[2];
+  const text = descendantText(surface);
+  assert.match(text, /Lead with the/);
+  assert.match(text, /value recap/);
+  assert.match(text, /The order that works/);
+  assert.match(text, /Name three results from last year\./);
+  assert.match(text, /Give the start date\./);
+  assert.match(text, /My rate is £95\/hr from 1 September\./);
+  assert.match(text, /Example client email/);
+  assert.match(text, /What actually happens when you raise/);
+  assert.match(text, /Lesson 3\.3/);
+  assert.match(text, /72%/);
+  assert.match(text, /Said yes/);
+  assert.match(text, /From the 43 raises this cohort reported\./);
+  assert.match(text, /THE SENTENCE ITSELF/);
+  assert.match(text, /My rate is \$95\/hr from 1 September\./);
+  assert.match(text, /Watch the 40-second version/);
+  assert.match(text, /0:42/);
+  assert.match(text, /Module 3 · Pricing without flinching/);
+  assert.match(text, /You're 2 of 4 lessons in/);
+  assert.match(text, /Next: 3\.3 The number itself/);
+  assert.match(text, /What if they say no\?/);
+  assert.match(text, /Show me the email/);
+  assert.doesNotMatch(text, /from the future/);
+
+  const video = findDescendant(surface, (element) => element.tagName === "VIDEO");
+  assert.ok(video, "a real <video> element is rendered for the video part");
+  assert.equal(video.src, "https://learning.example/clip.mp4");
+  assert.equal(video.poster, "https://learning.example/poster.jpg");
+  assert.equal(video.controls, true);
+
+  const listRows = findDescendant(surface, (element) => element.className === "listRows");
+  assert.equal(listRows.children.length, 3, "every list item is rendered");
+
+  const progressBar = findDescendant(surface, (element) => element.className === "progressBar");
+  assert.equal(progressBar.children.length, 4);
+  assert.equal(progressBar.children.filter((segment) => segment.className === "filled").length, 2);
+
+  const followups = findDescendant(surface, (element) => element.className === "followups");
+  assert.equal(followups.children.length, 2);
+});
+
+test("WID-15: a pending assistant turn with no parts yet renders a thinking indicator, not an empty bubble", async () => {
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_thinking",
+    adapter: adapter({
+      async bootstrap() {
+        return {
+          conversation: conversation(),
+          learningContext: { status: "resolved", module: "Module 2" },
+        };
+      },
+      async sendText(input, emit) {
+        emit({
+          type: "thread.item",
+          conversationId: input.conversationId,
+          item: {
+            id: "pending-1",
+            sequence: 1,
+            role: "assistant",
+            modality: "text",
+            status: "pending",
+            parts: [],
+            createdAt: "2026-07-30T00:00:00.000Z",
+          },
+        });
+        // Deliberately left pending — this test inspects the interim state.
+      },
+    }),
+  });
+
+  await widget.send("How do I price a retainer?");
+  const surface = widget.shadowRoot.children[2];
+  const thinking = findDescendant(surface, (element) => element.className === "message assistant thinking");
+  assert.ok(thinking, "a pending, partless turn renders a thinking indicator instead of nothing");
+  const dots = findDescendant(surface, (element) => element.className === "thinkingDots");
+  assert.equal(dots.children.length, 3);
+  assert.match(descendantText(surface), /Reading Module 2…/);
+});
+
+test("WID-16: a failed send is marked failed and its Try again control retries through retryLastFailed", async () => {
+  let attempts = 0;
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_failed_retry",
+    adapter: adapter({
+      async sendText(input, emit) {
+        attempts += 1;
+        if (attempts === 1) throw new Error("network unavailable");
+        emit({ type: "response.delta", conversationId: input.conversationId, itemId: "recovered", text: "Recovered." });
+        emit({ type: "response.complete", conversationId: input.conversationId, itemId: "recovered" });
+      },
+    }),
+  });
+
+  await widget.send("How do I price a retainer?");
+  const surface = widget.shadowRoot.children[2];
+  const failedMessage = findDescendant(surface, (element) => element.dataset?.status === "failed");
+  assert.ok(failedMessage, "the failed user turn carries data-status=failed");
+  const retryButton = findDescendant(surface, (element) => element.className === "retryButton");
+  assert.ok(retryButton, "a Try again control is rendered for the failed turn");
+
+  retryButton.click();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.equal(attempts, 2, "clicking Try again calls retryLastFailed, which resends");
+  assert.ok(widget.getSnapshot().conversation.items.some((item) => item.id === "recovered"));
+  assert.ok(!widget.getSnapshot().conversation.items.some((item) => item.status === "failed"));
+});
+
+test("WID-17: starter chips, the away banner, and the trust footer are branding-driven", async () => {
+  const asked = [];
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_starters",
+    adapter: adapter({
+      async sendText(input) {
+        asked.push(input.text);
+      },
+    }),
+    branding: {
+      starterPrompts: ["Raise my rate", "Scope creep", "   "],
+      awayMessage: "Maya has paused me. Post in the community and she'll answer herself.",
+      privacyUrl: "https://learning.example/privacy",
+    },
+  });
+
+  assert.deepEqual(widget.getSnapshot().branding.starterPrompts, ["Raise my rate", "Scope creep"]);
+  const surface = widget.shadowRoot.children[2];
+  const chips = findDescendant(surface, (element) => element.className === "emptyChips");
+  assert.equal(chips.children.length, 2, "blank starter prompts are dropped, real ones render as chips");
+
+  chips.children[0].click();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(asked, ["Raise my rate"], "a starter chip asks its own label");
+
+  const away = findDescendant(surface, (element) => element.className === "away");
+  assert.equal(away.hidden, false);
+  assert.match(descendantText(away), /Away right now/);
+  assert.match(descendantText(away), /Maya has paused me/);
+
+  const trustLink = findDescendant(surface, (element) => element.className === "trustLink");
+  assert.equal(trustLink.getAttribute("href"), "https://learning.example/privacy");
+  assert.match(descendantText(surface), /Answers come only from this course/);
+
+  const plainWidget = connectedWidget();
+  await plainWidget.configure({ tenantKey: "pk_no_starters", adapter: adapter() });
+  const plainSurface = plainWidget.shadowRoot.children[2];
+  assert.equal(findDescendant(plainSurface, (element) => element.className === "away").hidden, true);
+  assert.equal(
+    findDescendant(plainSurface, (element) => element.className === "emptyChips").children.length,
+    0,
+    "no starter prompts configured renders no chips",
+  );
+});
+
+test("WID-18: text parts support a restricted **bold** inline syntax, built as real elements rather than innerHTML", async () => {
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_bold",
+    adapter: adapter({
+      async sendText(input, emit) {
+        emit({
+          type: "thread.item",
+          conversationId: input.conversationId,
+          item: {
+            id: "bold-1",
+            sequence: 1,
+            role: "assistant",
+            modality: "text",
+            status: "complete",
+            parts: [{ kind: "text", text: "State the new rate **once**. Don't soften it twice." }],
+            createdAt: "2026-07-30T00:00:00.000Z",
+          },
+        });
+      },
+    }),
+  });
+
+  await widget.send("How do I raise my rate?");
+  const surface = widget.shadowRoot.children[2];
+  const strong = findDescendant(surface, (element) => element.tagName === "STRONG" && element.textContent === "once");
+  assert.ok(strong, "a ** run becomes a real <strong> element");
+  assert.match(descendantText(surface), /State the new rate/);
+  assert.match(descendantText(surface), /Don't soften it twice\./);
 });

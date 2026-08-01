@@ -342,7 +342,7 @@ export function parsePlatformOverview(value: unknown): PlatformOverview {
       displayName: String(tenant.displayName ?? "Unnamed workspace"),
       status: String(tenant.status ?? "unknown"),
       region: optionalText(tenant.region),
-      assistantName: String(tenant.assistantName ?? "LearningBot"),
+      assistantName: String(tenant.assistantName ?? "Corso"),
       courses: number(tenant.courses),
       publishedCourses: number(tenant.publishedCourses),
       members: number(tenant.members),
@@ -379,7 +379,7 @@ export function parsePlatformTenantDetail(
       displayName: String(tenant.displayName ?? "Unnamed workspace"),
       status: String(tenant.status ?? "unknown"),
       region: optionalText(tenant.region),
-      assistantName: String(tenant.assistantName ?? "LearningBot"),
+      assistantName: String(tenant.assistantName ?? "Corso"),
       createdAt: String(tenant.createdAt ?? ""),
       updatedAt: String(tenant.updatedAt ?? ""),
     },
@@ -514,7 +514,7 @@ export function parsePlatformClientCreation(
     status: String(result.status ?? "unknown"),
     region: optionalText(result.region),
     plan: String(result.plan ?? "unconfirmed"),
-    assistantName: String(result.assistantName ?? "LearningBot"),
+    assistantName: String(result.assistantName ?? "Corso"),
     claim:
       claim === null
         ? null

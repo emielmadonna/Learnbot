@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0004_branding_progress_and_conversations.
+-- The executable migration is maintained as 0004_branding_progress_and_conversations.sql.
