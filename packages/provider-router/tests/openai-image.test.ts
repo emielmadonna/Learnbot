@@ -24,6 +24,8 @@ const context = (
 
 const input: ImageGenerationInput = {
   prompt: "A friendly stylized bobblehead character, idle resting pose.",
+  background: "transparent",
+  quality: "medium",
 };
 
 const oneByOnePngBase64 =
@@ -106,6 +108,8 @@ test("generates a text-to-image request, stores the bytes, and reports usage", a
     size: "1024x1024",
     n: 1,
     output_format: "png",
+    background: "transparent",
+    quality: "medium",
   });
 });
 
@@ -118,10 +122,12 @@ test("uses the edits endpoint and resolves reference bytes when references are s
     mediaType: "image/png",
   };
   let capturedEndpoint = "";
+  let capturedForm: FormData | undefined;
   let resolvedRef: ProtectedObjectRef | undefined;
   const instance = adapter(
-    (async (url) => {
+    (async (url, init) => {
       capturedEndpoint = String(url);
+      capturedForm = init?.body as FormData;
       return imageResponse();
     }) as typeof fetch,
     {
@@ -138,6 +144,8 @@ test("uses the edits endpoint and resolves reference bytes when references are s
   });
   assert.equal(outcome.ok, true);
   assert.equal(capturedEndpoint, "https://api.openai.com/v1/images/edits");
+  assert.equal(capturedForm?.get("background"), "transparent");
+  assert.equal(capturedForm?.get("quality"), "medium");
   assert.deepEqual(resolvedRef, sourceRef);
   if (!outcome.ok) assert.fail("expected image edit success");
   assert.equal(outcome.result.providerMetadata.editUsed, true);

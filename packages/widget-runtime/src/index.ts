@@ -601,6 +601,7 @@ export class CourseAiWidgetElement extends HTMLElementBase {
   #refs?: {
     launcher: HTMLButtonElement;
     launcherIcon: HTMLElement;
+    launcherAvatar: HTMLImageElement;
     launcherCount: HTMLElement;
     launcherLabel: HTMLElement;
     greetingBubble: HTMLButtonElement;
@@ -1033,11 +1034,15 @@ export class CourseAiWidgetElement extends HTMLElementBase {
 
     const launcher = createButton("Open learning assistant", "launcher", "");
     const launcherIcon = iconSpan("launcherIcon", CHAT_ICON);
+    const launcherAvatar = document.createElement("img");
+    launcherAvatar.className = "launcherAvatar";
+    launcherAvatar.alt = "";
+    launcherAvatar.hidden = true;
     const launcherCount = document.createElement("span");
     launcherCount.className = "launcherCount";
     const launcherLabel = document.createElement("span");
     launcherLabel.className = "launcherLabel";
-    launcher.append(launcherIcon, launcherCount, launcherLabel);
+    launcher.append(launcherAvatar, launcherIcon, launcherCount, launcherLabel);
     const greetingBubble = createButton(
       "Open learning assistant",
       "greetingBubble",
@@ -1156,7 +1161,7 @@ export class CourseAiWidgetElement extends HTMLElementBase {
     );
     this.#root.replaceChildren(style, launcher, surface, greetingBubble);
     this.#refs = {
-      launcher, launcherIcon, launcherCount, launcherLabel, greetingBubble,
+      launcher, launcherIcon, launcherAvatar, launcherCount, launcherLabel, greetingBubble,
       surface, header, avatar, name, identity, context, away, awayBody,
       thread, empty, emptyText, emptyChips, live, composer, send, voice,
       attach, fileInput, expand, expandIcon, restoreIcon, close, stop,
@@ -1230,8 +1235,16 @@ export class CourseAiWidgetElement extends HTMLElementBase {
       : branding.launcherShape === "bubble"
         ? ""
         : branding.launcherLabel;
+    const launcherAvatarUrl = branding.avatarUrl ?? branding.logoUrl;
+    const showLauncherAvatar = Boolean(launcherAvatarUrl) && this.#state.unread === 0;
+    this.#refs.launcherAvatar.hidden = !showLauncherAvatar;
+    if (showLauncherAvatar && launcherAvatarUrl) {
+      this.#refs.launcherAvatar.src = launcherAvatarUrl;
+    } else {
+      this.#refs.launcherAvatar.removeAttribute("src");
+    }
     if (branding.launcherShape === "bubble") {
-      this.#refs.launcherIcon.hidden = launcherText !== "";
+      this.#refs.launcherIcon.hidden = showLauncherAvatar || launcherText !== "";
       this.#refs.launcherCount.textContent = launcherText;
       this.#refs.launcherLabel.textContent = "";
     } else {
@@ -2225,7 +2238,10 @@ button,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 button:focus-visible,textarea:focus-visible,[tabindex]:focus-visible,a:focus-visible{outline:3px solid var(--widget-primary);outline-offset:2px}
 .launcher{position:fixed;right:24px;bottom:calc(24px + env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;width:60px;height:60px;border:0;border-radius:100px;background:var(--widget-primary);color:#fff;box-shadow:0 10px 26px color-mix(in srgb,var(--widget-primary) 40%,transparent);font-size:13px;font-weight:800;line-height:1.1;transition:transform .18s ease,box-shadow .18s ease}
-.launcher:hover{transform:translateY(-2px);box-shadow:0 14px 32px color-mix(in srgb,var(--widget-primary) 46%,transparent)}
+.launcher:hover{transform:translateY(-3px) rotate(1.5deg);box-shadow:0 14px 32px color-mix(in srgb,var(--widget-primary) 46%,transparent)}
+.launcherAvatar{width:54px;height:54px;object-fit:contain;border-radius:999px;transform-origin:50% 100%;animation:launcherAvatarIdle 3.6s ease-in-out infinite;filter:drop-shadow(0 4px 5px #0002)}
+.launcher[data-shape=pill] .launcherAvatar,.launcher[data-shape=tab] .launcherAvatar{width:38px;height:38px;margin-left:-12px}
+.launcherAvatar[hidden]{display:none}
 .launcherIcon[hidden]{display:none}
 .launcher[data-shape=pill]{width:auto;min-width:132px;height:50px;padding:0 20px;gap:9px;border-radius:999px;white-space:nowrap}
 .launcher[data-shape=tab]{width:auto;min-width:118px;height:46px;bottom:env(safe-area-inset-bottom);padding:0 18px;border-radius:16px 16px 0 0;white-space:nowrap}
@@ -2361,6 +2377,7 @@ button:focus-visible,textarea:focus-visible,[tabindex]:focus-visible,a:focus-vis
 @keyframes orbFloat{0%,100%{border-radius:45% 55% 52% 48%/46% 44% 56% 54%;transform:translateY(0) rotate(0)}50%{border-radius:54% 46% 43% 57%/43% 57% 43% 57%;transform:translateY(-2px) rotate(2deg)}}
 @keyframes spectralEdge{0%,100%{opacity:.62}50%{opacity:1}}
 @keyframes listenPulse{0%,100%{transform:scale(.82);opacity:.68}50%{transform:scale(1.08);opacity:1}}
+@keyframes launcherAvatarIdle{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-2px) rotate(-1deg)}}
 @media(max-width:767px){.surface[data-presentation=expanded],.surface[data-presentation=panel]{inset:auto 0 0;width:100vw;height:min(92dvh,760px);border:0;border-radius:28px 28px 0 0;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -20px 80px #0003}.surface[data-presentation=mobile-sheet]{inset:auto 0 0;height:min(92dvh,760px);border-radius:28px 28px 0 0;padding-top:0}.header{padding-top:14px}.launcher{right:18px;bottom:calc(18px + env(safe-area-inset-bottom))}.launcher.left{left:18px}.empty{font-size:20px}.context{margin-top:8px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 /* Container queries, not viewport media queries — the widget's own box is

@@ -60,7 +60,7 @@ async function circleJson(
   const response = await fetcher(url, {
     signal: AbortSignal.timeout(12_000),
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${token}`,
       Accept: "application/json",
       "User-Agent": "LearningBot source importer/1.0",
     },
@@ -97,6 +97,17 @@ function recordsFrom(payload: unknown): Array<Record<string, unknown>> {
   return [];
 }
 
+function hasNextPageFrom(payload: unknown): boolean | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const object = payload as Record<string, unknown>;
+  if (typeof object.has_next_page === "boolean") return object.has_next_page;
+  if (object.data && typeof object.data === "object" && !Array.isArray(object.data)) {
+    const data = object.data as Record<string, unknown>;
+    if (typeof data.has_next_page === "boolean") return data.has_next_page;
+  }
+  return null;
+}
+
 async function paginated(
   token: string,
   path: string,
@@ -105,14 +116,21 @@ async function paginated(
 ) {
   const rows: Array<Record<string, unknown>> = [];
   for (let page = 1; page <= MAX_PAGES; page += 1) {
-    const next = recordsFrom(
-      await circleJson(token, path, { ...query, page, per_page: 50 }, fetcher),
+    const payload = await circleJson(
+      token,
+      path,
+      { ...query, page, per_page: 50 },
+      fetcher,
     );
+    const next = recordsFrom(payload);
     rows.push(...next);
     if (rows.length > MAX_RECORDS) {
       throw new CircleSourceError("circle_course_too_large");
     }
-    if (next.length < 50) return rows;
+    const hasNextPage = hasNextPageFrom(payload);
+    if (hasNextPage === false || (hasNextPage === null && next.length < 50)) {
+      return rows;
+    }
   }
   throw new CircleSourceError("circle_course_too_large");
 }

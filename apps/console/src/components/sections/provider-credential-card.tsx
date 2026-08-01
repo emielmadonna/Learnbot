@@ -9,6 +9,7 @@ type ProviderState = {
   credentialSource: "tenant_vault" | "platform_managed";
   keyLast4: string | null;
   updatedAt: string | null;
+  managementEnabled: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -25,6 +26,7 @@ function providerState(value: unknown): ProviderState | null {
         : "platform_managed",
     keyLast4: typeof value.keyLast4 === "string" ? value.keyLast4 : null,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : null,
+    managementEnabled: value.managementEnabled === true,
   };
 }
 
@@ -44,7 +46,9 @@ export function ProviderCredentialCard() {
       if (!result.ok || !body) throw new Error();
       setState(body);
       setMessage(
-        body.tenantConfigured
+        !body.managementEnabled
+          ? "This workspace uses the platform-managed provider. Only a platform administrator can enable workspace API-key management."
+          : body.tenantConfigured
           ? `Workspace key ending in ${body.keyLast4 ?? "••••"} is active.`
           : "Platform-managed OpenAI is active. Add a workspace key only if this tenant should own provider billing.",
       );
@@ -120,6 +124,7 @@ export function ProviderCredentialCard() {
       <p className={styles.providerMessage} role="status">
         {message}
       </p>
+      {state?.managementEnabled ? (
       <form className={styles.providerForm} onSubmit={submit}>
         <TextField
           autoComplete="off"
@@ -151,6 +156,7 @@ export function ProviderCredentialCard() {
           ) : null}
         </div>
       </form>
+      ) : null}
     </div>
   );
 }

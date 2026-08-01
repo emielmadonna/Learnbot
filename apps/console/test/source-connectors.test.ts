@@ -199,7 +199,7 @@ test("Circle calls only the fixed Admin API host with Token authorization", asyn
   assert.doesNotMatch(course.documents[0]!.body, /never store me/u);
   for (const request of requests) {
     assert.equal(new URL(request.url).origin, "https://app.circle.so");
-    assert.equal(request.authorization, "Token secret-circle-token-value");
+    assert.equal(request.authorization, "Bearer secret-circle-token-value");
     assert.doesNotMatch(request.url, /secret-circle-token-value/u);
   }
 });

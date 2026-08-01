@@ -27,6 +27,7 @@ export type BillingConfig = {
   readonly secretKey: string;
   readonly webhookSecret: string;
   readonly meteredPriceId: string;
+  readonly meterEventName: string;
   readonly pricesByPlan: Partial<Record<BillingPlan, string>>;
   readonly plansByPrice: Map<string, BillingPlan>;
 };
@@ -57,11 +58,13 @@ export function readBillingConfig(): BillingConfig | null {
   const secretKey = process.env.STRIPE_SECRET_KEY?.trim() ?? "";
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim() ?? "";
   const meteredPriceId = process.env.STRIPE_METERED_PRICE_ID?.trim() ?? "";
+  const meterEventName = process.env.STRIPE_METER_EVENT_NAME?.trim() ?? "";
 
   if (
     !secretKey.startsWith("sk_") ||
     webhookSecret.length < 16 ||
-    meteredPriceId.length === 0
+    meteredPriceId.length === 0 ||
+    !/^[A-Za-z0-9_]{1,100}$/u.test(meterEventName)
   ) {
     cachedConfig = null;
     return cachedConfig;
@@ -81,6 +84,7 @@ export function readBillingConfig(): BillingConfig | null {
     secretKey,
     webhookSecret,
     meteredPriceId,
+    meterEventName,
     pricesByPlan,
     plansByPrice,
   };
@@ -180,7 +184,7 @@ export async function createCheckoutSession(input: {
     "subscription_data[metadata][tenant_id]": input.tenantId,
     "subscription_data[metadata][plan]": input.plan,
     // Stripe Tax, not hand-rolled VAT (PLAN.md S10.3).
-    automatic_tax: "true",
+    "automatic_tax[enabled]": "true",
   };
   if (input.customerEmail) {
     params.customer_email = input.customerEmail;
@@ -215,34 +219,36 @@ export async function createBillingPortalSession(input: {
 }
 
 /**
- * Reports one row of metered usage. `quantity` is whole minor currency units
- * (cents), matching a metered Price configured at $0.01/unit — see the
- * migration comment on `app_private.billing_micro_to_minor` for the
- * conversion. `action: "increment"` composes correctly with the idempotent
- * per-row commit in SQL: each Stripe call reports exactly one `cost_ledger`
- * row's billed amount, never a running total.
+ * Reports one idempotent Stripe meter event per cost-ledger row. The value is
+ * billed micro-dollars, so the attached metered Price must charge $0.000001
+ * per unit. Keeping the six-decimal ledger unit avoids per-request cent
+ * rounding errors; Stripe aggregates the usage before invoicing.
  */
-export async function reportUsageRecord(input: {
-  readonly stripeSubscriptionItemId: string;
-  readonly quantityMinorUnits: number;
+export async function reportMeterEvent(input: {
+  readonly stripeCustomerId: string;
+  readonly billedMicro: number;
+  readonly identifier: string;
   readonly occurredAtEpochSeconds: number;
-}): Promise<{ readonly usageRecordId: string | null }> {
+}): Promise<{ readonly meterEventIdentifier: string }> {
   const config = readBillingConfig();
   if (config === null) {
     throw new Error("stripe_not_configured");
   }
-  const record = await stripeRequest(
+  const identifier = input.identifier.trim().slice(0, 100);
+  if (!identifier) throw new Error("invalid_meter_event_identifier");
+  await stripeRequest(
     config,
     "POST",
-    `/subscription_items/${encodeURIComponent(input.stripeSubscriptionItemId)}/usage_records`,
+    "/billing/meter_events",
     {
-      quantity: Math.max(0, Math.round(input.quantityMinorUnits)),
+      event_name: config.meterEventName,
+      "payload[stripe_customer_id]": input.stripeCustomerId,
+      "payload[value]": Math.max(0, Math.round(input.billedMicro)),
+      identifier,
       timestamp: Math.max(0, Math.round(input.occurredAtEpochSeconds)),
-      action: "increment",
     },
   );
-  const id = record.id;
-  return { usageRecordId: typeof id === "string" ? id : null };
+  return { meterEventIdentifier: identifier };
 }
 
 /**

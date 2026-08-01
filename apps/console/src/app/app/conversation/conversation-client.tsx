@@ -16,6 +16,7 @@ import type { AgentConfig } from "../../../components/app-shell/contract";
 import {
   AvatarCharacter,
   type AvatarPose,
+  type AvatarPoseUrls,
 } from "../../../components/avatar-character";
 import { PlainText, RichText } from "../../../components/ui/rich-text";
 import { recordUsageEvent } from "../usage-signal";
@@ -718,6 +719,7 @@ export default function ConversationClient({
   // both render exactly like an unbranded tenant.
   const [brandAccent, setBrandAccent] = useState<string | null>(null);
   const [brandGlyph, setBrandGlyph] = useState("");
+  const [avatarPoseUrls, setAvatarPoseUrls] = useState<AvatarPoseUrls>({});
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -853,6 +855,41 @@ export default function ConversationClient({
       }
     }
     void loadBrand();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // A published set is the only avatar learners may see. The endpoint signs
+  // the tenant-private pose assets for this session; generation drafts and
+  // rejected versions never reach this surface.
+  useEffect(() => {
+    let active = true;
+    async function loadAvatar() {
+      try {
+        const response = await fetch("/api/learning/avatar", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!response.ok) return;
+        const payload = await readJson(response);
+        if (!active || !isRecord(payload) || !isRecord(payload.poseUrls)) return;
+        const next: AvatarPoseUrls = {};
+        for (const pose of [
+          "idle",
+          "listening",
+          "thinking",
+          "speaking",
+          "unsure",
+        ] as const) {
+          next[pose] = stringValue(payload.poseUrls[pose]);
+        }
+        setAvatarPoseUrls(next);
+      } catch {
+        // The monogram is a complete, deliberate fallback.
+      }
+    }
+    void loadAvatar();
     return () => {
       active = false;
     };
@@ -2259,10 +2296,9 @@ export default function ConversationClient({
   // `thinking` while a request is out and no token has arrived yet,
   // `speaking` while tokens stream or voice audio plays, `listening` while
   // voice input is active, `unsure` when the last turn refused for lack of
-  // grounding, `idle` otherwise. No avatar images are wired into this
-  // workspace yet (Phase 9), so `poseUrls` is always empty and every pose
-  // renders the monogram fallback — the pose still drives the fallback's own
-  // idle/listening/thinking/speaking animation in avatar-character.module.css.
+  // grounding, `idle` otherwise. Published pose images are signed by the
+  // learner avatar endpoint; until one exists, the monogram remains the
+  // complete fallback.
   // Whether an assistant row is already in the feed for the in-flight turn
   // (it appears as soon as the `sources` SSE event arrives). Until then the
   // generic "thinking" placeholder below is what shows the avatar.
@@ -2637,7 +2673,7 @@ export default function ConversationClient({
                         // Only the turn currently in flight reflects the live
                         // pose; a historical answer just sits idle.
                         pose={message.streaming ? avatarPose : "idle"}
-                        poseUrls={{}}
+                        poseUrls={avatarPoseUrls}
                       />
                     ) : null}
                     <div className={styles.answerLayout}>
@@ -2827,7 +2863,7 @@ export default function ConversationClient({
                     className={styles.messageAvatar ?? ""}
                     monogram={mark}
                     pose={mode === "voice" ? avatarPose : "thinking"}
-                    poseUrls={{}}
+                    poseUrls={avatarPoseUrls}
                   />
                   <div
                     className={styles.thinkingDots}

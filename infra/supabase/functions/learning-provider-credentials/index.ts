@@ -107,6 +107,40 @@ Deno.serve(async (request: Request) => {
     return json({ ok: false, code: "invalid_request" }, 400);
   }
 
+  // This check uses the caller's own JWT-selected tenant and fails closed.
+  // The service-role write below must never be a way around the platform
+  // owner's provider_api_key grant.
+  const { data: grants, error: grantsError } = await client.rpc(
+    "tenant_get_capabilities",
+  );
+  if (
+    grantsError ||
+    !grants ||
+    typeof grants !== "object" ||
+    Array.isArray(grants)
+  ) {
+    return json({ ok: false, code: "credential_boundary_unavailable" }, 503);
+  }
+  const grantResult = grants as Record<string, unknown>;
+  const capabilities = Array.isArray(grantResult.capabilities)
+    ? grantResult.capabilities
+    : [];
+  const managementEnabled =
+    grantResult.ok === true &&
+    grantResult.tenantId === tenantId &&
+    capabilities.some(
+      (value) =>
+        value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        (value as Record<string, unknown>).capabilityKey ===
+          "provider_api_key" &&
+        (value as Record<string, unknown>).enabled === true,
+    );
+  if (!managementEnabled) {
+    return json({ ok: false, code: "provider_key_management_disabled" }, 403);
+  }
+
   const { data, error } = await service.rpc(
     "learning_provider_set_credential",
     {

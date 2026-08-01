@@ -124,6 +124,13 @@ test("client capabilities are a durable, audited, platform-only record", () => {
   );
   const platformRoute = source("../src/app/api/platform/route.ts");
   const panel = source("../src/components/sections/platform-panel.tsx");
+  const providerRoute = source("../src/app/api/agent/provider/route.ts");
+  const providerBoundary = source(
+    "../../../infra/supabase/functions/learning-provider-credentials/index.ts",
+  );
+  const providerCapabilityMigration = source(
+    "../../../infra/supabase/migrations/20260801090000_provider_key_capability_and_published_avatar.sql",
+  );
 
   // Mirrors the section pattern: tenant-readable table, no write policy for
   // authenticated callers, writes only through the definer RPC.
@@ -162,9 +169,14 @@ test("client capabilities are a durable, audited, platform-only record", () => {
   assert.match(panel, /void toggleCapability\(/u);
   assert.match(panel, /action: "capability"/u);
 
-  // ...and it stays honest about what a grant does NOT do yet.
+  // Provider-key management is now one of the grants and is enforced on both
+  // server boundaries. The panel stays honest that the older grants are not
+  // all enforced yet.
+  assert.match(providerCapabilityMigration, /'provider_api_key'::text, false/u);
+  assert.match(providerRoute, /provider_api_key/u);
+  assert.match(providerBoundary, /provider_api_key/u);
   assert.match(panel, /capabilityEnforcementNote/u);
-  assert.match(panel, /The client console does not read them yet/u);
+  assert.match(panel, /Provider API-key access is enforced/u);
 });
 
 test("managed access uses provider invitations and never returns a password", () => {

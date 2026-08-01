@@ -11,6 +11,7 @@ import {
 import ConversationClient from "../../app/app/conversation/conversation-client";
 import { UsageSignal } from "../../app/app/usage-signal";
 import { AvatarStudio } from "../avatar-studio";
+import { BrandGlyph } from "../corso/brand-glyph";
 import { CorsoIcon, corsoIconNames } from "../corso/corso-icon";
 import { brandStyle } from "../app-shell/brand";
 import type { AgentConfig, PanelProps, ShellPayload } from "../app-shell/contract";
@@ -794,7 +795,7 @@ function LivePreview({
 }) {
   const name = draft.assistantName.trim() || tenantName;
   const glyph = draft.iconGlyph.trim();
-  const mark = (Array.from(name)[0] ?? glyph ?? "?").toUpperCase();
+  const mark = (Array.from(name)[0] ?? "?").toUpperCase();
   const theme = useMemo(() => {
     const agent: AgentConfig = {
       assistantName: name,
@@ -845,7 +846,7 @@ function LivePreview({
           <div className={styles.previewHeader}>
             <span className={styles.previewMark}>
               {logoUrl === null ? (
-                mark
+                <BrandGlyph fallback={mark} size={18} value={glyph} />
               ) : (
                 // Signed storage URL of unknown size — not routable through next/image.
                 // eslint-disable-next-line @next/next/no-img-element
@@ -863,7 +864,7 @@ function LivePreview({
             </span>
             <span className={styles.previewAvatar}>
               {avatarUrl === null ? (
-                (glyph || mark)
+                <BrandGlyph fallback={mark} size={16} value={glyph} />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img alt="" src={avatarUrl} />
@@ -875,7 +876,7 @@ function LivePreview({
             <div className={styles.previewChatHead}>
               <span className={styles.previewChatMark}>
                 {avatarUrl === null ? (
-                  (glyph || mark)
+                  <BrandGlyph fallback={mark} size={16} value={glyph} />
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img alt="" src={avatarUrl} />
@@ -908,7 +909,9 @@ function LivePreview({
             </p>
 
             <div className={styles.previewComposer}>
-              <span className={styles.previewGlyph}>{glyph || mark}</span>
+              <span className={styles.previewGlyph}>
+                <BrandGlyph fallback={mark} size={13} value={glyph} />
+              </span>
               <span className={styles.previewComposerText}>
                 Ask a question…
               </span>
@@ -1811,6 +1814,11 @@ function AgentConfigurator({
   const showAppearance = view === "overview" || view === "appearance";
   const showBot = view === "overview" || view === "bot";
   const showModel = view === "overview" || view === "model";
+  const assistantMark = (
+    Array.from(draft.assistantName.trim())[0] ??
+    Array.from(payload.tenant.displayName.trim())[0] ??
+    "A"
+  ).toUpperCase();
 
   return (
     <div className={styles.editorRoot} ref={rootRef}>
@@ -1876,7 +1884,7 @@ function AgentConfigurator({
             { key: "overview", label: "Overview" },
             { key: "bot", label: "The bot" },
             { key: "appearance", label: "Appearance" },
-            { key: "model", label: "Model & grounding" },
+            { key: "model", label: "Safeguards & model" },
           ].map((item) => {
             const href = panelHref(
               "agent",
@@ -2037,7 +2045,7 @@ function AgentConfigurator({
                   onUpload={(file, onProgress) =>
                     handleUpload("logo", file, onProgress)
                   }
-                  placeholder={draft.iconGlyph.trim() || "Logo"}
+                  placeholder={assistantMark}
                   previewUrl={logoUrl}
                 />
                 <FileDrop
@@ -2052,7 +2060,7 @@ function AgentConfigurator({
                   onUpload={(file, onProgress) =>
                     handleUpload("avatar", file, onProgress)
                   }
-                  placeholder={draft.iconGlyph.trim() || "Avatar"}
+                  placeholder={assistantMark}
                   previewUrl={avatarUrl}
                 />
               </div>
@@ -2103,11 +2111,7 @@ function AgentConfigurator({
               <AvatarStudio
                 assistantName={draft.assistantName}
                 disabled={busy}
-                monogram={
-                  (draft.assistantName.trim().charAt(0) ||
-                    draft.iconGlyph.trim().charAt(0) ||
-                    "A").toUpperCase()
-                }
+                monogram={assistantMark}
               />
             </div>
 
@@ -2224,9 +2228,9 @@ function AgentConfigurator({
                 Provider
               </h3>
               <p className={styles.groupNote}>
-                OpenAI is available as a platform-managed service or with this
-                workspace&apos;s own encrypted key. Removing a workspace key
-                returns the assistant to the managed provider automatically.
+                OpenAI is platform-managed by default. A platform administrator
+                decides whether this workspace may add and manage its own
+                encrypted key.
               </p>
               <ProviderCredentialCard />
             </section>
@@ -2517,7 +2521,7 @@ function AgentConfigurator({
               hidden={!showModel}
             >
               <h3 className={styles.groupTitle} id={`${headingId}-grounding`}>
-                Grounding
+                Answer safeguards
               </h3>
               <p className={styles.groupNote}>
                 How the assistant searches its own material before it
@@ -2605,7 +2609,7 @@ function AgentConfigurator({
             <section
               className={styles.group}
               aria-labelledby={`${headingId}-escalation`}
-              hidden={!showBot}
+              hidden={!showBot && !showModel}
             >
               <h3 className={styles.groupTitle} id={`${headingId}-escalation`}>
                 Escalation
