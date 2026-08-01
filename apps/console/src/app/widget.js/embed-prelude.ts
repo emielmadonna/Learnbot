@@ -62,6 +62,66 @@ export const widgetHostAdapterSource = String.raw`
     return "w" + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
 
+  // ------------------------------------------------------ host identity hook
+  //
+  // Opt-in, and opt-in by existing: the embedding page declares
+  // window.CourseAiWidgetIdentity and the widget starts attributing questions
+  // to whoever it names. A page that declares nothing gets exactly the
+  // behaviour it got before this hook existed -- anonymous, no reference sent,
+  // no extra request field. There is deliberately no second switch (no data-
+  // attribute to also set): one of the two being forgotten is a launcher that
+  // works perfectly and silently attributes nothing, which is the failure mode
+  // this codebase is worst at noticing.
+  //
+  //   window.CourseAiWidgetIdentity = { ref: "...", displayName: "..." };
+  //
+  // or a function returning that shape, which is re-read before every
+  // question so an identity that resolves after page load is still picked up:
+  //
+  //   window.CourseAiWidgetIdentity = function () {
+  //     if (!window.circleUser) return null;
+  //     return {
+  //       ref: "circle:" + window.circleUser.id,
+  //       displayName: window.circleUser.name,
+  //     };
+  //   };
+  //
+  // The function must be synchronous. A promise is not awaited and is
+  // discarded, because a question must not wait on the host page.
+  //
+  // The ref is an opaque account handle, never an email address: an at-sign or
+  // whitespace fails the pattern below, and the same pattern is enforced again
+  // at /api/widget/ask and a third time inside public.widget_ask. Only a
+  // peppered HMAC of it is ever stored, and it is namespaced by the caller so
+  // one host's ids cannot collide with another's.
+  //
+  // The displayName is used for the local header label only. It is never sent
+  // anywhere.
+  //
+  // This is a CLAIM MADE BY THE PAGE and is treated as one. window.circleUser
+  // is plain client-side data with no signature, so anyone with devtools can
+  // set it to any value; the widget labels the result "Identity not verified"
+  // and the server records it as self-reported. Nothing on this path can, or
+  // pretends to, verify a person.
+  var identityRefPattern = /^[A-Za-z0-9_.:-]{3,180}$/;
+
+  function hostIdentity() {
+    var declared;
+    try {
+      declared = globalThis.CourseAiWidgetIdentity;
+      if (typeof declared === "function") declared = declared();
+    } catch (error) {
+      // A throwing host hook must never take the widget down with it.
+      return null;
+    }
+    if (!declared || typeof declared !== "object") return null;
+    var ref = typeof declared.ref === "string" ? declared.ref.trim() : "";
+    if (!identityRefPattern.test(ref)) return null;
+    var name =
+      typeof declared.displayName === "string" ? declared.displayName.trim() : "";
+    return { ref: ref, displayName: name ? name.slice(0, 80) : "" };
+  }
+
   var uuidPattern =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -272,12 +332,24 @@ export const widgetHostAdapterSource = String.raw`
           if (!payload || payload.ok !== true) {
             throw new Error("widget_unavailable");
           }
+          // The tier is decided here, on the page, because the claim was made
+          // here. "self_reported" is the ceiling and there is no branch that
+          // reaches "verified": the runtime renders that tier as "Verified
+          // learner", and nothing on this path has verified anybody. The
+          // label the visitor sees for a declared identity is "Identity not
+          // verified", which is the true statement.
+          var declared = hostIdentity();
+          var identity = { tier: "anonymous" };
+          if (declared) {
+            identity = { tier: "self_reported" };
+            if (declared.displayName) identity.displayName = declared.displayName;
+          }
           return {
             // The widget transcript is never resumed from the server, so this
             // conversation always starts empty. See the route comments.
             conversation: { id: conversationRef(), items: [] },
             branding: payload.branding || {},
-            identity: { tier: "anonymous" },
+            identity: identity,
             learningContext: { status: "unknown" },
           };
         });
@@ -317,12 +389,27 @@ export const widgetHostAdapterSource = String.raw`
           // below unchanged -- so this is safe to send unconditionally.
           accept: "text/event-stream, application/json",
         },
-        body: JSON.stringify({
-          key: script.dataset.tenant,
-          conversationRef: input.conversationId,
-          question: input.text,
-          courseRef: script.dataset.course || null,
-        }),
+        body: JSON.stringify(
+          (function () {
+            var payload = {
+              key: script.dataset.tenant,
+              conversationRef: input.conversationId,
+              question: input.text,
+              courseRef: script.dataset.course || null,
+            };
+            // Re-read per question, not captured at bootstrap: on a Circle
+            // page the member object can arrive after the launcher does, and
+            // a member can sign out mid-session. Absent identity means the
+            // two fields are omitted from the body entirely, so an install
+            // that never opted in sends byte-for-byte what it sent before.
+            var declared = hostIdentity();
+            if (declared) {
+              payload.visitorRef = declared.ref;
+              payload.visitorTier = "self_reported";
+            }
+            return payload;
+          })(),
+        ),
         signal: input.signal,
       })
         .then(function (response) {

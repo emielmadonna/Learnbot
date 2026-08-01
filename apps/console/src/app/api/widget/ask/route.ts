@@ -20,6 +20,7 @@ import {
   createWidgetSupabaseClient,
   isConversationRef,
   isCourseRef,
+  isVisitorRef,
   isWidgetKey,
   widgetAsk,
   type WidgetAskMatch,
@@ -633,6 +634,27 @@ export async function POST(request: Request) {
     const question =
       typeof input.question === "string" ? input.question.trim() : "";
     const courseRef = isCourseRef(input.courseRef) ? input.courseRef : null;
+    // Who the embedding page says is asking.
+    //
+    // Both halves must be present and well formed or neither is forwarded:
+    // a reference with no tier is an unlabelled claim, and a tier with no
+    // reference is a label with nothing under it. `"self_reported"` is the
+    // only tier this boundary accepts — see `isVisitorRef` and
+    // `WidgetVisitorTier` for why `"verified"` cannot be reached from a page
+    // script, and why the database refuses it as well rather than trusting
+    // this route to have checked.
+    //
+    // Nothing below logs `visitorRef`, and nothing may start: the whole point
+    // of hashing it behind a per-install pepper in the database is defeated
+    // by a plaintext copy in a log line. The refusal path returns the same
+    // generic 400 the route already returns, so a malformed reference tells a
+    // prober nothing new.
+    const visitorTier =
+      input.visitorTier === "self_reported" ? "self_reported" : null;
+    const visitorRef =
+      visitorTier !== null && isVisitorRef(input.visitorRef)
+        ? input.visitorRef
+        : null;
     if (
       !isWidgetKey(key) ||
       !isConversationRef(conversationRef) ||
@@ -663,7 +685,7 @@ export async function POST(request: Request) {
     const traceId = `widget-response:${turnId}`;
     const supabase = createWidgetSupabaseClient();
 
-    const asked = await widgetAsk(supabase, {
+    const askInput = {
       widgetKey: key,
       origin,
       question,
@@ -672,7 +694,63 @@ export async function POST(request: Request) {
       idempotencyKey: `widget-turn:${turnId}`,
       traceId,
       operationToken,
-    });
+    };
+
+    /**
+     * The identity is carried on a best-effort basis, and only the identity.
+     *
+     * Migrations on this project are applied by hand, so a deployment can be
+     * running this code against a database that has not been given
+     * 20260731090000 yet. In that state `widget_ask` has no `visitor_ref`
+     * argument, PostgREST cannot match the call, and `widgetAsk` reports
+     * `request_failed`. Retrying once without the identity turns that into a
+     * normal anonymous turn instead of a visitor whose question vanishes
+     * because of an analytics feature.
+     *
+     * The retry is the same turn, not a second one: `idempotencyKey` and
+     * `traceId` are unchanged, and `widget_ask` writes the question under that
+     * key, so a first call that somehow did land is deduplicated rather than
+     * doubled.
+     */
+    const asked = await (async () => {
+      if (visitorRef === null) return widgetAsk(supabase, askInput);
+      try {
+        const identified = await widgetAsk(supabase, {
+          ...askInput,
+          visitorRef,
+          visitorTier,
+        });
+        // An identity was sent and the database says it counted nobody. That
+        // is not the same as nobody having identified themselves, and it must
+        // not read as one: the likely cause is a missing
+        // app_private.surface_attribution_settings row, which makes
+        // surface_visitor_key return null and drop the identity without
+        // failing anything.
+        if (identified.learnerCounted !== true) {
+          console.warn(
+            `[widget-identity] an identity was sent and none was recorded. ` +
+              `Check app_private.surface_attribution_settings. ` +
+              `trace=${traceId}`,
+          );
+        }
+        return identified;
+      } catch (error) {
+        if (
+          !(error instanceof WidgetRpcError) ||
+          error.code !== "request_failed"
+        ) {
+          throw error;
+        }
+        // Deliberately names no reference and no visitor. It reports that
+        // attribution was lost and why to look, which is the whole content.
+        console.warn(
+          `[widget-identity] the database refused the identified call; ` +
+            `retrying anonymously. Apply 20260731090000 if this persists. ` +
+            `trace=${traceId}`,
+        );
+        return widgetAsk(supabase, askInput);
+      }
+    })();
 
     const visuals = citedVisuals(
       asked.matches,

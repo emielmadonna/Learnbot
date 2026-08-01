@@ -46,7 +46,10 @@ type RuntimeEvent = {
   item?: ThreadItem;
 };
 
-function mountAdapter(fetchImpl: () => Promise<unknown>) {
+function mountAdapter(
+  fetchImpl: (url?: string, init?: { body?: string }) => Promise<unknown>,
+  hostIdentity?: unknown,
+) {
   const stored = new Map<string, string>();
   const sandbox: Record<string, unknown> = {
     console,
@@ -68,6 +71,9 @@ function mountAdapter(fetchImpl: () => Promise<unknown>) {
       },
     },
   };
+  if (hostIdentity !== undefined) {
+    sandbox.CourseAiWidgetIdentity = hostIdentity;
+  }
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(preludeCode as string, sandbox);
@@ -76,6 +82,9 @@ function mountAdapter(fetchImpl: () => Promise<unknown>) {
       input: Record<string, unknown>,
       emit: (event: RuntimeEvent) => void,
     ) => Promise<void>;
+    bootstrap: (input: Record<string, unknown>) => Promise<{
+      identity: { tier: string; displayName?: string };
+    }>;
   };
 }
 
@@ -274,4 +283,132 @@ test("a JSON response still renders exactly the answer it always did", async () 
   assert.ok(parts.some((part) => part.kind === "source"));
   assert.equal(settled.item?.feedbackRef, MESSAGE_ID);
   assert.ok(events.some((event) => event.type === "response.complete"));
+});
+
+/**
+ * The host identity hook, RUN rather than read.
+ *
+ * `circle-install.test.ts` pins the source of this hook; source contracts
+ * cannot tell you whether a hook that throws takes the widget down with it, or
+ * whether an install that never opted in still sends exactly the body it used
+ * to. These execute it.
+ */
+
+/** A non-streamed answer, so `sendText` falls through to the JSON branch. */
+function jsonAnswerResponse() {
+  return {
+    ok: true,
+    body: null,
+    headers: {
+      get: (name: string) =>
+        name === "content-type" ? "application/json" : null,
+    },
+    json: async () => ({
+      ok: true,
+      message: { text: "Buffered answer.", sources: [] },
+    }),
+  };
+}
+
+async function askBody(hostIdentity?: unknown) {
+  let sent: Record<string, unknown> = {};
+  const adapter = mountAdapter(async (_url, init) => {
+    sent = JSON.parse(init?.body ?? "{}") as Record<string, unknown>;
+    return jsonAnswerResponse();
+  }, hostIdentity);
+  await adapter.sendText(
+    {
+      conversationId: CONVERSATION,
+      text: "how do I reset a lesson?",
+      page: {},
+      attachmentIds: [],
+      signal: undefined,
+    },
+    () => {},
+  );
+  return sent;
+}
+
+/**
+ * The identity object is created inside the `vm` realm, so its prototype is
+ * that realm's `Object.prototype` and `deepStrictEqual` rejects it however
+ * identical the contents are. Flattening it here keeps the assertions about
+ * values rather than about realms.
+ */
+async function bootstrapIdentity(hostIdentity?: unknown) {
+  const adapter = mountAdapter(
+    async () => ({
+      ok: true,
+      json: async () => ({ ok: true, branding: {} }),
+    }),
+    hostIdentity,
+  );
+  const result = await adapter.bootstrap({ tenantKey: `wk_${"a".repeat(40)}` });
+  return { ...result.identity };
+}
+
+test("an install that declares no identity sends exactly what it always sent", async () => {
+  const sent = await askBody(undefined);
+  assert.deepEqual(Object.keys(sent).sort(), [
+    "conversationRef",
+    "courseRef",
+    "key",
+    "question",
+  ]);
+  assert.deepEqual(await bootstrapIdentity(undefined), { tier: "anonymous" });
+});
+
+test("a declared identity is forwarded as self_reported, from an object or a function", async () => {
+  const declared = { ref: "circle:1234567", displayName: "Ada L" };
+  for (const hook of [declared, () => declared]) {
+    const sent = await askBody(hook);
+    assert.equal(sent.visitorRef, "circle:1234567");
+    assert.equal(sent.visitorTier, "self_reported");
+    assert.deepEqual(await bootstrapIdentity(hook), {
+      tier: "self_reported",
+      displayName: "Ada L",
+    });
+  }
+});
+
+test("the widget never sends a tier it cannot substantiate", async () => {
+  // A page that claims to have verified somebody is still only a page.
+  const sent = await askBody({ ref: "circle:1234567", tier: "verified" });
+  assert.equal(sent.visitorTier, "self_reported");
+  const identity = await bootstrapIdentity({
+    ref: "circle:1234567",
+    tier: "verified",
+  });
+  assert.equal(identity.tier, "self_reported");
+});
+
+test("a reference the database would refuse never leaves the page", async () => {
+  for (const [label, ref] of [
+    ["an email address", "ada@example.com"],
+    ["whitespace", "circle 1234567"],
+    ["too short", "ab"],
+    ["too long for surface_visitor_key", "x".repeat(181)],
+  ] as const) {
+    const sent = await askBody({ ref });
+    assert.equal(sent.visitorRef, undefined, `${label} was forwarded`);
+    assert.equal(sent.visitorTier, undefined, `${label} was labelled`);
+  }
+});
+
+test("a broken host hook degrades to anonymous instead of breaking the widget", async () => {
+  for (const hook of [
+    () => {
+      throw new Error("the host page blew up");
+    },
+    // Not awaited, deliberately: a question must not wait on the host page.
+    () => Promise.resolve({ ref: "circle:1234567" }),
+    null,
+    "circle:1234567",
+    { displayName: "Ada L" },
+  ]) {
+    const sent = await askBody(hook);
+    assert.equal(sent.visitorRef, undefined);
+    assert.equal(sent.question, "how do I reset a lesson?");
+    assert.deepEqual(await bootstrapIdentity(hook), { tier: "anonymous" });
+  }
 });

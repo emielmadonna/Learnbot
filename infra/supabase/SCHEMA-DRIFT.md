@@ -649,6 +649,120 @@ surface consults it yet — there is not even a tenant-side invite flow to gate
 owner invitation). The platform panel says so on the card rather than implying
 a switched-off row already restricts somebody.
 
+## Awaiting hand-apply: self-reported learner identity on the widget
+
+Committed 2026-07-31 and **not yet applied**. Recorded here before any apply,
+in the same session it was written.
+
+| Version | Name | SHA-256 | Bytes |
+|---|---|---|---|
+| 20260731090000 | `widget_self_reported_learner_identity` | `0fbe9aeea351b74b4d1d13f79de45709864dba1efab919ff18ace622f08b2103` | 22,949 |
+
+Pure ASCII, verified by byte scan (zero bytes outside 0x20-0x7E plus tab and
+newline). Route it through base64 anyway.
+
+Order matters against `20260731070000`, which holds the current
+`public.widget_ask` body. This file **drops** that eight-argument function and
+creates a ten-argument one, so it must be applied after it. It does not touch
+`public.widget_record_answer`, so it is independent of the still-unapplied
+`20260731080000` and `20260731081000` and may be applied before or after
+either.
+
+### What it does
+
+1. `public.conversation_surfaces` gains `learner_key` (a 64-hex digest, or
+   null) and `learner_identity` (`unidentified` / `self_reported_learner`),
+   plus two check constraints and a partial index on `(tenant_id,
+   learner_key)`. Both new columns are additive; the `not null default` on
+   `learner_identity` is a catalog-only change on PG11+ and rewrites no row.
+2. `app_private.conversation_surface_view` is **dropped and recreated** with
+   the two new columns appended to its `returns table`. A return type cannot
+   be changed by `create or replace`. The body is otherwise the 20260726094000
+   body character for character, and all sixteen callers select from it by
+   column name, so appending is invisible to them.
+3. `public.widget_ask` is **dropped and recreated** with `visitor_ref text
+   default null` and `visitor_tier text default null` appended. The drop is
+   the point: two defaulted arguments added by `create or replace` would leave
+   an eight-argument and a ten-argument candidate, and PostgREST calls this
+   function by name, so every widget question would fail as `function is not
+   unique`. The drop takes the ACL with it, so `grant execute ... to anon` is
+   restated. Everything else in the body is unchanged from 20260731070000.
+
+### Why `visitor_identity` was not given a third value
+
+`conversation_surfaces.visitor_key` does not mean "a person" today. Every
+widget row's key is derived from the conversation idempotency key
+(`widget:<hash>`), which is a per-browser-session nonce the embed keeps in
+`sessionStorage`. Six analytics bodies count `distinct visitor_key` on that
+basis, and `app_private.widget_signal_detections` tells the customer so in
+words: *an anonymous visitor reference identifies a returning browser, not a
+person*.
+
+Writing a person-stable hash into that column would have changed what all six
+numbers mean without changing a line of any of them, and made that sentence
+false. Adding `self_reported_learner` to `visitor_identity` has the mirror
+failure: every one of those bodies filters on the literals
+`'anonymous_visitor'` and `'verified_learner'`, so the new rows would have been
+dropped from both buckets in silence.
+
+So the person-stable pseudonym is a new column with its own label.
+`visitor_identity` keeps its two values, and an identified widget visitor is
+still `anonymous_visitor` — that column answers "did this platform verify a
+learner", and the answer is genuinely no.
+
+The surface row this function writes sets `visitor_key` to exactly the digest
+`conversation_surface_view` was already synthesising for the same conversation,
+so materialising the row cannot move a distinct-visitor count a tenant has
+already been shown.
+
+### What does change once applied
+
+For a conversation whose host page declared an identity, `conversation_surfaces`
+gains a real row where previously the view inferred everything. That row also
+carries `host_origin`, which widget conversations have never had:
+`app_private.widget_conversation` writes no `hostOrigin` into conversation
+metadata, so the anonymous-spike signal currently groups every widget question
+under `(origin not recorded)`. Opted-in tenants will start seeing the real
+origin there. That is more truth, not different truth, but it is a visible
+change to a shipped signal.
+
+`attribution_source` for those conversations moves from `inferred_console` /
+`conversation_metadata` to `recorded`, which is accurate: a surface really was
+recorded.
+
+### Until it is applied
+
+Nothing regresses and nothing needs to wait for it.
+
+`widgetAsk` omits `visitor_ref` and `visitor_tier` from the RPC body entirely
+when no identity was declared, so every install that has not opted in sends
+byte-for-byte what it sent before and matches the eight-argument function that
+is live today. An install that *has* opted in gets one failed call, and
+`/api/widget/ask` retries the same turn (same idempotency key, same trace id)
+without the identity and logs `[widget-identity] the database refused the
+identified call`. The visitor gets their answer; only the attribution is lost,
+and the log says which migration is missing.
+
+### Rollback
+
+`drop function public.widget_ask(text,text,text,text,text,text,text,text,text,
+text)` and re-run 20260731070000; `drop function
+app_private.conversation_surface_view(uuid)` and re-run the 20260726094000
+definition; then drop the two columns, the two constraints and the index. No
+existing row is read or rewritten by any statement in the file — the only
+runtime writes are to `conversation_surfaces`, keyed `(tenant_id,
+conversation_id)`, and the update leaves `visitor_key` and `visitor_identity`
+alone.
+
+### Not covered
+
+The new `learner_key` has **no reader yet**. It is reachable through
+`conversation_surface_view` — the only sanctioned read path, since
+`conversation_surfaces_no_direct_access` refuses every direct authenticated
+read — but no analytics RPC or signal selects it. Per-learner signals
+("this learner is stuck", repeat-question detection across sessions) are the
+next piece of work and are not in this migration.
+
 ## Edge functions are still deployed by hand
 
 `infra/supabase/functions/learning-admin-users/index.ts` has an **unapplied

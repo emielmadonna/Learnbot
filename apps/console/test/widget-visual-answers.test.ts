@@ -90,6 +90,58 @@ test("widget_ask stays anon-only after being replaced", () => {
   );
 });
 
+/**
+ * 20260731090000 restates the whole `widget_ask` body to add two arguments,
+ * because a plpgsql body cannot be patched in place. Every assertion above is
+ * therefore pinned to a definition the database no longer ends up with, and
+ * would keep passing if the newest revision quietly dropped the visual
+ * projection. These repeat them against the current definition.
+ */
+const askCurrent = readFileSync(
+  new URL(
+    "../../../infra/supabase/migrations/20260731090000_widget_self_reported_learner_identity.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
+test("the current widget_ask definition keeps the visual projection and the boundary", () => {
+  for (const field of [
+    "'visualAssetId', match -> 'source' ->> 'visualAssetId'",
+    "'visualKind', match -> 'source' ->> 'visualKind'",
+    "'mediaType', match -> 'source' ->> 'mediaType'",
+    "'altText', match -> 'source' ->> 'altText'",
+  ]) {
+    assert.ok(
+      askCurrent.includes(field),
+      `the current widget_ask no longer projects ${field}`,
+    );
+  }
+  for (const leaked of [
+    "'courseId'",
+    "'documentId'",
+    "'lessonId'",
+    "'chunkId'",
+    "'knowledgeVersionId'",
+  ]) {
+    assert.ok(
+      !askCurrent.includes(leaked),
+      `the current widget_ask projection leaks ${leaked}`,
+    );
+  }
+  assert.match(
+    askCurrent,
+    /grant execute on function public\.widget_ask\([\s\S]*?\) to anon;/u,
+  );
+  assert.match(
+    askCurrent,
+    /revoke execute on function public\.widget_ask\([\s\S]*?\) from public, authenticated, service_role;/u,
+  );
+  // The pseudonym is the thing that must never come back out.
+  assert.doesNotMatch(askCurrent, /'learnerKey'/u);
+  assert.doesNotMatch(askCurrent, /'visitorKey'/u);
+});
+
 test("the ask route records a disclosure before it hands out any media URL", () => {
   assert.match(askRoute, /widgetRecordVisualDisclosure/u);
   const disclosureAt = askRoute.indexOf("await widgetRecordVisualDisclosure");

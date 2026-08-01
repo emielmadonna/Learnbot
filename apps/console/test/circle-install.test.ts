@@ -86,9 +86,10 @@ test("the widget runtime artifact is traced into the deployed bundle", () => {
 });
 
 test("the console does not promise an embed identity path that does not exist", () => {
-  // The embed sends tier "anonymous" unconditionally and widget_ask takes no
-  // identity argument, so with the toggle off nobody can ask at all.
-  assert.match(embedPrelude, /identity: \{ tier: "anonymous" \}/u);
+  // Anonymous is still the default and still what an install that opts into
+  // nothing gets: the identity object starts at that tier and is only raised
+  // when the host page actually declared one.
+  assert.match(embedPrelude, /var identity = \{ tier: "anonymous" \}/u);
   assert.doesNotMatch(
     widgetPanel,
     /Only a visitor your site has identified to the widget can ask/u,
@@ -97,6 +98,63 @@ test("the console does not promise an embed identity path that does not exist", 
     widgetPanel,
     /Nobody can ask through the embedded widget/u,
   );
+});
+
+test("a host-declared identity is self-reported and can never reach verified", () => {
+  // The whole point of the three-tier type. window.circleUser is unsigned
+  // client-side data, so a page script may claim an identity and may never
+  // assert that anyone verified it. "verified" must not appear as a tier the
+  // embed can send, and it must not appear in the install instructions as
+  // something the customer is being given.
+  assert.match(embedPrelude, /tier: "self_reported"/u);
+  assert.match(embedPrelude, /visitorTier = "self_reported"/u);
+  assert.doesNotMatch(embedPrelude, /tier: "verified"/u);
+  assert.doesNotMatch(embedPrelude, /visitorTier = "verified"/u);
+  assert.match(pageSource, /Identity not verified/u);
+  assert.match(pageSource, /not a login/u);
+});
+
+test("the identity hook is host-agnostic and opt-in", () => {
+  // Circle is the documented example, not the mechanism. The hook is a global
+  // any host page can define, and an install that defines nothing must send
+  // nothing new.
+  assert.match(embedPrelude, /globalThis\.CourseAiWidgetIdentity/u);
+  assert.match(embedPrelude, /if \(!declared \|\| typeof declared !== "object"\) return null;/u);
+  assert.match(pageSource, /window\.CourseAiWidgetIdentity/u);
+  assert.match(pageSource, /window\.circleUser/u);
+  // An email address must be refused at the boundary rather than hashed.
+  assert.match(embedPrelude, /\/\^\[A-Za-z0-9_\.:-\]\{3,180\}\$\//u);
+});
+
+const widgetRpc = readFileSync(
+  new URL("../src/lib/supabase/widget-rpc.ts", import.meta.url),
+  "utf8",
+);
+const askRoute = readFileSync(
+  new URL("../src/app/api/widget/ask/route.ts", import.meta.url),
+  "utf8",
+);
+
+test("the visitor reference is validated at the route and never logged", () => {
+  // Same pattern in three places on purpose: embed, route, and public.widget_ask.
+  assert.match(widgetRpc, /\/\^\[A-Za-z0-9_\.:-\]\{3,180\}\$\/u/u);
+  assert.match(askRoute, /isVisitorRef\(input\.visitorRef\)/u);
+  // The peppered hash in the database is pointless if a plaintext copy sits
+  // in a log line, so no console call in the route may name the reference.
+  for (const line of askRoute.split("\n")) {
+    if (!/console\.(log|warn|error)/u.test(line)) continue;
+    assert.doesNotMatch(line, /visitorRef/u);
+  }
+  assert.doesNotMatch(askRoute, /\$\{visitorRef\}/u);
+});
+
+test("the identity arguments are omitted rather than sent as nulls", () => {
+  // Migrations here are applied by hand. Sending visitor_ref unconditionally
+  // would make PostgREST fail to match widget_ask on every database that has
+  // not been given 20260731090000, breaking the anonymous path that every
+  // install uses today.
+  assert.match(widgetRpc, /\.\.\.\(identified/u);
+  assert.match(askRoute, /20260731090000/u);
 });
 
 test("the Circle instructions are reachable from the console", () => {

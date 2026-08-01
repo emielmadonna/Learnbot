@@ -87,6 +87,18 @@ export default async function CircleInstallPage() {
   script.defer = true;
   document.head.append(script);
 })();`;
+  // Optional, and pasted ABOVE the launcher snippet so the first render
+  // already knows who is there. `CourseAiWidgetIdentity` is the host-agnostic
+  // hook: any site that knows who its visitor is can define it, and Circle is
+  // simply the example because `window.circleUser` is what Circle exposes to a
+  // code snippet.
+  const identitySnippet = `(() => {
+  window.CourseAiWidgetIdentity = () => {
+    const member = window.circleUser;
+    if (!member || !member.id) return null;
+    return { ref: "circle:" + member.id, displayName: member.name };
+  };
+})();`;
 
   return (
     <main className={styles.shell}>
@@ -197,6 +209,39 @@ export default async function CircleInstallPage() {
         <article>
           <span className={styles.stepNumber}>5</span>
           <div>
+            <h2>Optional: tell Corso which member is asking</h2>
+            <p>
+              Without this, every widget question is anonymous and Corso can
+              only report how many browsers asked. Paste this snippet{" "}
+              <strong>above</strong> the launcher snippet and each question is
+              attributed to the Circle member who asked it, so repeat questions
+              and stuck learners can be spotted per person.
+            </p>
+            <pre>
+              <code>{identitySnippet}</code>
+            </pre>
+            <p>
+              Corso stores only a one-way, per-workspace hash of the id you
+              pass, never the id itself and never an email address — an address
+              is rejected outright. <code>displayName</code> is used for the
+              widget header on the visitor&apos;s own screen and is not sent
+              anywhere.
+            </p>
+            <p>
+              <strong>This is a claim your page makes, not a login.</strong>{" "}
+              <code>window.circleUser</code> is ordinary browser data with no
+              signature, so anyone who opens developer tools can change it
+              before Corso reads it. The widget therefore labels the visitor
+              <em> Identity not verified</em>, and Corso records the identity as
+              self-reported. It grants no access: an identified visitor sees
+              exactly the published course material an anonymous one does.
+            </p>
+          </div>
+        </article>
+
+        <article>
+          <span className={styles.stepNumber}>6</span>
+          <div>
             <h2>Test it on the real domain</h2>
             <p>
               Publish the snippet, open the Circle site at its allowed origin,
@@ -268,8 +313,12 @@ export default async function CircleInstallPage() {
       <aside className={styles.note}>
         <strong>Current connector boundary</strong>
         <p>
-          This is an origin-allowlisted web widget. It does not use Circle
-          member identity, sync Circle roles, or bypass Corso access controls.
+          This is an origin-allowlisted web widget. It does not sync Circle
+          roles or bypass Corso access controls. Step 5 is the only place
+          Circle member identity is used at all, it is opt-in, and what it
+          passes is an unverified claim made by your page: Corso records it for
+          attribution and never treats it as authentication or as a grant of
+          access.
         </p>
       </aside>
     </main>
