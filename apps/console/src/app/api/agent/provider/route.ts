@@ -6,6 +6,7 @@ import {
   getCurrentTenantContext,
 } from "../../../../lib/supabase/auth-boundary";
 import { authenticatedLearningClient } from "../../../../lib/supabase/learning-route";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 function response(body: unknown, status = 200) {
   return NextResponse.json(body, {
@@ -29,9 +30,26 @@ function failure(error: unknown) {
   return response({ ok: false, code: "request_failed" }, 500);
 }
 
+async function providerManagementEnabled(supabase: SupabaseClient) {
+  const result = await supabase.rpc("tenant_get_capabilities");
+  if (result.error || !isRecord(result.data) || result.data.ok !== true) {
+    return false;
+  }
+  const capabilities = Array.isArray(result.data.capabilities)
+    ? result.data.capabilities
+    : [];
+  return capabilities.some(
+    (entry) =>
+      isRecord(entry) &&
+      entry.capabilityKey === "provider_api_key" &&
+      entry.enabled === true,
+  );
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = await authenticatedLearningClient(request);
+    const managementEnabled = await providerManagementEnabled(supabase);
     const result = await supabase.rpc("learning_provider_credential_state");
     if (result.error || !isRecord(result.data)) {
       return response({ ok: false, code: "request_failed" }, 503);
@@ -48,7 +66,7 @@ export async function GET(request: Request) {
             : 400,
       );
     }
-    return response(body);
+    return response({ ...body, managementEnabled });
   } catch (error) {
     return failure(error);
   }
@@ -60,6 +78,12 @@ export async function PUT(request: Request) {
     const supabase = await authenticatedLearningClient(request, {
       mutation: true,
     });
+    if (!(await providerManagementEnabled(supabase))) {
+      return response(
+        { ok: false, code: "provider_key_management_disabled" },
+        403,
+      );
+    }
     const input = (await request.json()) as unknown;
     if (!isRecord(input)) return response({ ok: false, code: "invalid_request" }, 400);
     const apiKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";

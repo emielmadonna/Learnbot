@@ -33,6 +33,7 @@ export const platformCapabilityKeys = [
   "voice_answer_length",
   "model_choice",
   "invite_members",
+  "provider_api_key",
 ] as const;
 
 export type PlatformCapabilityKey = (typeof platformCapabilityKeys)[number];

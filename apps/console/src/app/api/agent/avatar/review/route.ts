@@ -11,6 +11,12 @@ import {
   requireAgentRpcSuccess,
 } from "../../../../../lib/supabase/agent-rpc";
 import { authenticatedLearningClient } from "../../../../../lib/supabase/learning-route";
+import {
+  getWidgetSettings,
+  updateWidgetSettings,
+  widgetOperationFields,
+} from "../../../../../lib/supabase/widget-rpc";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * The creator's review decision on a generated pose set (PLAN.md Section
@@ -69,6 +75,61 @@ function errorResponse(error: unknown) {
   );
 }
 
+async function syncPublishedAvatarToWidget(
+  supabase: SupabaseClient,
+  avatarSet: unknown,
+) {
+  if (!isRecord(avatarSet) || !isRecord(avatarSet.poses)) return false;
+  const idle = isRecord(avatarSet.poses.idle) ? avatarSet.poses.idle : null;
+  const storageKey =
+    idle && typeof idle.storageKey === "string" ? idle.storageKey : "";
+  if (!storageKey || storageKey.includes("..")) return false;
+
+  try {
+    const snapshot = await getWidgetSettings(supabase);
+    if (!snapshot.widgetKey || !snapshot.assetPrefix) return false;
+    const downloaded = await supabase.storage
+      .from("tenant-private")
+      .download(storageKey);
+    if (downloaded.error || !downloaded.data) return false;
+
+    const prefix = snapshot.assetPrefix.endsWith("/")
+      ? snapshot.assetPrefix
+      : `${snapshot.assetPrefix}/`;
+    const publicPath = `${prefix}${crypto.randomUUID()}/avatar.png`;
+    const uploaded = await supabase.storage
+      .from("widget-public")
+      .upload(publicPath, downloaded.data, {
+        cacheControl: "3600",
+        contentType: "image/png",
+        upsert: false,
+      });
+    if (uploaded.error) return false;
+
+    try {
+      await updateWidgetSettings(
+        supabase,
+        {
+          ...snapshot.settings,
+          avatarObjectPath: publicPath,
+          expectedVersion: snapshot.expectedVersion,
+          publish: snapshot.liveStatus === "live",
+          rotateKey: false,
+        },
+        widgetOperationFields("widget.avatar.sync"),
+      );
+      return true;
+    } catch {
+      await supabase.storage.from("widget-public").remove([publicPath]);
+      return false;
+    }
+  } catch {
+    // Avatar review is authoritative; an unconfigured or concurrently edited
+    // widget must not roll back a valid publish decision.
+    return false;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
@@ -104,9 +165,18 @@ export async function POST(request: Request) {
     });
     if (response.error) throw new AgentRpcError("request_failed");
     const result = requireAgentRpcSuccess(response.data);
+    const widgetAvatarSynced =
+      decision === "publish"
+        ? await syncPublishedAvatarToWidget(supabase, result.avatarSet)
+        : false;
 
     return NextResponse.json(
-      { ok: true, dataMode: "durable", avatarSet: result.avatarSet ?? null },
+      {
+        ok: true,
+        dataMode: "durable",
+        avatarSet: result.avatarSet ?? null,
+        widgetAvatarSynced,
+      },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

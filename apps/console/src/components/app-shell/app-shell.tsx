@@ -95,39 +95,28 @@ function dockDestinations(
   platformMode: boolean,
 ): DockDestination[] {
   if (platformMode) {
-    const items: DockDestination[] = [
+    return [
       {
         id: "workspaces",
         label: "Workspaces",
         icon: "workspaces",
         panel: "platform",
       },
-      { id: "home", label: "Home", icon: "home", panel: null },
-      { id: "learning", label: "Learning", icon: "learning", panel: "course" },
       {
-        id: "results",
-        label: "Results",
+        id: "billing",
+        label: "Billing",
         icon: "results",
-        panel: "insights",
-        extra: { view: "insights" },
+        panel: "platform",
+        extra: { view: "billing" },
       },
       {
-        id: "signals",
-        label: "Signals",
-        icon: "signals",
-        panel: "insights",
-        extra: { view: "signals" },
-      },
-      {
-        id: "settings",
-        label: "Settings",
+        id: "platform-settings",
+        label: "Platform settings",
         icon: "settings",
-        panel: "settings",
+        panel: "platform",
+        extra: { view: "settings" },
       },
     ];
-    return items.filter(
-      (item) => item.panel === null || payload.sections[item.panel] === true,
-    );
   }
 
   const items: DockDestination[] = [

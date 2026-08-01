@@ -106,24 +106,24 @@ const LIFECYCLE_OPTIONS = [
 type CourseSurface =
   | "learning"
   | "library"
-  | "knowledge"
-  | "import"
-  | "cleanup"
-  | "visuals";
+  | "sources"
+  | "media";
 
 const COURSE_SURFACES: readonly {
   readonly key: CourseSurface;
   readonly label: string;
 }[] = [
   { key: "learning", label: "Learning" },
-  { key: "knowledge", label: "Knowledge" },
-  { key: "import", label: "Import" },
-  { key: "cleanup", label: "Cleanup" },
-  { key: "visuals", label: "Visuals" },
+  { key: "sources", label: "Sources" },
+  { key: "media", label: "Media" },
 ];
 
 function readCourseSurface(value: string | null): CourseSurface {
   if (value === "library") return "library";
+  if (value === "knowledge" || value === "import" || value === "cleanup") {
+    return "sources";
+  }
+  if (value === "visuals") return "media";
   return COURSE_SURFACES.some((surface) => surface.key === value)
     ? (value as CourseSurface)
     : "learning";
@@ -710,6 +710,12 @@ export function CoursePanel({ payload, params, refresh }: PanelProps) {
 
   const navigateSurface = (next: CourseSurface) =>
     openPanel("course", { view: next });
+  const scrollToSourceStep = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
 
   let content: ReactNode;
 
@@ -720,34 +726,38 @@ export function CoursePanel({ payload, params, refresh }: PanelProps) {
         headline="This workspace role has read-only learning access"
       />
     );
-  } else if (surface === "knowledge") {
+  } else if (surface === "sources") {
     content = (
-      <KnowledgeView
-        onImport={() => navigateSurface("import")}
-        onOpenCourse={(id) =>
-          openPanel("course", { view: "learning", id })
-        }
-        onTest={() => openPanel("agent")}
-      />
+      <div className={shared.stack}>
+        <div id="source-library">
+          <KnowledgeView
+            onImport={() => scrollToSourceStep("source-import")}
+            onOpenCourse={(id) =>
+              openPanel("course", { view: "learning", id })
+            }
+            onTest={() => openPanel("agent")}
+          />
+        </div>
+        <div id="source-import">
+          <ImportView
+            canConfigureCircle={
+              role === "tenant_owner" || role === "tenant_admin"
+            }
+            courses={courses}
+            onReview={() => scrollToSourceStep("source-review")}
+          />
+        </div>
+        <div id="source-review">
+          <CleanupView
+            courses={courses.map((course) => ({
+              courseId: course.courseId,
+              title: course.title,
+            }))}
+          />
+        </div>
+      </div>
     );
-  } else if (surface === "import") {
-    content = (
-      <ImportView
-        canConfigureCircle={role === "tenant_owner" || role === "tenant_admin"}
-        courses={courses}
-        onReview={() => navigateSurface("cleanup")}
-      />
-    );
-  } else if (surface === "cleanup") {
-    content = (
-      <CleanupView
-        courses={courses.map((course) => ({
-          courseId: course.courseId,
-          title: course.title,
-        }))}
-      />
-    );
-  } else if (surface === "visuals") {
+  } else if (surface === "media") {
     content = (
       <VisualKnowledgeManager
         courses={courses.map((course) => ({
@@ -809,7 +819,7 @@ export function CoursePanel({ payload, params, refresh }: PanelProps) {
       <CourseLibrary
         canAuthor={canAuthor}
         courses={courses}
-        onImport={() => navigateSurface("import")}
+        onImport={() => navigateSurface("sources")}
         onOpen={(id) => openPanel("course", { view: "learning", id })}
         wantsCreate={params.get("intent") === "create"}
       />

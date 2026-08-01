@@ -3,7 +3,9 @@ import { createHmac } from "node:crypto";
 import test from "node:test";
 
 import {
+  createCheckoutSession,
   readBillingConfig,
+  reportMeterEvent,
   resetBillingConfigCacheForTests,
   verifyStripeWebhookSignature,
 } from "../src/lib/billing/stripe";
@@ -80,6 +82,7 @@ test("readBillingConfig returns null when Stripe is not configured", () => {
     delete process.env.STRIPE_SECRET_KEY;
     delete process.env.STRIPE_WEBHOOK_SECRET;
     delete process.env.STRIPE_METERED_PRICE_ID;
+    delete process.env.STRIPE_METER_EVENT_NAME;
     resetBillingConfigCacheForTests();
     assert.equal(readBillingConfig(), null);
   } finally {
@@ -94,6 +97,7 @@ test("readBillingConfig maps configured plan prices", () => {
     process.env.STRIPE_SECRET_KEY = "sk_test_abc";
     process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_secret_value";
     process.env.STRIPE_METERED_PRICE_ID = "price_metered";
+    process.env.STRIPE_METER_EVENT_NAME = "learningbot_usage";
     process.env.STRIPE_PRICE_STARTER = "price_starter";
     process.env.STRIPE_PRICE_GROWTH = "price_growth";
     delete process.env.STRIPE_PRICE_ENTERPRISE;
@@ -110,11 +114,69 @@ test("readBillingConfig maps configured plan prices", () => {
   }
 });
 
+test("checkout enables Stripe Tax and usage is reported as idempotent micro-unit meter events", async () => {
+  const originalEnv = { ...process.env };
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; body: URLSearchParams }> = [];
+  try {
+    process.env.STRIPE_SECRET_KEY = "sk_test_abc";
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_secret_value";
+    process.env.STRIPE_METERED_PRICE_ID = "price_metered";
+    process.env.STRIPE_METER_EVENT_NAME = "learningbot_usage";
+    process.env.STRIPE_PRICE_STARTER = "price_starter";
+    resetBillingConfigCacheForTests();
+    globalThis.fetch = (async (input, init) => {
+      requests.push({
+        url: String(input),
+        body: new URLSearchParams(String(init?.body ?? "")),
+      });
+      const checkout = String(input).endsWith("/checkout/sessions");
+      return new Response(
+        JSON.stringify(
+          checkout
+            ? { id: "cs_test_1", url: "https://checkout.stripe.test/session" }
+            : { object: "billing.meter_event" },
+        ),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    await createCheckoutSession({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      plan: "starter",
+      successUrl: "https://example.test/success",
+      cancelUrl: "https://example.test/cancel",
+    });
+    await reportMeterEvent({
+      stripeCustomerId: "cus_123",
+      billedMicro: 12_345,
+      identifier: "11111111-1111-4111-8111-111111111111",
+      occurredAtEpochSeconds: 1_700_000_000,
+    });
+
+    assert.equal(requests[0]?.body.get("automatic_tax[enabled]"), "true");
+    assert.equal(requests[0]?.body.has("automatic_tax"), false);
+    assert.match(requests[1]?.url ?? "", /\/billing\/meter_events$/u);
+    assert.equal(requests[1]?.body.get("event_name"), "learningbot_usage");
+    assert.equal(requests[1]?.body.get("payload[stripe_customer_id]"), "cus_123");
+    assert.equal(requests[1]?.body.get("payload[value]"), "12345");
+    assert.equal(
+      requests[1]?.body.get("identifier"),
+      "11111111-1111-4111-8111-111111111111",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env = originalEnv;
+    resetBillingConfigCacheForTests();
+  }
+});
+
 function fixtureConfig() {
   resetBillingConfigCacheForTests();
   process.env.STRIPE_SECRET_KEY = "sk_test_abc";
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_secret_value";
   process.env.STRIPE_METERED_PRICE_ID = "price_metered";
+  process.env.STRIPE_METER_EVENT_NAME = "learningbot_usage";
   process.env.STRIPE_PRICE_STARTER = "price_starter";
   process.env.STRIPE_PRICE_GROWTH = "price_growth";
   process.env.STRIPE_PRICE_ENTERPRISE = "price_enterprise";

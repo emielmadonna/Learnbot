@@ -115,6 +115,8 @@ interface ValidatedRequest {
   readonly size: string;
   readonly outputFormat: string;
   readonly outputMediaType: string;
+  readonly background: "auto" | "opaque" | "transparent";
+  readonly quality: "auto" | "low" | "medium" | "high";
 }
 
 interface ParsedImageResponse {
@@ -325,11 +327,25 @@ function validateRequest(
   const prompt = validatePrompt(adapterId, input.prompt);
   const size = resolveSize(adapterId, input.width, input.height);
   const outputFormat = resolveOutputFormat(adapterId, input.outputMediaType);
+  const background = input.background ?? "auto";
+  const quality = input.quality ?? "auto";
+  if (background === "transparent" && outputFormat.format === "jpeg") {
+    throw new AdapterFailure(
+      providerError(
+        adapterId,
+        "invalid_request",
+        "Transparent image output requires PNG or WebP.",
+        false,
+      ),
+    );
+  }
   return {
     prompt,
     size,
     outputFormat: outputFormat.format,
     outputMediaType: outputFormat.mediaType,
+    background,
+    quality,
   };
 }
 
@@ -685,6 +701,8 @@ export class OpenAIImageAdapter implements ImageGenerationProvider {
       form.set("size", request.size);
       form.set("n", "1");
       form.set("output_format", request.outputFormat);
+      form.set("background", request.background);
+      form.set("quality", request.quality);
       referenceBytes.forEach((reference, index) => {
         form.append(
           "image[]",
@@ -703,6 +721,8 @@ export class OpenAIImageAdapter implements ImageGenerationProvider {
         size: request.size,
         n: 1,
         output_format: request.outputFormat,
+        background: request.background,
+        quality: request.quality,
       });
       headers["content-type"] = "application/json";
       body = json;

@@ -102,7 +102,7 @@ const codeMessages: Record<string, string> = {
   tenant_unavailable: "That client workspace is not available to enter.",
   section_not_found: "That section does not exist on this workspace.",
   stripe_not_configured:
-    "Stripe is not configured on this deployment. Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and STRIPE_METERED_PRICE_ID to enable checkout and the billing portal.",
+    "Stripe is not configured on this deployment. Set the Stripe secret, webhook secret, metered price and meter event name to enable checkout, usage billing and the billing portal.",
   plan_not_configured:
     "This plan has no Stripe price configured. Set its STRIPE_PRICE_* environment variable first.",
   stripe_customer_missing:
@@ -275,6 +275,11 @@ const capabilityCopy: Record<
     description:
       "Lets the client bring in their own administrators and learners.",
   },
+  provider_api_key: {
+    label: "Manage a workspace API key",
+    description:
+      "Lets this client add or remove its own OpenAI key. Off keeps provider billing under platform control.",
+  },
 };
 
 /**
@@ -288,7 +293,7 @@ const capabilityCopy: Record<
  * already restricting somebody.
  */
 const capabilityEnforcementNote =
-  "Grants are recorded and audited immediately. The client console does not read them yet, so switching one off does not remove the control from the client's screen.";
+  "Provider API-key access is enforced in both the console and credential service. The remaining grants are recorded and audited but are not all enforced by their client controls yet.";
 
 function statusState(status: string): StatState {
   if (status === "active") return "known";

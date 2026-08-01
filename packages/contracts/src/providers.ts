@@ -398,6 +398,10 @@ export interface ImageGenerationInput {
   readonly width?: number;
   readonly height?: number;
   readonly outputMediaType?: string;
+  /** Whether the provider should preserve transparency in the generated asset. */
+  readonly background?: "auto" | "opaque" | "transparent";
+  /** Provider quality tier. `auto` lets the provider choose. */
+  readonly quality?: "auto" | "low" | "medium" | "high";
   readonly references?: readonly ProtectedObjectRef[];
 }
 
