@@ -101,8 +101,8 @@ export function DurableWorkspace({
       <section className={styles.section}>
         <div className={styles.sectionHeading}>
           <div>
-            <p className={styles.eyebrow}>Launch readiness</p>
-            <h2>{snapshot.launch.ready ? "Ready for review" : "Gates remain"}</h2>
+            <p className={styles.eyebrow}>Workspace status</p>
+            <h2>{snapshot.launch.ready ? "Ready for review" : "A few checks remain"}</h2>
           </div>
           <span
             className={snapshot.launch.ready ? styles.readyBadge : styles.blockedBadge}
@@ -125,7 +125,7 @@ export function DurableWorkspace({
         <div className={styles.sectionHeading}>
           <div>
             <p className={styles.eyebrow}>Company and brand</p>
-            <h2>Shape the client workspace</h2>
+            <h2>Name and colour it</h2>
           </div>
           <span className={styles.version}>Version {snapshot.onboarding.version}</span>
         </div>
@@ -241,10 +241,10 @@ export function DurableWorkspace({
       <section className={styles.section}>
         <div className={styles.sectionHeading}>
           <div>
-            <p className={styles.eyebrow}>Implementation evidence</p>
-            <h2>Complete the launch gates</h2>
+            <p className={styles.eyebrow}>Readiness checklist</p>
+            <h2>Complete the launch checks</h2>
           </div>
-          <span className={styles.version}>Concurrency-safe</span>
+          <span className={styles.version}>Saved as you go</span>
         </div>
         <div className={styles.stepGrid}>
           {snapshot.steps.map((step) => (
@@ -262,7 +262,7 @@ export function DurableWorkspace({
         <div className={styles.sectionHeading}>
           <div>
             <p className={styles.eyebrow}>Client access</p>
-            <h2>Invite the client team</h2>
+            <h2>Recovery access codes</h2>
           </div>
           <span className={styles.version}>
             {snapshot.invitations.length} invitations
@@ -308,14 +308,14 @@ export function DurableWorkspace({
               </select>
             </label>
             <button className={styles.button} type="submit">
-              Create invitation
+              Create private code
             </button>
           </form>
         ) : null}
         <p className={styles.finePrint}>
-          Invitation records are durable. Email delivery remains a separate
-          production connector; use the opaque invitation ID below for current
-          acceptance testing.
+          Use People in the workspace to send time-limited email invitations
+          automatically. These private onboarding codes are a separate
+          recovery channel; share one only through an approved secure channel.
         </p>
         <div className={styles.invitationList}>
           {snapshot.invitations.length === 0 ? (

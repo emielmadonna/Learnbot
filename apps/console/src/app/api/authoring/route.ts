@@ -6,12 +6,17 @@ import {
 import { authenticatedLearningClient } from "../../../lib/supabase/learning-route";
 import { LearningRpcError } from "../../../lib/supabase/learning-rpc";
 import {
+  normalizeCourseMediaContent,
+  type CourseMediaBlockType,
+} from "../../../lib/content/media-block";
+import {
   createContentBlock,
   createLesson,
   createModule,
   deleteContentBlock,
   deleteLesson,
   deleteModule,
+  getLessonReception,
   getUploadStateReport,
   listCourseRevisions,
   reorderChildren,
@@ -34,6 +39,14 @@ const blockTypes = new Set<AuthoringBlockType>([
   "quote",
   "list",
   "divider",
+  "image",
+  "video",
+  "link",
+]);
+const mediaBlockTypes = new Set<CourseMediaBlockType>([
+  "image",
+  "video",
+  "link",
 ]);
 const lifecycleStatuses = new Set(["draft", "published", "archived"]);
 const cacheHeaders = { "Cache-Control": "private, no-store" } as const;
@@ -107,9 +120,17 @@ function blockType(value: unknown): AuthoringBlockType {
   return value as AuthoringBlockType;
 }
 
-function blockContent(value: unknown) {
+function blockContent(type: AuthoringBlockType, value: unknown) {
   if (!isRecord(value) || JSON.stringify(value).length > 100_000) {
     throw new LearningRpcError("invalid_request");
+  }
+  if (mediaBlockTypes.has(type as CourseMediaBlockType)) {
+    const normalized = normalizeCourseMediaContent(
+      type as CourseMediaBlockType,
+      value,
+    );
+    if (normalized === null) throw new LearningRpcError("invalid_request");
+    return normalized;
   }
   return value;
 }
@@ -123,6 +144,20 @@ function orderedIds(value: unknown) {
     throw new LearningRpcError("invalid_request");
   }
   return ids;
+}
+
+/**
+ * `learning_lesson_reception` itself refuses anything outside 1–366, so this
+ * validates the same bound before the RPC is ever called — a caller that
+ * never sends `windowDays` gets the RPC's own 90-day default.
+ */
+function windowDays(value: unknown) {
+  if (value === null || value === undefined) return 90;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 366) {
+    throw new LearningRpcError("invalid_request");
+  }
+  return parsed;
 }
 
 function parentKind(value: unknown): ReorderParentKind {
@@ -284,28 +319,32 @@ export async function POST(request: Request) {
           }),
           { headers: cacheHeaders },
         );
-      case "block.create":
+      case "block.create": {
+        const createBlockType = blockType(input.blockType);
         return NextResponse.json(
           await createContentBlock(supabase, {
             lessonId: uuid(input.lessonId),
-            blockType: blockType(input.blockType),
-            content: blockContent(input.content),
+            blockType: createBlockType,
+            content: blockContent(createBlockType, input.content),
             expectedVersion: expectedVersion(input.expectedVersion),
             idempotencyKey: idempotencyKey(input.idempotencyKey),
           }),
           { status: 201, headers: cacheHeaders },
         );
-      case "block.update":
+      }
+      case "block.update": {
+        const updateBlockType = blockType(input.blockType);
         return NextResponse.json(
           await updateContentBlock(supabase, {
             contentBlockId: uuid(input.contentBlockId),
-            blockType: blockType(input.blockType),
-            content: blockContent(input.content),
+            blockType: updateBlockType,
+            content: blockContent(updateBlockType, input.content),
             expectedVersion: expectedVersion(input.expectedVersion),
             idempotencyKey: idempotencyKey(input.idempotencyKey),
           }),
           { headers: cacheHeaders },
         );
+      }
       case "block.delete":
         return NextResponse.json(
           await deleteContentBlock(supabase, {
@@ -340,6 +379,17 @@ export async function POST(request: Request) {
             targetRevisionId: boundedString(input.targetRevisionId, 1, 200),
             expectedVersion: expectedVersion(input.expectedVersion),
             idempotencyKey: idempotencyKey(input.idempotencyKey),
+          }),
+          { headers: cacheHeaders },
+        );
+      case "lesson.reception":
+        // A pure read, like course.revisions above — no expectedVersion, and
+        // an unapplied migration surfaces as the ordinary request_failed code
+        // rather than a broken response.
+        return NextResponse.json(
+          await getLessonReception(supabase, {
+            courseId: uuid(input.courseId),
+            windowDays: windowDays(input.windowDays),
           }),
           { headers: cacheHeaders },
         );

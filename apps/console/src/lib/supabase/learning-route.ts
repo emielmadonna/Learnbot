@@ -60,7 +60,22 @@ export function learningRedirect(
   kind: "error" | "status",
   value: string,
 ) {
-  const url = new URL("/app", request.url);
+  const requestUrl = new URL(request.url);
+  const referer = request.headers.get("referer");
+  let url = new URL("/app", requestUrl);
+  if (referer) {
+    try {
+      const candidate = new URL(referer);
+      if (
+        candidate.origin === requestUrl.origin &&
+        candidate.pathname === "/app"
+      ) {
+        url = candidate;
+      }
+    } catch {
+      // A malformed or cross-origin Referer never controls the redirect.
+    }
+  }
   url.searchParams.set(kind, value);
   return NextResponse.redirect(url, 303);
 }

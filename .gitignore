@@ -29,4 +29,6 @@ infra/supabase/.temp/
 # inside infra/supabase, which the pattern above does not reach. Contains the
 # linked project ref and local service versions -- machine state, not source.
 infra/supabase/supabase/
+# ...and at the repo root, when the CLI is invoked from there.
+/supabase/
 .vercel

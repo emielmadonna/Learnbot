@@ -9,6 +9,12 @@ export function ChangePasswordForm({ nextPath }: { nextPath: string }) {
   const [confirmation, setConfirmation] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const passwordIsStrong =
+    password.length >= 12 &&
+    /[a-z]/u.test(password) &&
+    /[A-Z]/u.test(password) &&
+    /\d/u.test(password) &&
+    /[^A-Za-z0-9]/u.test(password);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -69,9 +75,23 @@ export function ChangePasswordForm({ nextPath }: { nextPath: string }) {
           onChange={(event) => setPassword(event.target.value)}
           disabled={pending}
         />
+        <span
+          className={styles.passwordStrength}
+          data-valid={passwordIsStrong}
+        >
+          <i />
+          <i />
+          <i />
+          <i />
+        </span>
+        <small className={styles.passwordHint}>
+          {passwordIsStrong
+            ? "Strong — 12 characters, mixed case"
+            : "12 characters, mixed case, number and symbol"}
+        </small>
       </label>
       <label className={styles.field}>
-        Confirm password
+        Confirm
         <input
           className={styles.input}
           type="password"
@@ -89,7 +109,7 @@ export function ChangePasswordForm({ nextPath }: { nextPath: string }) {
         </p>
       ) : null}
       <button className={styles.button} type="submit" disabled={pending}>
-        {pending ? "Saving password…" : "Save password and continue"}
+        {pending ? "Saving password…" : "Continue"}
       </button>
     </form>
   );

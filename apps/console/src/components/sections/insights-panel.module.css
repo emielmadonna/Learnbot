@@ -1,59 +1,25 @@
 /*
   Insights panel layout.
 
-  Layout only: every colour comes from the global neutral tokens or the
-  `--brand-*` properties the shell publishes. The shared UI primitives own all
-  of the data rendering (tiles, bars, charts, empty states), so nothing here
-  restyles a primitive's internals.
+  This surface is the Corso v2 design (the ".v2*" rules below) plus one small
+  shared fragment: `SectionHead`/`EmptyState` render the "not available yet"
+  states for both the question-intelligence and learner-signal migrations,
+  reused as-is from the pre-v2 design so that message doesn't need its own
+  bespoke layout. Every other pre-v2 rule (toolbar, tiles, drilldowns,
+  question/signal lists, definitions, surface breakdown) was deleted with the
+  section components that used it — none of it is reachable from
+  `InsightsPanel` any more. Colour comes from the global neutral tokens or
+  `color-mix()` over them; nothing here restyles a primitive's internals.
 */
-
-.panel {
-  display: grid;
-  gap: var(--space-7);
-}
-
-/* ---------------------------------------------------------------- toolbar */
-
-.toolbar {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--hairline);
-}
-
-.toolbarText {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.toolbarActions {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.rangeField {
-  min-width: 190px;
-}
 
 .eyebrow {
   margin: 0;
   color: var(--muted);
-  font-size: var(--text-xs);
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Menlo, monospace);
+  font-size: var(--text-2xs, 0.625rem);
   font-weight: var(--weight-heavy);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
-}
-
-.rangeLine {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--text-md);
 }
 
 .status {
@@ -62,22 +28,15 @@
   font-size: var(--text-sm);
 }
 
-/* --------------------------------------------------------------- sections */
+/* -------------------------------------------------- shared "unavailable" head */
 
 .section {
   display: grid;
-  gap: var(--space-4);
-  padding: var(--space-5);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-}
-
-/* The headline surface: question distribution reads first. It earns emphasis
-   from size and elevation, not from a brand-tinted border. */
-.sectionHeadline {
+  gap: var(--space-5);
   padding: clamp(var(--space-5), 2.4vw, var(--space-7));
-  border-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
+  border: 0;
+  border-radius: var(--radius-xl, 20px);
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
 
@@ -105,15 +64,16 @@
 }
 
 .sectionTitleLarge {
-  font-size: var(--text-2xl);
+  font-size: clamp(var(--text-2xl), 3vw, 2.375rem);
+  letter-spacing: -0.032em;
 }
 
 .sectionLede {
-  max-width: 68ch;
+  max-width: 72ch;
   margin: 0;
-  color: var(--ink);
+  color: var(--muted);
   font-size: var(--text-md);
-  line-height: var(--leading-normal);
+  line-height: 1.65;
 }
 
 .badges {
@@ -123,409 +83,1159 @@
   flex-wrap: wrap;
 }
 
-/* ------------------------------------------------------------------ parts */
+/* ---------------------------------------------------------------- Corso v2 */
 
-.tiles {
-  display: grid;
-  gap: var(--space-3);
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-}
-
-.charts {
-  display: grid;
-  gap: var(--space-4);
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
-
-.stack {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.stackTight {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.actions {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-/* -------------------------------------------------------------- drilldown */
-
-.drill {
-  display: grid;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  border: 1px solid var(--hairline);
-  border-left: 3px solid var(--brand-primary);
-  border-radius: var(--radius-md);
-  background: var(--bg);
-}
-
-.drillNested {
-  border-left-color: var(--brand-accent);
-}
-
-.drillHead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-.drillTitle {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-strong);
-}
-
-.drillEyebrow {
-  margin: 0 0 var(--space-1);
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-heavy);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-}
-
-.facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-5);
-  margin: 0;
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   padding: 0;
-  list-style: none;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+  white-space: nowrap;
 }
 
-.fact {
-  display: grid;
-  gap: 2px;
-}
-
-.factLabel {
-  color: var(--muted);
-  font-size: var(--text-xs);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.factValue {
-  color: var(--ink);
-  font-size: var(--text-md);
-  font-weight: var(--weight-strong);
-}
-
-/* ------------------------------------------- labelled questions and signals */
-
-.questionList {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.questionItem {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
+.v2Screen {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 24px;
   background: var(--bg);
-}
-
-.questionText {
-  margin: 0;
+  box-shadow: 0 8px 30px rgb(0 0 0 / 12%);
   color: var(--ink);
-  font-size: var(--text-md);
-  line-height: var(--leading-normal);
 }
 
-.tagRow {
+.v2SurfaceHeader {
   display: flex;
-  flex-wrap: wrap;
+  min-height: 52px;
   align-items: center;
-  gap: var(--space-2);
-}
-
-.tag {
-  padding: 2px var(--space-2);
-  border: 1px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  font-size: var(--text-xs);
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-/* Semantic, never brand: an ungrounded answer must not read as "on brand". */
-.tagUngrounded {
-  border-color: color-mix(in srgb, var(--warn) 30%, var(--hairline));
-  background: var(--ui-notice-soft);
-  color: var(--ink);
-}
-
-.tagGrounded {
-  border-color: color-mix(in srgb, var(--good) 40%, var(--hairline));
-  background: var(--ui-positive-soft);
-  color: var(--good);
-}
-
-.signalList {
-  display: grid;
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.signalItem {
-  display: grid;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border: 1px solid var(--hairline);
-  border-left: 3px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
-  border-radius: var(--radius-md);
-  background: var(--bg);
-}
-
-.signalCritical {
-  border-left-color: var(--warn);
-}
-
-.signalElevated {
-  border-left-color: color-mix(
-    in srgb,
-    var(--warn) 55%,
-    color-mix(in srgb, var(--ink) 30%, var(--hairline))
-  );
-}
-
-.signalWatch {
-  border-left-color: color-mix(in srgb, var(--ink) 30%, var(--hairline));
-}
-
-.signalReviewed {
-  opacity: 0.72;
-}
-
-.signalHead {
-  display: flex;
-  align-items: flex-start;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: 16px;
+  padding: 0 28px;
+  border-bottom: 1px solid rgb(0 0 0 / 7%);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: saturate(180%) blur(24px);
 }
 
-.signalHeadline {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--text-md);
-  font-weight: var(--weight-strong);
-  line-height: var(--leading-tight);
-}
-
-.signalDetail {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-}
-
-.signalActions {
+.v2SurfaceTitle,
+.v2HeaderActions {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
 }
 
-.evidenceRefs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.v2SurfaceTitle {
+  min-width: 0;
+  gap: 12px;
+}
+
+.v2SurfaceTitle strong {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.v2SurfaceTitle > span:last-child:not(.v2Mark) {
+  overflow: hidden;
   color: var(--muted);
-  font-size: var(--text-xs);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.evidenceRef {
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
-  word-break: break-all;
+.v2HeaderActions {
+  gap: 9px;
 }
 
-/* ------------------------------------------------------- honesty notices */
-
-.note {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-}
-
-.truncation {
-  margin: 0;
-  padding: var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--ui-notice-soft);
-  color: var(--ink);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-}
-
-.limitations {
+.v2Mark {
+  position: relative;
   display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0 0 0 var(--space-4);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--accent);
 }
 
-.unattributed {
+.v2Mark::before {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--accent-ink);
+  border-right-color: transparent;
+  border-radius: 50%;
+  content: "";
+  transform: rotate(-28deg);
+}
+
+.v2Mark i {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+}
+
+.v2Range {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px dashed color-mix(in srgb, var(--ink) 30%, var(--hairline));
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  font-size: var(--text-sm);
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
 }
 
-.unattributed strong {
-  color: var(--ink);
-  font-weight: var(--weight-strong);
+.v2RangeButton,
+.v2Pill,
+.v2SecondaryButton,
+.v2PrimaryButton,
+.v2LearnerRow,
+.v2SignalCard {
+  appearance: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
 }
 
-/* ------------------------------------------------------------- definitions */
-
-.definitions {
-  padding: var(--space-4);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  background: var(--bg);
-}
-
-.definitions > summary {
-  color: var(--ink);
+.v2RangeButton {
+  padding: 5px 11px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
   cursor: pointer;
-  font-size: var(--text-md);
-  font-weight: var(--weight-strong);
 }
 
-.definitions > summary:focus-visible {
-  border-radius: var(--radius-sm);
-  outline: 2px solid var(--brand-primary);
+/* -------------------------------------------------- Questions/Students/Signals
+   Same segmented shell as .v2Range so the two header controls read as one
+   family, sized a step up because this one is navigation rather than a filter. */
+.v2ViewSwitch {
+  display: flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+
+.v2ViewSwitchLink {
+  padding: 5px 12px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.v2ViewSwitchLink:hover {
+  color: var(--ink);
+}
+
+.v2ViewSwitchLinkActive,
+.v2ViewSwitchLinkActive:hover {
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.v2RangeButtonActive {
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.v2RangeButton:disabled,
+.v2SecondaryButton:disabled,
+.v2PrimaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.v2SecondaryButton,
+.v2PrimaryButton {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 13px;
+  border-radius: 10px;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.v2SecondaryButton {
+  border: 1px solid rgb(0 0 0 / 14%);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.v2PrimaryButton {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.v2RangeButton:focus-visible,
+.v2Pill:focus-visible,
+.v2SecondaryButton:focus-visible,
+.v2PrimaryButton:focus-visible,
+.v2LearnerRow:focus-visible,
+.v2SignalCard:focus-visible,
+.v2Search input:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.definitionList {
+.v2InsightsBody {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 36px 44px 48px;
+}
+
+.v2MetricGrid {
   display: grid;
-  gap: var(--space-3);
-  margin: var(--space-4) 0 0;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 28px;
 }
 
-.definitionList dt {
-  color: var(--ink);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-strong);
+.v2MetricCard {
+  min-width: 0;
+  padding: 22px 24px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
 }
 
-.definitionList dd {
-  margin: var(--space-1) 0 0;
-  color: var(--ink);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
+.v2MetricLabel,
+.v2MetricSublabel {
+  display: block;
+  color: var(--muted);
 }
 
-.boundary {
+.v2MetricLabel {
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.v2MetricValueLine {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.v2MetricValue {
+  overflow: hidden;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2MetricValueLong {
+  font-size: 21px;
+}
+
+.v2PartialBadge {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px solid rgb(0 0 0 / 14%);
+  border-radius: 5px;
+  color: var(--muted);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+}
+
+.v2MetricSublabel {
+  margin-top: 6px;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2Good {
+  color: var(--good);
+}
+
+.v2Warning {
+  color: var(--alert);
+}
+
+.v2InsightsGrid {
+  display: grid;
+  align-items: start;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.v2Card,
+.v2SideCard {
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+}
+
+.v2Card {
+  overflow: hidden;
+}
+
+.v2QuestionHeader {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgb(0 0 0 / 7%);
+}
+
+.v2QuestionHeader h2,
+.v2SideCard h2 {
   margin: 0;
-  padding: var(--space-4);
-  border-radius: var(--radius-md);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+}
+
+.v2QuestionHeader h2 {
+  flex: 1;
+}
+
+.v2Search {
+  display: flex;
+  width: 214px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.v2Search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.v2Search input::placeholder {
+  color: var(--muted);
+}
+
+.v2Pills {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.v2Card > .v2Pills {
+  padding: 12px 24px;
+  border-bottom: 1px solid rgb(0 0 0 / 7%);
+}
+
+.v2Pill {
+  padding: 5px 12px;
+  border-radius: 999px;
   background: var(--bg);
   color: var(--ink);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-}
-
-.boundary strong {
-  color: var(--ink);
-}
-
-@media (max-width: 640px) {
-  .toolbar {
-    align-items: stretch;
-  }
-
-  .toolbarActions {
-    justify-content: space-between;
-  }
+  font-size: 12px;
+  cursor: pointer;
 }
 
 /*
- * Surface dimension.
- *
- * The coverage note states, in the operator's own reading order, why a widget
- * figure is missing or partial. It uses the neutral notice tone rather than an
- * error tone, because "not recorded yet" is a fact about the platform, not a
- * fault. No brand colour appears here.
+ * On the Insights card the pills sit on a white card over the grey pane, so
+ * `--bg` reads as a visible tint (matches the mockup exactly). On Signals and
+ * Students the whole pane IS `--bg`, so an unraised `.v2Pill` disappears into
+ * its own background — this variant lifts it back off the pane with the
+ * mockup's white-and-shadow treatment.
  */
-.surfaceNote {
-  margin: 0;
-  padding: var(--space-3);
-  border-left: 2px solid color-mix(in srgb, var(--ink) 30%, var(--hairline));
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
+.v2PillRaised {
+  padding: 7px 14px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+  font-size: 13px;
 }
 
-.deflectionList {
-  display: grid;
-  gap: var(--space-2);
+.v2PillActive {
+  background: var(--ink);
+  color: var(--surface);
+  font-weight: 500;
+}
+
+.v2PillRaised.v2PillActive {
+  box-shadow: none;
+}
+
+/*
+ * The "Not helpful" filter has no feedback data behind it yet, so it renders
+ * as inert text rather than a real pill. A dashed outline and no fill read as
+ * "not wired up on purpose" — the flat, filled `.v2Pill` look it had before
+ * read as a rendering glitch instead.
+ */
+.v2PillUnavailable {
+  border: 1px dashed color-mix(in srgb, var(--ink) 20%, transparent);
+  background: transparent;
+  color: var(--muted);
+  cursor: help;
+  font-style: italic;
+}
+
+.v2QuestionRows,
+.v2DetailCards,
+.v2EvidenceList {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.deflectionItem {
+.v2QuestionRows {
+  padding: 6px 24px 0;
+}
+
+.v2QuestionRows > li {
+  padding: 16px 0;
+  border-bottom: 1px solid rgb(0 0 0 / 7%);
+}
+
+.v2QuestionRows > li:last-child {
+  border-bottom: 0;
+}
+
+.v2QuestionMain {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.v2QuestionMain p {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* Mockup avatar-placeholder grey (#e3e3e8) has no token of its own; it sits
+   between --hairline and --bg on light ground, same blend `toggle.module.css`
+   uses for its off-state swatch, kept identical here for the same reason. */
+.v2TinyAvatar {
   display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--hairline) 55%, var(--bg));
+  color: var(--ink);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.v2Outcome {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.v2OutcomeGood {
+  background: color-mix(in srgb, var(--good) 10%, transparent);
+  color: var(--good);
+}
+
+.v2OutcomeWarning {
+  background: color-mix(in srgb, var(--alert) 10%, transparent);
+  color: var(--alert);
+}
+
+.v2QuestionMeta {
+  display: flex;
+  padding-left: 38px;
+  color: var(--muted);
+  font-size: 13px;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+}
+
+.v2AccentText {
+  color: var(--accent);
+}
+
+.v2ListFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid rgb(0 0 0 / 7%);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.v2CompactEmpty {
+  display: grid;
+  gap: 5px;
+  padding: 28px 24px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.v2CompactEmpty strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.v2SideStack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.v2SideCard {
+  padding: 24px;
+}
+
+.v2SideCard h2 {
+  margin-bottom: 20px;
+}
+
+.v2TopicList {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.v2TopicList > div > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  font-size: 14px;
+}
+
+.v2TopicList > div > div span:last-child {
+  color: var(--muted);
+}
+
+.v2BarTrack {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
   background: var(--bg);
 }
 
-.deflectionTitle {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--text-md);
-  font-weight: 600;
-  line-height: var(--leading-tight);
+.v2BarTrack i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
 }
 
-/* A host URL is data, not prose: it must wrap anywhere and never widen the
-   panel past its container. */
-.deflectionPath {
+.v2BarTrack .v2BarMuted {
+  background: var(--hairline);
+}
+
+.v2SideNote,
+.v2PaneNote,
+.v2PrivacyNote,
+.v2SignalDetailCopy {
   margin: 0;
-  overflow-wrap: anywhere;
   color: var(--muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.v2SideNote {
+  margin-top: 16px;
+}
+
+.v2MiniBars {
+  display: flex;
+  height: 64px;
+  align-items: flex-end;
+  gap: 3px;
+  margin-bottom: 9px;
+}
+
+.v2MiniBars i {
+  min-width: 2px;
+  flex: 1;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg));
+}
+
+.v2MiniBars i:nth-last-child(-n + 4) {
+  background: var(--accent);
+}
+
+.v2MiniAxis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.v2Status,
+.v2ReviewError {
+  margin: 16px 0 0;
+  font-size: 13px;
+}
+
+.v2Status {
+  color: var(--muted);
+}
+
+.v2ReviewError {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--alert) 8%, transparent);
+  color: var(--alert);
+}
+
+.v2SplitBody {
+  display: grid;
+  min-height: 648px;
+  grid-template-columns: minmax(520px, 1fr) minmax(0, 380px);
+}
+
+.v2LearnerListPane,
+.v2SignalListPane {
+  min-width: 0;
+  padding: 32px 36px 40px;
+}
+
+.v2SignalListPane {
+  padding-right: 32px;
+  padding-left: 32px;
+  border-right: 1px solid rgb(0 0 0 / 7%);
+}
+
+.v2LearnerListPane > .v2Pills,
+.v2SignalListPane > .v2Pills {
+  margin-bottom: 20px;
+}
+
+.v2LearnerTable {
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+}
+
+.v2LearnerTableHead,
+.v2LearnerRow {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto 50px;
+  align-items: center;
+  gap: 14px;
+}
+
+.v2LearnerTableHead {
+  padding: 13px 22px;
+  border-bottom: 1px solid rgb(0 0 0 / 7%);
+  background: color-mix(in srgb, var(--surface) 75%, var(--bg));
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.v2LearnerRow {
+  width: 100%;
+  padding: 16px 22px;
+  border-bottom: 1px solid rgb(0 0 0 / 7%);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.v2LearnerRow:last-child {
+  border-bottom: 0;
+}
+
+/*
+ * The shared `--accent-wash` token (12%) is tuned for other surfaces; the
+ * mockup uses a much lighter 5% for a selected row so it reads as a subtle
+ * highlight rather than a coloured block. Composed here rather than changing
+ * the shared token, which other surfaces still depend on at 12%.
+ */
+.v2LearnerRowActive {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+/* Gone quiet: nothing recorded in 14 days. The whole row dims rather than
+   just its status text, since it's the learner's activity as a whole that's
+   gone stale, not one field. */
+.v2LearnerRowQuiet {
+  opacity: 0.6;
+}
+
+/* Specificity has to beat `.v2LearnerIdentity small`'s own colour rule below,
+   so this is written as a compound selector rather than the class alone. */
+.v2LearnerIdentity small.v2LearnerMetaStuck {
+  color: var(--alert);
+}
+
+.v2LearnerIdentity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 13px;
+}
+
+.v2LearnerIdentity > i {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--hairline) 55%, var(--bg));
+  color: var(--ink);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.v2LearnerIdentity > .v2AvatarActive {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.v2LearnerIdentity > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.v2LearnerIdentity strong {
+  overflow: hidden;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2LearnerIdentity small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2Depth {
+  display: flex;
+  height: 20px;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.v2Depth i {
+  display: block;
+  width: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--hairline) 55%, var(--bg));
+}
+
+.v2Depth i:nth-child(1) {
+  height: 9px;
+}
+
+.v2Depth i:nth-child(2) {
+  height: 13px;
+}
+
+.v2Depth i:nth-child(3) {
+  height: 17px;
+}
+
+.v2Depth i:nth-child(4) {
+  height: 20px;
+}
+
+.v2Depth > .v2DepthFilled {
+  background: var(--accent);
+}
+
+.v2PaneNote {
+  margin-top: 14px;
+}
+
+.v2DetailPane {
+  min-width: 0;
+  padding: 32px 28px 40px;
+  border-left: 1px solid rgb(0 0 0 / 7%);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+
+.v2DetailIdentity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.v2DetailIdentity > span {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.v2DetailIdentity h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.v2DetailIdentity p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/*
+ * Same reasoning as `.v2LearnerRowActive`: the mockup wants a stronger 9%
+ * wash for this callout, distinct from the shared `--accent-wash` token's
+ * 12%, so it's composed locally instead of changed at the token.
+ */
+.v2InsightCallout {
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.v2InsightCallout h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.v2InsightCallout p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.v2DetailEyebrow {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+}
+
+.v2DetailFacts {
+  display: grid;
+  gap: 0;
+  margin: 0 0 22px;
+  padding: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.v2DetailFacts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgb(0 0 0 / 7%);
+  font-size: 13px;
+}
+
+.v2DetailFacts > div:last-child {
+  border-bottom: 0;
+}
+
+.v2DetailFacts dt {
+  color: var(--muted);
+}
+
+.v2DetailFacts dd {
+  margin: 0;
+  text-align: right;
+}
+
+.v2DetailCards {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 22px;
+}
+
+.v2DetailCards li {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.v2DetailCards p {
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.v2DetailCards span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.v2PrivacyNote {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgb(0 0 0 / 7%);
+  font-size: 12px;
+}
+
+.v2SignalList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.v2SignalCard {
+  width: 100%;
+  padding: 22px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 7%);
+  text-align: left;
+  cursor: pointer;
+}
+
+.v2SignalCardActive {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: -2px;
+}
+
+.v2SignalCardResolved {
+  opacity: 0.65;
+}
+
+.v2SignalCard > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.v2SignalCard h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  line-height: 1.35;
+}
+
+.v2SignalCard p {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.v2SignalIcon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.v2SignalIconCritical {
+  background: color-mix(in srgb, var(--alert) 10%, transparent);
+  color: var(--alert);
+}
+
+.v2SignalIconElevated {
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--warn);
+}
+
+.v2SignalIconWatch {
+  background: color-mix(in srgb, var(--good) 10%, transparent);
+  color: var(--good);
+}
+
+.v2SignalFacts {
+  display: flex;
+  color: var(--muted);
+  font-size: 13px;
+  gap: 8px 18px;
+  flex-wrap: wrap;
+}
+
+.v2SignalDetailTitle {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.024em;
+  line-height: 1.25;
+}
+
+.v2SignalDetailCopy {
+  margin-bottom: 20px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.v2EvidenceList {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.v2EvidenceList li {
+  overflow-wrap: anywhere;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+}
+
+.v2SignalActions {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.v2Unavailable,
+.v2Loading {
+  min-height: 420px;
+  padding: 36px 44px 48px;
+}
+
+.v2Loading {
+  margin: 0;
+  color: var(--muted);
+}
+
+@media (max-width: 980px) {
+  .v2MetricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .v2InsightsGrid,
+  .v2SplitBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .v2DetailPane,
+  .v2SignalListPane {
+    border: 0;
+    border-top: 1px solid rgb(0 0 0 / 7%);
+  }
+}
+
+@media (max-width: 640px) {
+  .v2Screen {
+    border-radius: 16px;
+  }
+
+  .v2SurfaceHeader {
+    align-items: flex-start;
+    padding: 12px 16px;
+    flex-wrap: wrap;
+  }
+
+  .v2SurfaceTitle > span:last-child:not(.v2Mark) {
+    width: 100%;
+    white-space: normal;
+  }
+
+  .v2HeaderActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .v2InsightsBody,
+  .v2Unavailable,
+  .v2Loading {
+    padding: 20px 16px 32px;
+  }
+
+  .v2MetricGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .v2QuestionHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .v2Search {
+    width: auto;
+  }
+
+  .v2QuestionMain {
+    flex-wrap: wrap;
+  }
+
+  .v2QuestionMain p {
+    min-width: calc(100% - 38px);
+  }
+
+  .v2Outcome {
+    margin-left: 38px;
+  }
+
+  .v2QuestionMeta {
+    padding-left: 38px;
+  }
+
+  .v2ListFooter {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .v2LearnerListPane,
+  .v2SignalListPane,
+  .v2DetailPane {
+    padding: 24px 16px 32px;
+  }
+
+  .v2LearnerTableHead {
+    display: none;
+  }
+
+  .v2LearnerRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .v2LearnerRow > .v2Depth {
+    grid-column: 1 / -1;
+    padding-left: 49px;
+  }
 }

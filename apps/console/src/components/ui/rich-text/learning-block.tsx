@@ -9,6 +9,7 @@ import {
 } from "./markdown";
 import { RichText } from "./rich-text";
 import styles from "./learning-block.module.css";
+import { normalizeCourseMediaContent } from "../../../lib/content/media-block";
 
 /**
  * The learner-facing rendering of one authored content block.
@@ -57,6 +58,19 @@ export function learningBlockPreview(
   content: Readonly<Record<string, unknown>>,
 ): string {
   if (type === "divider") return "— divider —";
+  if (type === "image") {
+    const caption =
+      typeof content.caption === "string" ? content.caption.trim() : "";
+    const altText =
+      typeof content.altText === "string" ? content.altText.trim() : "";
+    return caption || altText;
+  }
+  if (type === "video") {
+    return typeof content.title === "string" ? content.title.trim() : "";
+  }
+  if (type === "link") {
+    return typeof content.label === "string" ? content.label.trim() : "";
+  }
   if (type === "list") {
     const items = itemsOf(content);
     if (items.length > 0) return items.map((item) => `• ${item}`).join("\n");
@@ -157,6 +171,113 @@ export function LearningBlockView({
       ) : (
         <ul className={styles.list}>{listItems}</ul>
       ),
+    );
+  }
+
+  if (type === "image") {
+    const media = normalizeCourseMediaContent("image", content);
+    if (media === null) {
+      return root(
+        <p className={styles.mediaUnavailable}>
+          This image has an invalid or unsafe source.
+        </p>,
+      );
+    }
+    const url = media.url as string;
+    const altText = media.altText as string;
+    const caption = media.caption as string;
+    return root(
+      <figure className={styles.mediaFigure}>
+        {/* Authored media may live on a customer's existing HTTPS CDN. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          alt={altText}
+          className={styles.image}
+          decoding="async"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          src={url}
+        />
+        {caption.length === 0 ? null : (
+          <figcaption className={styles.mediaCaption}>{caption}</figcaption>
+        )}
+      </figure>,
+    );
+  }
+
+  if (type === "video") {
+    const media = normalizeCourseMediaContent("video", content);
+    if (media === null) {
+      return root(
+        <p className={styles.mediaUnavailable}>
+          This video has an invalid or unsafe source.
+        </p>,
+      );
+    }
+    const url = media.url as string;
+    const provider = media.provider as "youtube" | "vimeo" | "file";
+    const title = media.title as string;
+    const caption = media.caption as string;
+    return root(
+      <figure className={styles.mediaFigure}>
+        {provider === "file" ? (
+          <video
+            aria-label={title}
+            className={styles.video}
+            controls
+            controlsList="nodownload noremoteplayback"
+            disablePictureInPicture
+            playsInline
+            preload="metadata"
+            src={url}
+          />
+        ) : (
+          <iframe
+            allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            className={styles.video}
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+            sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+            src={url}
+            title={title}
+          />
+        )}
+        <figcaption className={styles.mediaCaption}>
+          <strong>{title}</strong>
+          {caption.length === 0 ? null : <span>{caption}</span>}
+        </figcaption>
+      </figure>,
+    );
+  }
+
+  if (type === "link") {
+    const media = normalizeCourseMediaContent("link", content);
+    if (media === null) {
+      return root(
+        <p className={styles.mediaUnavailable}>
+          This link has an invalid or unsafe destination.
+        </p>,
+      );
+    }
+    const url = media.url as string;
+    const label = media.label as string;
+    const description = media.description as string;
+    return root(
+      <a
+        className={styles.linkCard}
+        href={url}
+        rel="external nofollow noopener noreferrer"
+        target="_blank"
+      >
+        <span className={styles.linkLabel}>{label}</span>
+        {description.length === 0 ? null : (
+          <span className={styles.linkDescription}>{description}</span>
+        )}
+        <span aria-hidden="true" className={styles.linkArrow}>
+          ↗
+        </span>
+      </a>,
     );
   }
 

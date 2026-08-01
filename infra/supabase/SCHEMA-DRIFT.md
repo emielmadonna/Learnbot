@@ -665,3 +665,44 @@ supabase functions deploy learning-admin-users --project-ref fwilehggxqkpeuojxqz
 There is still no deploy config for edge functions anywhere -- no CI step, and
 nothing in `hosted-release.mjs`. Every function on this project has been pushed
 by hand, and this one is no different.
+
+### `learning-provider-widget-complete` -- unapplied, 2026-07-31
+
+`infra/supabase/functions/learning-provider-widget-complete/index.ts` has an
+**unapplied change**: it now accepts `stream: true` and, when asked, proxies the
+provider's token stream back as `text/event-stream` instead of a buffered JSON
+body. This is what lets `/api/widget/ask` stream to the embedded widget and to
+the hosted full-page assistant.
+
+```
+sha256  e9582374f8b032cf14c6700b81b5683c5037045a5f5570d6b1ba57f629a6db63
+bytes   22035
+```
+
+```
+supabase functions deploy learning-provider-widget-complete --project-ref fwilehggxqkpeuojxqzk
+```
+
+Why it had to be this function rather than a direct call from the console: this
+is the only place the widget surface's tenant id exists, so it is the only place
+`learning_reserve_provider_call` can run before the spend and
+`learning_record_provider_cost` after it. Streaming around it would have made
+every streamed widget answer unmetered.
+
+**Not deploying is safe, and is the current state.** The new code path is
+opt-in on a field the deployed function does not know: it ignores `stream` and
+returns the JSON it always has. `streamWithManagedWidgetProvider`
+(`apps/console/src/lib/provider-runtime.ts`) detects that -- it checks for a
+`text/event-stream` content type and gets `application/json` -- and yields the
+whole answer as one delta followed by `done`. So until the deploy, both
+customer-facing surfaces get sources immediately and the prose in one piece;
+after it, the prose arrives token by token. Nothing else differs, and no ledger
+row changes shape either way.
+
+The reservation, the ledger write and the refusal codes are unchanged in the
+buffered branch. Both branches now write the ledger through one helper
+(`recordWidgetCost`) specifically so a future edit cannot leave one of them
+unmetered.
+
+Everything added to this file is ASCII; the four non-ASCII characters it still
+contains are pre-existing em-dashes in comments, untouched.

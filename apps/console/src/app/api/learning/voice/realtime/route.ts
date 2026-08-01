@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
   AuthenticationBoundaryError,
@@ -6,16 +5,16 @@ import {
 } from "../../../../../lib/supabase/auth-boundary";
 import { authenticatedLearningClient } from "../../../../../lib/supabase/learning-route";
 import {
-  enforceVoiceQuota,
-  meterVoiceUsage,
   resolveTenantVoice,
-  voiceTraceId,
 } from "../../../../../lib/voice-runtime";
+import {
+  forwardManagedVoiceFailure,
+  invokeManagedVoice,
+  managedVoiceHeaders,
+} from "../../../../../lib/supabase/managed-voice";
 
-const REALTIME_URL = "https://api.openai.com/v1/realtime/calls";
 const REALTIME_MODEL = "gpt-realtime-2.1";
 const MAX_SDP_BYTES = 32 * 1024;
-const REQUEST_DEADLINE_MS = 20_000;
 
 function jsonError(code: string, status: number, message: string) {
   return NextResponse.json(
@@ -48,11 +47,6 @@ async function realtimeContext(request: Request, mutation: boolean) {
   };
 }
 
-function providerCredential() {
-  const credential = process.env.OPENAI_API_KEY?.trim();
-  return credential && credential.length >= 20 ? credential : null;
-}
-
 export async function GET(request: Request) {
   try {
     const context = await realtimeContext(request, false);
@@ -63,11 +57,19 @@ export async function GET(request: Request) {
         "Select a workspace before using voice.",
       );
     }
-    if (!providerCredential()) {
-      return jsonError(
-        "voice_provider_not_configured",
-        503,
-        "Continuous voice is not configured.",
+    const readiness = await invokeManagedVoice(
+      request,
+      context.supabase,
+      JSON.stringify({
+        action: "readiness",
+        tenantId: context.tenantId,
+      }),
+      "application/json",
+    );
+    if (!readiness.ok) {
+      return forwardManagedVoiceFailure(
+        readiness,
+        "Continuous voice readiness could not be verified.",
       );
     }
     // The readiness read reports the voice the learner will actually hear, so a
@@ -112,14 +114,6 @@ export async function POST(request: Request) {
         "Select a workspace before using voice.",
       );
     }
-    const credential = providerCredential();
-    if (!credential) {
-      return jsonError(
-        "voice_provider_not_configured",
-        503,
-        "Continuous voice is not configured.",
-      );
-    }
     const contentType = request.headers.get("content-type")?.toLowerCase();
     const declaredLength = request.headers.get("content-length");
     const contentLength = declaredLength === null ? null : Number(declaredLength);
@@ -136,16 +130,6 @@ export async function POST(request: Request) {
         "A bounded WebRTC session description is required.",
       );
     }
-    // Durable, cross-instance quota. The previous per-process map reset on
-    // every serverless cold start, so it bounded nothing in production.
-    const quota = await enforceVoiceQuota(context.supabase, {
-      kind: "realtime",
-      tenantId: context.tenantId,
-      principalId: context.principalId,
-    });
-    if (!quota.allowed) {
-      return jsonError(quota.code, 429, quota.message);
-    }
     const sdp = await request.text();
     if (!sdp.startsWith("v=0") || new TextEncoder().encode(sdp).byteLength > MAX_SDP_BYTES) {
       return jsonError("invalid_sdp", 400, "The WebRTC offer was invalid.");
@@ -153,73 +137,32 @@ export async function POST(request: Request) {
 
     // The tenant's configured voice, not a hardcoded one.
     const voiceProfile = await resolveTenantVoice(context.supabase);
-    const session = {
-      type: "realtime",
-      model: REALTIME_MODEL,
-      instructions:
-        "You are a calm learning voice. Automatic answers are disabled because the application grounds every turn in the tenant's published learning. When the application asks you to read a saved answer, speak that answer faithfully, without adding facts or changing its meaning.",
-      output_modalities: ["audio"],
-      audio: {
-        input: {
-          transcription: {
-            model: "gpt-4o-mini-transcribe",
-            language: "en",
-          },
-          turn_detection: {
-            type: "semantic_vad",
-            eagerness: "auto",
-            create_response: false,
-            interrupt_response: true,
-          },
-        },
-        output: { voice: voiceProfile.voice },
-      },
-    };
-    const form = new FormData();
-    form.set("sdp", sdp);
-    form.set("session", JSON.stringify(session));
-    const safetyIdentifier = createHash("sha256")
-      .update(`learningbot:${context.tenantId}:${context.principalId}`)
-      .digest("hex");
-    const providerResponse = await fetch(REALTIME_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${credential}`,
-        "OpenAI-Safety-Identifier": safetyIdentifier,
-      },
-      body: form,
-      signal: AbortSignal.timeout(REQUEST_DEADLINE_MS),
-    });
-    const answerSdp = await providerResponse.text();
-    if (!providerResponse.ok || !answerSdp.startsWith("v=0")) {
-      return jsonError(
-        "realtime_provider_failed",
-        502,
+    const managedResponse = await invokeManagedVoice(
+      request,
+      context.supabase,
+      JSON.stringify({
+        action: "realtime",
+        tenantId: context.tenantId,
+        sdp,
+        voice: voiceProfile.voice,
+      }),
+      "application/json",
+    );
+    if (!managedResponse.ok) {
+      return forwardManagedVoiceFailure(
+        managedResponse,
         "Continuous voice could not connect. Push-to-talk remains available.",
       );
     }
-    // A realtime session is metered once, at connection, as an estimate: the
-    // browser holds the socket, so the server never observes its true length.
-    await meterVoiceUsage(context.supabase, {
-      kind: "realtime",
-      model: REALTIME_MODEL,
-      quantity: 1,
-      fallbackUnit: "realtime_sessions",
-      traceId: voiceTraceId("realtime"),
-      idempotencyKey: `voice-realtime:${crypto.randomUUID()}`,
-    });
-
-    return new NextResponse(answerSdp, {
+    return new NextResponse(managedResponse.body, {
       status: 200,
-      headers: {
-        "Cache-Control": "private, no-store",
+      headers: managedVoiceHeaders(managedResponse, {
         "Content-Type": "application/sdp",
         "X-AI-Generated-Voice": "true",
         "X-Voice-Transport": "webrtc",
         "X-Voice-Name": voiceProfile.voice,
         "X-Voice-Profile": voiceProfile.source,
-        "X-Voice-RateLimit-Scope": quota.scope,
-      },
+      }),
     });
   } catch (error) {
     if (error instanceof AuthenticationBoundaryError) {

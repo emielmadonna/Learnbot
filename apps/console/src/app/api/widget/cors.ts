@@ -25,7 +25,19 @@
  * console session.
  */
 
-const preflightHeaders = "content-type";
+/*
+ * `accept` is here because the embed asks for `text/event-stream` on
+ * /api/widget/ask, and that is how it opts into a streamed answer.
+ *
+ * It is very probably redundant: `Accept` is a CORS-safelisted request header
+ * so long as its value carries no unsafe bytes, and "text/event-stream,
+ * application/json" carries none -- so a browser should never list it in
+ * `Access-Control-Request-Headers` at all. It is stated anyway because the cost
+ * is one word and the failure it would prevent is the widget being blocked
+ * outright on every customer page, which is not a thing worth reasoning about
+ * from the spec instead of allowing for.
+ */
+const preflightHeaders = "content-type, accept";
 const preflightMaxAgeSeconds = 600;
 
 /** The exact `Origin` header, or null when the caller did not send one. */

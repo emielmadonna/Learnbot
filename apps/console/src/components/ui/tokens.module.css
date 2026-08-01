@@ -33,16 +33,15 @@
   --ui-focus: color-mix(in srgb, var(--brand-primary) 42%, transparent);
 
   /*
-   * Status washes. Graphite defines exactly two status colours, --good and
-   * --warn (docs/PLAN.md Section 3.1) — there is no separate "critical" or
-   * "notice" hue. The old three-tier danger/warning/positive system (plus a
-   * fourth, near-identical "critical" tone declared again in app/globals.css)
-   * collapsed into these two on purpose; see the Phase 16 report for the full
-   * before/after. Graphite has no "soft" wash token, so these are synthesised
-   * the same way --accent-wash is: a percentage of the solid colour mixed
-   * into --surface.
+   * Status washes. Graphite defines three status colours — --good, --warn
+   * and --alert (app/tokens.css) — so danger/critical states have their own
+   * hue distinct from caution. --ui-danger-soft derives from --alert, not
+   * --warn: a destructive/critical wash must not read as the same colour as
+   * a caution wash. Graphite has no "soft" wash token, so these are
+   * synthesised the same way --accent-wash is: a percentage of the solid
+   * colour mixed into --surface.
    */
-  --ui-danger-soft: color-mix(in srgb, var(--warn) 11%, var(--surface));
+  --ui-danger-soft: color-mix(in srgb, var(--alert) 11%, var(--surface));
   --ui-warning-soft: color-mix(in srgb, var(--warn) 16%, var(--surface));
   --ui-positive-soft: color-mix(in srgb, var(--good) 12%, var(--surface));
 

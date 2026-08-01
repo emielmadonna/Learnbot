@@ -90,6 +90,16 @@
   transform: rotate(-6deg);
 }
 
+.poseThinking .layerActive {
+  transform-origin: 50% 100%;
+  transform: translateY(-2%) rotate(3deg);
+}
+
+.poseUnsure .layerActive {
+  transform-origin: 50% 100%;
+  transform: translateY(1%) rotate(-4deg);
+}
+
 /* ---------------------------------------------- speaking squash-and-stretch */
 @keyframes avatarSpeakingBounce {
   0%,

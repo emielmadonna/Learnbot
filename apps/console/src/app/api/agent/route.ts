@@ -30,9 +30,9 @@ const escalationTriggers = new Set<string>(agentEscalationTriggerOptions);
 // is a redundant client-side guard only — the database CHECK constraint and
 // RPC validation are the actual boundary a caller cannot bypass.
 const agentModels = new Set<string>([
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
   "gpt-5.6-luna",
-  "gpt-5.6-luna-mini",
-  "gpt-5.6-luna-pro",
 ]);
 const conflictCodes = new Set([
   "idempotency_conflict",

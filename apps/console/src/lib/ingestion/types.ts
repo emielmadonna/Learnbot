@@ -24,7 +24,10 @@ export interface ExtractionResult {
   readonly sourceLocations: readonly SourceLocation[];
   /** sha256 hex digest of rawText. */
   readonly contentHash: string;
-  readonly extractor: "plain_text_transcript_v1";
+  readonly extractor:
+    | "plain_text_transcript_v1"
+    | "pdf_text_v1"
+    | "docx_raw_text_v1";
   readonly extractorVersion: 1;
 }
 
