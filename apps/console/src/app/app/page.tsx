@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import AppShell from "../../components/app-shell/app-shell";
 import type {
@@ -154,12 +155,15 @@ export default async function AuthenticatedAppPage() {
     redirect("/auth/sign-in?error=authentication_required&next=/app");
   }
 
-  const platformAuthorization = await supabase.rpc(
-    "platform_admin_is_authorized",
-  );
+  // Neither read depends on the other, so they travel together. Awaited one
+  // after the other they were two separate round trips to Supabase on the
+  // critical path of every single workspace load.
+  const [platformAuthorization, context] = await Promise.all([
+    supabase.rpc("platform_admin_is_authorized"),
+    getCurrentTenantContext(supabase),
+  ]);
   const canManagePlatform =
     !platformAuthorization.error && platformAuthorization.data === true;
-  const context = await getCurrentTenantContext(supabase);
   const accessMode = resolveAppAccessMode({
     platformAuthorized: canManagePlatform,
     selectedTenant: context.selected && context.tenantId !== null,
@@ -208,11 +212,13 @@ export default async function AuthenticatedAppPage() {
       workspace: null,
     };
     return (
-      <AppShell
-        payload={payload}
-        accountName={accountName}
-        accountEmail={user.email ?? null}
-      />
+      <Suspense fallback={null}>
+        <AppShell
+          payload={payload}
+          accountName={accountName}
+          accountEmail={user.email ?? null}
+        />
+      </Suspense>
     );
   }
 
@@ -227,6 +233,16 @@ export default async function AuthenticatedAppPage() {
   const canAdminister = TENANT_ADMIN_ROLES.includes(identityRole);
   const brand = workspace.branding;
 
+  // Two storage signatures and the section catalogue, none of which reads the
+  // others. These were three consecutive awaits — the brand pair awaited inline
+  // inside the object literal below, which is an easy place to miss that it
+  // serialises them.
+  const [logoUrl, avatarUrl, sections] = await Promise.all([
+    signedBrandAsset(supabase, brand?.logoStorageKey),
+    signedBrandAsset(supabase, brand?.avatarStorageKey),
+    resolveSections(supabase, { canAdminister, canManagePlatform }),
+  ]);
+
   // The workspace payload is the authoritative source for presentation: it is
   // the only branding a learner is allowed to see, and it always resolves. The
   // agent record below supplies the fields the workspace deliberately withholds
@@ -234,8 +250,8 @@ export default async function AuthenticatedAppPage() {
   // themes correctly whether or not the agent migration has been applied.
   const agent: AgentConfig = {
     assistantName: brand?.assistantName ?? "Corso",
-    logoUrl: await signedBrandAsset(supabase, brand?.logoStorageKey),
-    avatarUrl: await signedBrandAsset(supabase, brand?.avatarStorageKey),
+    logoUrl,
+    avatarUrl,
     iconGlyph: brand?.iconGlyph ?? "◎",
     // Unbranded defaults are NEUTRAL graphite, drawn from the neutral ramp in
     // globals.css (--n-800 / --n-600 / --n-50 / --n-900). A tenant that has not
@@ -259,11 +275,6 @@ export default async function AuthenticatedAppPage() {
     courseScope: brand?.courseScope ?? "all",
   };
 
-  const sections = await resolveSections(supabase, {
-    canAdminister,
-    canManagePlatform,
-  });
-
   const payload: ShellPayload = {
     role: toShellRole(identityRole, canManagePlatform),
     tenant: {
@@ -277,10 +288,12 @@ export default async function AuthenticatedAppPage() {
   };
 
   return (
-    <AppShell
-      payload={payload}
-      accountName={accountName}
-      accountEmail={user.email ?? null}
-    />
+    <Suspense fallback={null}>
+      <AppShell
+        payload={payload}
+        accountName={accountName}
+        accountEmail={user.email ?? null}
+      />
+    </Suspense>
   );
 }

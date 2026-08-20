@@ -114,8 +114,12 @@ export default function HomePage() {
             <a href="#security">Security</a>
           </div>
           <div className="corsoNavActions">
-            <Link href="/auth/sign-in">Sign in</Link>
-            <Link className="corsoButton corsoPrimary corsoSmall" href="/auth/sign-in">
+            <Link href="/auth/sign-in" prefetch={false}>Sign in</Link>
+            <Link
+              className="corsoButton corsoPrimary corsoSmall"
+              href="/auth/sign-in"
+              prefetch={false}
+            >
               Open Corso
             </Link>
           </div>
@@ -139,7 +143,11 @@ export default function HomePage() {
             is stuck on.
           </p>
           <div className="corsoActions">
-            <Link className="corsoButton corsoPrimary" href="/auth/sign-in">
+            <Link
+              className="corsoButton corsoPrimary"
+              href="/auth/sign-in"
+              prefetch={false}
+            >
               Open Corso
             </Link>
             <a className="corsoButton corsoSecondary" href="#widget">
@@ -267,6 +275,7 @@ export default function HomePage() {
                       : "corsoButton corsoSecondary"
                   }
                   href="/auth/sign-in"
+                  prefetch={false}
                 >
                   {plan.name === "Platform" ? "Open platform" : "Sign in"}
                 </Link>
@@ -297,7 +306,11 @@ export default function HomePage() {
           evaluation.
         </p>
         <div className="corsoActions">
-          <Link className="corsoButton corsoPrimary" href="/auth/sign-in">
+          <Link
+            className="corsoButton corsoPrimary"
+            href="/auth/sign-in"
+            prefetch={false}
+          >
             Open Corso
           </Link>
           <a className="corsoButton corsoSecondary" href="#how">
@@ -312,8 +325,8 @@ export default function HomePage() {
           <div>
             <span>Privacy</span>
             <a href="#security">Security</a>
-            <Link href="/api/health">Status</Link>
-            <Link href="/auth/sign-in">Sign in</Link>
+            <a href="/api/health">Status</a>
+            <Link href="/auth/sign-in" prefetch={false}>Sign in</Link>
           </div>
         </div>
       </footer>

@@ -22,13 +22,28 @@ export async function proxy(request: NextRequest) {
       },
     });
 
-    // getUser verifies the access token with Supabase Auth. Protected pages
-    // repeat this check before loading any tenant context.
-    const identity = await supabase.auth.getUser();
+    // `getClaims` verifies the access token the same way `getUser` did, but it
+    // prefers to do it locally: it reads the session (which is also what
+    // refreshes an expiring token and writes the cookies back through `setAll`
+    // above), then verifies the JWT signature with WebCrypto against the
+    // project's published JWKS, which auth-js caches at module scope and so
+    // reuses across every request on a warm instance.
+    //
+    // This runs on EVERY /app, /onboarding and /auth request, so it was the
+    // single most repeated network round trip in the product. It is never
+    // slower than what it replaces: on a project still signing with the legacy
+    // shared HS256 secret there is no public key to verify against, and auth-js
+    // falls back to exactly the `getUser` call that used to be here. The
+    // speed-up arrives on its own once the project's JWT signing keys are
+    // migrated to an asymmetric algorithm — no code change needed for that.
+    //
+    // Protected pages repeat this check before loading any tenant context.
+    const identity = await supabase.auth.getClaims();
+    const signedIn = Boolean(identity.data?.claims && !identity.error);
     const protectedWorkspace =
       request.nextUrl.pathname.startsWith("/app") ||
       request.nextUrl.pathname.startsWith("/onboarding");
-    if (identity.data.user && !identity.error && protectedWorkspace) {
+    if (signedIn && protectedWorkspace) {
       const access = await supabase.rpc("auth_current_access_state");
       const row = Array.isArray(access.data) ? access.data[0] : access.data;
       if (
