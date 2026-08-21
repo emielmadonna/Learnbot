@@ -820,3 +820,102 @@ unmetered.
 
 Everything added to this file is ASCII; the four non-ASCII characters it still
 contains are pre-existing em-dashes in comments, untouched.
+
+## Awaiting hand-apply: provider-key capability and the published avatar read
+
+Written 2026-08-01 on `agent/publish-latest-platform`, integrated onto `main`
+2026-08-21, and **not yet applied**. Recorded here before any apply, in the
+same session it was integrated.
+
+| Version | Name | SHA-256 | Bytes |
+|---|---|---|---|
+| 20260801090000 | `provider_key_capability_and_published_avatar` | `f76310ca393563594c399042b7b8763368cb208dd9f47a31f20cd70a7234512e` | 3,314 |
+
+Pure ASCII, verified by byte scan (zero bytes outside 0x20-0x7E plus tab and
+newline). Route it through base64 anyway.
+
+It depends on `20260731081000_tenant_capability_control`, which creates
+`public.tenant_capability_grants`, `app_private.tenant_capability_definitions`
+and `public.tenant_get_capabilities`. Apply that one first if it is not already
+live; this file replaces the definitions function and rewrites the grants
+check constraint, and does neither if the table is absent.
+
+### What it does
+
+1. `app_private.tenant_capability_definitions()` is replaced to add a sixth
+   row, `provider_api_key`, defaulting to **disabled** at display position 6.
+   The other five rows are unchanged.
+2. The check constraint on `public.tenant_capability_grants.capability_key` is
+   dropped by catalog lookup — not by name, because the name has varied — and
+   recreated widened to admit `provider_api_key`. Widening a check constraint
+   admits every row that was already legal, so no existing grant is affected.
+3. Every live tenant is seeded a `provider_api_key` grant with
+   `enabled = false`, keyed by a deterministic idempotency key and guarded by
+   `on conflict do nothing`. Re-running the file is a no-op.
+4. `public.learning_get_published_avatar()` is created, granted to
+   `authenticated` only, and revoked from `public`, `anon` and `service_role`.
+   It returns the highest `version_number` row of `public.agent_avatar_sets`
+   whose `status = 'published'`, and returns only `avatarSetId`,
+   `versionNumber`, `poses` and `publishedAt`. Source photos, consent
+   evidence, provider metadata and rejected drafts never cross it.
+
+### Until it is applied
+
+Nothing regresses, and the console deploy does not wait for it. Every new path
+fails closed onto behaviour that is already live:
+
+- `/api/learning/avatar` calls the missing function, gets an RPC error and
+  returns `503 request_failed`. `ConversationClient` checks `response.ok` and
+  returns without setting state, so every pose renders the monogram fallback —
+  which is exactly what the workspace renders today, avatars never having been
+  wired into it.
+- Provider-key management stays off. `providerManagementEnabled`
+  (`apps/console/src/app/api/agent/provider/route.ts`) reads
+  `tenant_get_capabilities`, finds no `provider_api_key` entry, and returns
+  false; `GET` reports `managementEnabled: false` and `PUT` refuses with
+  `403 provider_key_management_disabled`.
+
+### What changes once applied
+
+Provider-key management remains off — the seed is `enabled = false` for every
+tenant, deliberately. It is a platform-owner switch now, thrown per tenant from
+the Platform panel. Any tenant that could previously set its own provider API
+key **loses that surface until the owner grants it**, and that is the point of
+the migration: the service-role write in `learning-provider-credentials` must
+not be a way around the grant.
+
+### Rollback
+
+`drop function public.learning_get_published_avatar()`; re-run the
+`20260731081000` body of `app_private.tenant_capability_definitions()`; drop
+`tenant_capability_grants_capability_key_check` and recreate it over the
+original five keys; then
+`delete from public.tenant_capability_grants where capability_key =
+'provider_api_key'`. Do the delete before the constraint, or the narrowed
+constraint refuses to validate. No other table is read or written by the file.
+
+### `learning-provider-credentials` -- unapplied, 2026-08-21
+
+`infra/supabase/functions/learning-provider-credentials/index.ts` has an
+**unapplied change** that belongs with the migration above: before its
+service-role write it now calls `tenant_get_capabilities` on the *caller's own*
+JWT-selected tenant and refuses with `403 provider_key_management_disabled`
+unless that tenant holds an enabled `provider_api_key` grant. It fails closed
+on any RPC error, returning `503 credential_boundary_unavailable`.
+
+```
+sha256  f2ff62aedbb1b591fd22b6f79f2f178847dd6b9add54f0d1425bffe06f3ecf14
+bytes   5606
+```
+
+```
+supabase functions deploy learning-provider-credentials --project-ref fwilehggxqkpeuojxqzk
+```
+
+**Not deploying is safe.** The console refuses the same call first, in
+`/api/agent/provider`, so the UI path is already gated. What the deploy adds is
+the boundary itself: the console check is a client of the API, while this one
+is the last thing standing in front of the service-role key. Until it ships,
+anything holding a valid tenant JWT could call the function directly and set a
+credential the platform owner never granted. Deploy it in the same session as
+the migration.
