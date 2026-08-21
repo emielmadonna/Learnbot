@@ -8,18 +8,18 @@ import {
   executeLearningRpc,
 } from "../../../../../lib/supabase/learning-route";
 import {
-  enforceVoiceQuota,
-  meterVoiceUsage,
   resolveTenantVoice,
-  voiceTraceId,
 } from "../../../../../lib/voice-runtime";
+import {
+  forwardManagedVoiceFailure,
+  invokeManagedVoice,
+  managedVoiceHeaders,
+} from "../../../../../lib/supabase/managed-voice";
 
 type JsonRecord = Record<string, unknown>;
 
-const OPENAI_SPEECH_URL = "https://api.openai.com/v1/audio/speech";
-const SPEECH_MODEL = "gpt-4o-mini-tts";
 const MAX_SPEECH_CHARACTERS = 4_096;
-const REQUEST_DEADLINE_MS = 45_000;
+const MAX_SPEECH_REQUEST_BYTES = 16 * 1024;
 
 function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -85,35 +85,28 @@ export async function POST(request: Request) {
         "Select a workspace before using voice.",
       );
     }
-    const credential = process.env.OPENAI_API_KEY?.trim();
-    if (!credential || credential.length < 20) {
+    const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
+    if (!contentType.startsWith("application/json")) {
       return jsonError(
-        "voice_provider_not_configured",
-        503,
-        "Synthetic speech is not configured.",
+        "invalid_content_type",
+        415,
+        "A JSON speech request is required.",
       );
     }
-    // Durable, cross-instance quota. The previous per-process map reset on
-    // every serverless cold start, so it bounded nothing in production.
-    const quota = await enforceVoiceQuota(supabase, {
-      kind: "speak",
-      tenantId: context.tenantId,
-      principalId: context.principalId,
-    });
-    if (!quota.allowed) {
+    const rawInput = await request.text();
+    if (new TextEncoder().encode(rawInput).byteLength > MAX_SPEECH_REQUEST_BYTES) {
       return jsonError(
-        quota.code,
-        429,
-        quota.message,
-        quota.retryAfterSeconds > 0,
-        {
-          "Retry-After": String(Math.max(1, quota.retryAfterSeconds)),
-          "X-Voice-RateLimit-Scope": quota.scope,
-        },
+        "request_too_large",
+        413,
+        "The speech request is too large.",
       );
     }
-
-    const input = (await request.json()) as unknown;
+    let input: unknown;
+    try {
+      input = JSON.parse(rawInput) as unknown;
+    } catch {
+      return jsonError("invalid_request", 400, "A saved assistant answer is required.");
+    }
     if (
       !isRecord(input) ||
       !validUuid(input.conversationId) ||
@@ -152,55 +145,34 @@ export async function POST(request: Request) {
     // The tenant's configured voice, not a hardcoded one. An unset or
     // unrecognised value falls back to the platform default.
     const voiceProfile = await resolveTenantVoice(supabase);
-    const providerResponse = await fetch(OPENAI_SPEECH_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${credential}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: SPEECH_MODEL,
-        voice: voiceProfile.voice,
+    const managedResponse = await invokeManagedVoice(
+      request,
+      supabase,
+      JSON.stringify({
+        action: "speak",
+        tenantId: context.tenantId,
         input: answer,
-        response_format: "mp3",
-        instructions:
-          "Speak as a calm, warm learning companion. Read the supplied answer faithfully without adding words.",
+        voice: voiceProfile.voice,
+        conversationId,
+        messageId,
       }),
-      signal: AbortSignal.timeout(REQUEST_DEADLINE_MS),
-    });
-    if (!providerResponse.ok || !providerResponse.body) {
-      return jsonError(
-        "speech_failed",
-        502,
+      "application/json",
+    );
+    if (!managedResponse.ok || !managedResponse.body) {
+      return forwardManagedVoiceFailure(
+        managedResponse,
         "The answer is saved, but its audio could not be generated.",
-        providerResponse.status === 408 || providerResponse.status === 429,
       );
     }
-
-    // Speech is billed by input characters, which are known here. Metering is
-    // best effort and never throws: the audio is already on its way.
-    await meterVoiceUsage(supabase, {
-      kind: "speak",
-      model: SPEECH_MODEL,
-      quantity: answer.length,
-      fallbackUnit: "characters",
-      traceId: voiceTraceId("speak"),
-      idempotencyKey: `voice-speak:${conversationId}:${messageId}`,
-      conversationId,
-    });
-
-    return new NextResponse(providerResponse.body, {
+    return new NextResponse(managedResponse.body, {
       status: 200,
-      headers: {
-        "Cache-Control": "private, no-store",
+      headers: managedVoiceHeaders(managedResponse, {
         "Content-Type": "audio/mpeg",
         "Content-Disposition": 'inline; filename="assistant-answer.mp3"',
         "X-AI-Generated-Voice": "true",
-        "X-Content-Type-Options": "nosniff",
         "X-Voice-Name": voiceProfile.voice,
         "X-Voice-Profile": voiceProfile.source,
-        "X-Voice-RateLimit-Scope": quota.scope,
-      },
+      }),
     });
   } catch (error) {
     if (error instanceof AuthenticationBoundaryError) {

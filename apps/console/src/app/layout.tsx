@@ -4,11 +4,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "LearningBot",
-    template: "%s · LearningBot",
+    default: "Corso",
+    template: "%s · Corso",
   },
-  description:
-    "Private, grounded learning conversations, courses, voice, progress, and administration for modern teams.",
+  description: "Your course, answering.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

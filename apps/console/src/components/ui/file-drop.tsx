@@ -82,7 +82,10 @@ export function FileDrop({
   const [status, setStatus] = useState<FileDropStatus>("idle");
   const [progress, setProgress] = useState<number | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
-  const [staged, setStaged] = useState<{ name: string; url: string }>();
+  const [staged, setStaged] = useState<{
+    name: string;
+    url: string;
+  }>();
 
   useEffect(() => {
     mounted.current = true;
@@ -93,7 +96,7 @@ export function FileDrop({
 
   useEffect(
     () => () => {
-      if (staged !== undefined) URL.revokeObjectURL(staged.url);
+      if (staged?.url) URL.revokeObjectURL(staged.url);
     },
     [staged],
   );
@@ -122,7 +125,15 @@ export function FileDrop({
         return;
       }
 
-      setStaged({ name: file.name, url: URL.createObjectURL(file) });
+      const locallyPreviewable = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+      ].includes(file.type);
+      setStaged({
+        name: file.name,
+        url: locallyPreviewable ? URL.createObjectURL(file) : "",
+      });
       setError(undefined);
       setProgress(undefined);
       setStatus("uploading");
@@ -153,7 +164,9 @@ export function FileDrop({
     void handleFile(event.dataTransfer.files[0]);
   }
 
-  const shownUrl = staged?.url ?? previewUrl ?? undefined;
+  const shownUrl = staged
+    ? staged.url || undefined
+    : previewUrl ?? undefined;
   const uploading = status === "uploading";
 
   return (

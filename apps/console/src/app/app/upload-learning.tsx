@@ -2,7 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { createBrowserSupabaseClient } from "../../lib/supabase/client";
-import styles from "./workspace.module.css";
+import styles from "../../components/sections/course-panel.module.css";
 
 type Course = { courseId: string; title: string };
 type UploadItem = {
@@ -12,6 +12,23 @@ type UploadItem = {
   ingestionStatus: string | null;
   nextCheckpoint: string | null;
 };
+type ScanReadiness = {
+  configured: boolean;
+};
+
+const INERT_ACCEPT = ".txt,.md,text/plain,text/markdown";
+const SCANNED_ACCEPT = `${INERT_ACCEPT},.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document`;
+
+function requiresScanner(file: File) {
+  const name = file.name.toLowerCase();
+  return (
+    file.type === "application/pdf" ||
+    file.type ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    name.endsWith(".pdf") ||
+    name.endsWith(".docx")
+  );
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -21,6 +38,8 @@ export default function UploadLearning({ courses }: { courses: Course[] }) {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [scanReadiness, setScanReadiness] =
+    useState<ScanReadiness | null>(null);
 
   async function refresh() {
     try {
@@ -42,6 +61,28 @@ export default function UploadLearning({ courses }: { courses: Course[] }) {
 
   useEffect(() => {
     void refresh();
+    void (async () => {
+      try {
+        const response = await fetch("/api/ingestion/scan", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        const payload = (await response.json()) as unknown;
+        if (
+          response.ok &&
+          isRecord(payload) &&
+          payload.ok === true &&
+          typeof payload.configured === "boolean"
+        ) {
+          setScanReadiness({ configured: payload.configured });
+          return;
+        }
+      } catch {
+        // A failed readiness check must never make parser-backed formats look
+        // safe. The conservative text-only state remains in effect.
+      }
+      setScanReadiness({ configured: false });
+    })();
   }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -51,6 +92,12 @@ export default function UploadLearning({ courses }: { courses: Course[] }) {
     const file = data.get("file");
     const courseId = String(data.get("courseId") ?? "");
     if (!(file instanceof File) || !file.size || !courseId) return;
+    if (requiresScanner(file) && scanReadiness?.configured !== true) {
+      setMessage(
+        "PDF and Word uploads are unavailable until production malware scanning is configured. Upload a text or Markdown source now.",
+      );
+      return;
+    }
     setBusy(true);
     setMessage("Creating a private upload…");
     try {
@@ -117,8 +164,8 @@ export default function UploadLearning({ courses }: { courses: Course[] }) {
 
   return (
     <div className={styles.uploadPanel}>
-      <form onSubmit={submit}>
-        <label>
+      <form className={styles.uploadForm} onSubmit={submit}>
+        <label className={styles.uploadField}>
           <span>Course</span>
           <select name="courseId" required disabled={busy}>
             <option value="">Choose a course</option>
@@ -129,28 +176,38 @@ export default function UploadLearning({ courses }: { courses: Course[] }) {
             ))}
           </select>
         </label>
-        <label>
+        <label className={styles.uploadField}>
           <span>Source file</span>
           <input
             name="file"
             type="file"
-            accept=".pdf,.txt,.md,.docx"
+            accept={
+              scanReadiness?.configured === true
+                ? SCANNED_ACCEPT
+                : INERT_ACCEPT
+            }
             required
             disabled={busy}
           />
         </label>
-        <button type="submit" disabled={busy || courses.length === 0}>
+        <button
+          className={styles.uploadButton}
+          type="submit"
+          disabled={busy || courses.length === 0}
+        >
           {busy ? "Uploading…" : "Upload source"}
         </button>
       </form>
-      <p role="status">
+      <p className={styles.uploadStatus} role="status">
         {message ??
-          "PDF, text, Markdown, or Word up to 25 MB. Files stay private in quarantine until security scanning succeeds."}
+          (scanReadiness?.configured === true
+            ? "PDF, text, Markdown, or Word up to 25 MB. Files stay private in quarantine until security scanning succeeds."
+            : "Text and Markdown up to 25 MB are available now. PDF and Word become available when production malware scanning is configured.")}
       </p>
       {items.length ? (
         <div className={styles.uploadList}>
           {items.slice(0, 5).map((item) => (
-            <article key={item.intentId}>
+            <article className={styles.uploadItem} key={item.intentId}>
               <span aria-hidden="true">↥</span>
               <div>
                 <b>{item.filename}</b>

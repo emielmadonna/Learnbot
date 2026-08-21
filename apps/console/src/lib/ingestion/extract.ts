@@ -1,8 +1,6 @@
 /**
- * Stage 2 (Extract) for plain-text and markdown transcript uploads
- * (docs/PLAN.md Section 4). PDF/DOCX/audio extraction are separate,
- * out-of-scope extractors for a later pass — this is the one file type taken
- * end to end, because it is where the cleaning module actually matters.
+ * Stage 2 (Extract) for text, Markdown, PDF, and DOCX uploads
+ * (docs/PLAN.md Section 4).
  *
  * Output is raw text plus a list of `SourceLocation` anchors (heading,
  * timestamp, speaker) with character offsets, matching the plan's "raw text
@@ -14,8 +12,25 @@ import { sha256Hex } from "./hash";
 import type { ExtractionResult, SourceLocation } from "./types";
 
 export type PlainTextMediaType = "text/plain" | "text/markdown";
+export type SupportedDocumentMediaType =
+  | PlainTextMediaType
+  | "application/pdf"
+  | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 const MAX_RAW_TEXT_LENGTH = 4_000_000;
+const MAX_PDF_PAGES = 500;
+
+export class DocumentExtractionError extends Error {
+  constructor(
+    readonly code:
+      | "document_extraction_failed"
+      | "document_has_no_extractable_text"
+      | "document_page_limit_exceeded",
+  ) {
+    super(code);
+    this.name = "DocumentExtractionError";
+  }
+}
 
 /** Exported so the cleaning stage (`clean/furniture.ts`) recognizes the same shapes. */
 export const TIMESTAMP_LINE =
@@ -123,4 +138,108 @@ export function extractPlainText(
     extractor: "plain_text_transcript_v1",
     extractorVersion: 1,
   };
+}
+
+function requireExtractableText(value: string) {
+  const normalized = value
+    .replace(/\r\n?/gu, "\n")
+    .replace(/^﻿/u, "")
+    .slice(0, MAX_RAW_TEXT_LENGTH);
+  if (normalized.trim().length === 0) {
+    throw new DocumentExtractionError("document_has_no_extractable_text");
+  }
+  return normalized;
+}
+
+export function extractionFromParsedDocument(
+  rawValue: string,
+  extractor: Extract<ExtractionResult["extractor"], `${string}_text_v1`>,
+  pageOffsets: readonly { offset: number; page: number; line: number }[] = [],
+): ExtractionResult {
+  const rawText = requireExtractableText(rawValue);
+  const base = extractPlainText(
+    new TextEncoder().encode(rawText),
+    "text/plain",
+  );
+  const sourceLocations: SourceLocation[] = [
+    ...base.sourceLocations,
+    ...pageOffsets
+      .filter((entry) => entry.offset < rawText.length)
+      .map(
+        (entry): SourceLocation => ({
+          offset: entry.offset,
+          kind: "heading",
+          value: `Page ${entry.page}`,
+          line: entry.line,
+        }),
+      ),
+  ].sort((left, right) => left.offset - right.offset);
+
+  return {
+    ...base,
+    sourceLocations,
+    extractor,
+    extractorVersion: 1,
+  };
+}
+
+async function extractPdf(bytes: Uint8Array): Promise<ExtractionResult> {
+  try {
+    const { extractText, getDocumentProxy } = await import("unpdf");
+    const pdf = await getDocumentProxy(bytes);
+    try {
+      if (pdf.numPages > MAX_PDF_PAGES) {
+        throw new DocumentExtractionError("document_page_limit_exceeded");
+      }
+      const extracted = await extractText(pdf, { mergePages: false });
+      const pages = extracted.text.map((page) =>
+        page.replace(/\r\n?/gu, "\n").trim(),
+      );
+      const offsets: { offset: number; page: number; line: number }[] = [];
+      let offset = 0;
+      let line = 1;
+      for (let index = 0; index < pages.length; index += 1) {
+        const page = pages[index] ?? "";
+        offsets.push({ offset, page: index + 1, line });
+        offset += page.length + (index === pages.length - 1 ? 0 : 2);
+        line += page.split("\n").length + 1;
+      }
+      return extractionFromParsedDocument(
+        pages.join("\n\n"),
+        "pdf_text_v1",
+        offsets,
+      );
+    } finally {
+      await pdf.destroy();
+    }
+  } catch (error) {
+    if (error instanceof DocumentExtractionError) throw error;
+    throw new DocumentExtractionError("document_extraction_failed");
+  }
+}
+
+async function extractDocx(bytes: Uint8Array): Promise<ExtractionResult> {
+  try {
+    const mammothModule = await import("mammoth");
+    const result = await mammothModule.default.extractRawText({
+      buffer: Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+    });
+    return extractionFromParsedDocument(result.value, "docx_raw_text_v1");
+  } catch (error) {
+    if (error instanceof DocumentExtractionError) throw error;
+    throw new DocumentExtractionError("document_extraction_failed");
+  }
+}
+
+export async function extractUploadedDocument(
+  bytes: Uint8Array,
+  mediaType: SupportedDocumentMediaType,
+): Promise<ExtractionResult> {
+  if (mediaType === "text/plain" || mediaType === "text/markdown") {
+    const extraction = extractPlainText(bytes, mediaType);
+    requireExtractableText(extraction.rawText);
+    return extraction;
+  }
+  if (mediaType === "application/pdf") return extractPdf(bytes);
+  return extractDocx(bytes);
 }

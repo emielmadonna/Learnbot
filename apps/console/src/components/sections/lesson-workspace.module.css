@@ -1,0 +1,613 @@
+/*
+ * The three-pane lesson workspace (tree / document / rail).
+ *
+ * Owned by lesson-workspace.tsx only. Colour still resolves exclusively from
+ * the shared brand custom properties in app/tokens.css — see the two-gray
+ * rule there before adding anything here. Blocks rendered inside the document
+ * pane keep the styling from course-panel.module.css (`.editorRoot`,
+ * `.blockList`, `.docBody`, `.pill`, `.inlineForm`…) because they are the same
+ * `BlockRow` / `AddBlockForm` components the old outline editor used —
+ * nothing about how a block saves forks between the two surfaces.
+ */
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 262px) minmax(430px, 1.6fr) minmax(0, 300px);
+  gap: 0;
+  margin: 0 calc(clamp(1.15rem, 2.5vw, 2rem) * -1)
+    calc(clamp(1.15rem, 2.5vw, 2rem) * -1);
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- left: tree */
+
+.tree {
+  min-width: 0;
+  /* Exact mockup spec: 22px 16px. */
+  padding: 1.375rem 1rem;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  border-right: 1px solid var(--hairline);
+}
+
+.treeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 0.5rem 0.85rem;
+}
+
+.treeHeadTitle {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+/*
+ * The "Course" title doubles as the disclosure toggle for `.treeBody` below
+ * ~1100px (see .workspace's media query) — a real <button> rather than a
+ * <p>, so it stays keyboard- and screen-reader-reachable. Above that width no
+ * rule ever hides `.treeBody`, so clicking this button still flips
+ * `aria-expanded` honestly but has no visible effect — there is nothing to
+ * disclose on a screen wide enough for a fixed sidebar.
+ */
+.treeDisclosureToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.treeDisclosureToggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Hidden above the collapse breakpoint — there is nothing to disclose there. */
+.treeChevron {
+  display: none;
+  width: 6px;
+  height: 6px;
+  flex: none;
+  margin-top: -2px;
+  border-right: 1.6px solid var(--muted);
+  border-bottom: 1.6px solid var(--muted);
+  transform: rotate(45deg);
+}
+
+.treeAdd {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 10%, transparent);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.treeAdd:hover {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.treeAdd:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+}
+
+/*
+ * Everything below the head: search, the module/lesson tree, and the Q&A
+ * rows. Below ~1100px this collapses behind `.treeDisclosureToggle` — see the
+ * media query at the bottom of this file. At and above that width it is
+ * always visible; the narrow-only rules never apply, so `narrowOpen` state
+ * has no visual effect here.
+ */
+.treeBody {
+  min-width: 0;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  border-radius: 12px;
+  padding: 0.42rem 0.6rem;
+  background: var(--surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.searchBox svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.searchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.searchInput::placeholder {
+  color: var(--muted);
+}
+
+.searchInput:focus {
+  outline: none;
+}
+
+.moduleList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.78rem;
+}
+
+.moduleRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.42rem 0.6rem;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.moduleRow:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.moduleRow:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: -2px;
+}
+
+.moduleRowActive {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.moduleCount {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Exact mockup spec: 10px/600, 1px 7px padding, fully round, no border. */
+.draftPill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 100px;
+  padding: 1px 7px;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  font-size: 0.625rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.archivedPill {
+  composes: draftPill;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+}
+
+.lessonSublist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0.15rem 0 0.35rem;
+  padding-left: 0.85rem;
+  list-style: none;
+}
+
+.lessonRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 0;
+  border-radius: 9px;
+  padding: 0.4rem 0.6rem;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lessonRow:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.lessonRow:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: -2px;
+}
+
+.lessonRowActive {
+  color: var(--ink);
+  font-weight: 650;
+  background: var(--surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.lessonRowLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lessonDraftDot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 100px;
+  background: var(--warn);
+}
+
+.treeDivider {
+  margin: 1.1rem 0 0.6rem;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.qaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.42rem 0.6rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+/* ------------------------------------------------------------ centre: document */
+
+.document {
+  min-width: 0;
+  overflow: hidden;
+  padding: 2rem clamp(1.25rem, 3vw, 2.4rem) 2.4rem;
+}
+
+.breadcrumbRow {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+}
+
+.crumb {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.crumbSlash {
+  color: var(--hairline);
+  font-size: 0.72rem;
+}
+
+.statusPill {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 100px;
+  padding: 0.24rem 0.6rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 100px;
+}
+
+.statusPillLive {
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 10%, transparent);
+}
+
+.statusPillLive .statusDot {
+  background: var(--good);
+}
+
+.statusPillDraft {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+
+.statusPillDraft .statusDot {
+  background: var(--warn);
+}
+
+.lessonTitle {
+  margin: 0 0 0.5rem;
+  color: var(--ink);
+  font-size: 2.125rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.lessonMeta {
+  margin: 0 0 1.6rem;
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
+.docToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  width: fit-content;
+  margin-bottom: 1.35rem;
+  border-radius: 11px;
+  padding: 4px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.docToolButton {
+  display: flex;
+  align-items: center;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.4rem 0.68rem;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.docToolButton:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.docToolButton:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.docToolButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.docToolDivider {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.25rem 0.3rem;
+  background: var(--hairline);
+}
+
+.documentCard {
+  border-radius: 18px;
+  padding: clamp(1.4rem, 2.6vw, 2.1rem) clamp(1.3rem, 2.8vw, 2.35rem);
+  background: var(--surface);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.addBlockSlot {
+  margin-top: 0.75rem;
+}
+
+/* --------------------------------------------------------------- right: rail */
+
+.rail {
+  min-width: 0;
+  padding: 1.35rem 1.1rem;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  border-left: 1px solid var(--hairline);
+}
+
+.railKicker {
+  margin: 0 0 0.9rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.railKicker + .railKicker {
+  margin-top: 1.35rem;
+}
+
+.wildCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.calloutCard {
+  margin: 0.75rem 0 0.5rem;
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  background: var(--accent-wash);
+}
+
+.calloutTitle {
+  margin: 0 0 0.35rem;
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.calloutBody {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.versionsList {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.78rem;
+}
+
+.versionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink);
+}
+
+.versionRow:last-child {
+  border-bottom: 0;
+}
+
+.versionMeta {
+  color: var(--muted);
+}
+
+.versionAction {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.versionAction:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.versionAction:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.railLink {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.railLink:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/*
+ * Below ~1100px the three-pane grid cannot hold minmax(430px, …) for the
+ * document without crushing the other two panes, so it collapses to one
+ * column outright — per the brief, not a gentler two-column midpoint. The
+ * left tree stops being a fixed sidebar and becomes the disclosure driven by
+ * `.treeDisclosureToggle` / `narrowOpen` in lesson-workspace.tsx: collapsed
+ * by default so the document is the first thing on the page, expandable in
+ * place without navigating away from it.
+ */
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tree {
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .treeBody {
+    display: none;
+  }
+
+  .treeBody.treeBodyOpen {
+    display: flex;
+    flex-direction: column;
+    max-height: 20rem;
+    overflow-y: auto;
+  }
+
+  .treeChevron {
+    display: block;
+  }
+
+  .rail {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 1.5rem;
+    border-top: 1px solid var(--hairline);
+    border-left: 0;
+  }
+
+  .railKicker + .railKicker {
+    margin-top: 0;
+  }
+}
+
+/* A 3-column stat rail is too cramped on a phone; stack it instead. */
+@media (max-width: 640px) {
+  .rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .railKicker + .railKicker {
+    margin-top: 1.35rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .treeAdd,
+  .moduleRow,
+  .lessonRow {
+    transition: none;
+  }
+}

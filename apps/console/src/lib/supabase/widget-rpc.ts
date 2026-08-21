@@ -63,7 +63,12 @@ export type WidgetBootstrapWidget = {
   presentation: "launcher" | "panel";
   launcherPosition: "bottom-left" | "bottom-right";
   launcherLabel: string;
+  launcherShape: "bubble" | "pill" | "tab";
   greeting: string | null;
+  greetingBubbleEnabled: boolean;
+  greetingBubbleDelaySeconds: number;
+  showPoweredBy: boolean;
+  appearanceMode: "auto" | "light" | "dark";
   anonymousQuestions: boolean;
   courses: WidgetBootstrapCourse[];
 };
@@ -83,6 +88,19 @@ export type WidgetAskMatch = {
   sectionName: string | null;
   excerpt: string;
   contentHash: string;
+  /**
+   * Present only when the cited chunk is a projected visual, and only when the
+   * asset is still published, active, answerable and validated — the database
+   * strips these keys otherwise
+   * (`app_private.visual_source_for_match`, 20260731045059, and the projection
+   * in 20260731070000). They are the four fields already declared
+   * presentation-safe for an anonymous caller; no course, document or lesson
+   * UUID is ever carried alongside them.
+   */
+  visualAssetId?: string;
+  visualKind?: string;
+  mediaType?: string;
+  altText?: string;
 };
 
 export type WidgetAskResult = {
@@ -93,6 +111,17 @@ export type WidgetAskResult = {
   assistantName: string;
   retrievalMode: string;
   matches: WidgetAskMatch[];
+  /**
+   * What the database recorded about who asked. Absent when the deployment
+   * predates 20260731090000, which is why both keys are optional rather than
+   * required.
+   *
+   * `learnerCounted` says a pseudonym was stored, never which one: the
+   * `learner_key` digest is covered by `conversation_surfaces`' no-direct-read
+   * policy and no RPC returns it.
+   */
+  learnerIdentity?: "self_reported_learner" | "unidentified";
+  learnerCounted?: boolean;
   /**
    * Present only when the server presented a valid conversation operation
    * token. The persona is never returned to a browser caller.
@@ -105,6 +134,15 @@ export type WidgetAnswerRecord = {
   dataMode: "durable";
   conversationRef: string;
   sequence: number;
+  /**
+   * The durable id of the assistant message just recorded, and the only id
+   * `widget_record_answer_feedback` accepts. `null` when the database has not
+   * yet been given 20260731080000, which is why it is nullable rather than
+   * required: an un-migrated deployment must keep answering questions, and
+   * simply offer no rating control, instead of failing the turn or handing the
+   * page an id the feedback RPC would refuse.
+   */
+  messageId: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -179,6 +217,40 @@ export function isCourseRef(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{32}$/u.test(value);
 }
 
+/**
+ * A host-declared learner reference, as the embedding page hands it over.
+ *
+ * The shape is deliberately narrow and mirrors the identical check inside
+ * `public.widget_ask` (20260731090000), so a value that would be refused by
+ * the database is refused here first and never travels:
+ *
+ *   - an at-sign or any whitespace fails, which rejects a raw email address.
+ *     It would never have been stored — only its peppered HMAC is — but an
+ *     install that mistakenly passes a mailbox should fail at the boundary
+ *     rather than put one on the wire.
+ *   - 180 characters is the ceiling because `widget_ask` namespaces the
+ *     reference before hashing and `app_private.surface_visitor_key` returns
+ *     null above 200, which would drop the identity in silence.
+ *
+ * This value is never logged. See the call site in
+ * `app/api/widget/ask/route.ts`.
+ */
+export function isVisitorRef(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_.:-]{3,180}$/u.test(value);
+}
+
+/**
+ * How far a visitor reference can be trusted.
+ *
+ * `"self_reported"` is the only tier this boundary can carry. The reference
+ * comes from JavaScript on the customer's own page, so it is spoofable from
+ * devtools; `widget_ask` refuses `"verified"` outright rather than accepting a
+ * word it cannot honour. `"verified"` stays reserved for an identity the
+ * server can actually prove, which is why `IdentityTier` in
+ * `packages/widget-runtime` has three values and not two.
+ */
+export type WidgetVisitorTier = "self_reported";
+
 export function parseWidgetBootstrap(value: unknown): WidgetBootstrapResult {
   const result = requireWidgetRpcSuccess(value);
   if (
@@ -204,6 +276,9 @@ export function parseWidgetAsk(value: unknown): WidgetAskResult {
   return result as unknown as WidgetAskResult;
 }
 
+const MESSAGE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
 export function parseWidgetAnswerRecord(value: unknown): WidgetAnswerRecord {
   const result = requireWidgetRpcSuccess(value);
   if (
@@ -212,7 +287,17 @@ export function parseWidgetAnswerRecord(value: unknown): WidgetAnswerRecord {
   ) {
     throw new WidgetRpcError("request_denied");
   }
-  return result as unknown as WidgetAnswerRecord;
+  // Anything that is not a UUID becomes `null` rather than being forwarded.
+  // The rating write only ever accepts a real message id, so an id the page
+  // could not use is worse than no id: it would render a control that 400s on
+  // every click, which is precisely the console bug this path exists not to
+  // repeat.
+  const messageId =
+    typeof result.messageId === "string" &&
+    MESSAGE_ID_PATTERN.test(result.messageId)
+      ? result.messageId
+      : null;
+  return { ...(result as unknown as WidgetAnswerRecord), messageId };
 }
 
 export async function widgetBootstrap(
@@ -240,8 +325,16 @@ export async function widgetAsk(
     idempotencyKey: string;
     traceId: string;
     operationToken: string | null;
+    /**
+     * A host-declared learner reference, or `null` for the anonymous path.
+     * Validated with `isVisitorRef` before it gets here, and never logged.
+     */
+    visitorRef?: string | null;
+    visitorTier?: WidgetVisitorTier | null;
   },
 ): Promise<WidgetAskResult> {
+  const identified =
+    typeof input.visitorRef === "string" && input.visitorTier != null;
   const response = await supabase.rpc("widget_ask", {
     widget_key: input.widgetKey,
     origin: input.origin,
@@ -251,6 +344,16 @@ export async function widgetAsk(
     idempotency_key: input.idempotencyKey,
     trace_id: input.traceId,
     operation_token: input.operationToken,
+    // The two identity arguments are omitted entirely when there is no
+    // identity, rather than sent as nulls. PostgREST matches an RPC by the
+    // exact set of keys in the body, so sending them unconditionally would
+    // make every widget question fail against a database that has not yet
+    // been given 20260731090000 — and that is the current state of this
+    // project, where migrations are applied by hand. Omitting them keeps the
+    // anonymous path, which is every install today, working unchanged.
+    ...(identified
+      ? { visitor_ref: input.visitorRef, visitor_tier: input.visitorTier }
+      : {}),
   });
   if (response.error) throw new WidgetRpcError("request_failed");
   return parseWidgetAsk(response.data);
@@ -287,6 +390,67 @@ export async function widgetRecordAnswer(
   return parseWidgetAnswerRecord(response.data);
 }
 
+/**
+ * Records one classification against a widget-origin question.
+ *
+ * The anonymous twin of `recordQuestionLabel`
+ * (lib/supabase/question-intelligence-rpc.ts). Two differences, both forced:
+ *
+ *   * the question is named by the idempotency key `widgetAsk` already used,
+ *     not by a message id, because the widget path never learns one; and
+ *   * authorisation is the (widget key, origin) pair plus the server-held
+ *     `conversation.answer.record` token, because there is no session to read
+ *     a tenant from.
+ *
+ * It returns the reason rather than throwing, so the caller can log exactly
+ * why a question went unlabelled. Nothing is ever written on a fault.
+ */
+export type WidgetQuestionLabelCommand = {
+  readonly widgetKey: string;
+  readonly origin: string;
+  readonly conversationRef: string;
+  /** The `idempotencyKey` passed to `widgetAsk` for this same turn. */
+  readonly questionIdempotencyKey: string;
+  readonly topicKey: string;
+  readonly topicLabel: string;
+  readonly intent: string;
+  readonly importance: string;
+  readonly classifierKey: string;
+  readonly classifierVersion: string;
+  readonly traceId: string;
+  readonly operationToken: string;
+};
+
+export async function widgetRecordQuestionLabel(
+  supabase: SupabaseClient,
+  command: WidgetQuestionLabelCommand,
+): Promise<{ ok: boolean; code?: string }> {
+  const response = await supabase.rpc("widget_record_question_label", {
+    widget_key: command.widgetKey,
+    origin: command.origin,
+    conversation_ref: command.conversationRef,
+    question_idempotency_key: command.questionIdempotencyKey,
+    topic_key: command.topicKey,
+    topic_label: command.topicLabel,
+    question_intent: command.intent,
+    importance: command.importance,
+    classifier_key: command.classifierKey,
+    classifier_version: command.classifierVersion,
+    trace_id: command.traceId,
+    operation_token: command.operationToken,
+  });
+  // A missing function reads as `request_failed` here, which is the honest
+  // description of a deployment whose database has not been migrated yet.
+  if (response.error) return { ok: false, code: "request_failed" };
+  if (!isRecord(response.data)) return { ok: false, code: "invalid_response" };
+  return {
+    ok: response.data.ok === true,
+    ...(typeof response.data.code === "string"
+      ? { code: response.data.code }
+      : {}),
+  };
+}
+
 /* ------------------------------------------------------------------ admin */
 
 export type WidgetSettings = {
@@ -294,7 +458,12 @@ export type WidgetSettings = {
   presentation: "launcher" | "panel";
   launcherPosition: "bottom-left" | "bottom-right";
   launcherLabel: string;
+  launcherShape: "bubble" | "pill" | "tab";
   greeting: string | null;
+  greetingBubbleEnabled: boolean;
+  greetingBubbleDelaySeconds: number;
+  showPoweredBy: boolean;
+  appearanceMode: "auto" | "light" | "dark";
   allowedOrigins: string[];
   anonymousQuestions: boolean;
   showCourseList: boolean;
@@ -375,7 +544,13 @@ export async function updateWidgetSettings(
     requested_presentation: input.presentation,
     requested_launcher_position: input.launcherPosition,
     requested_launcher_label: input.launcherLabel,
+    requested_launcher_shape: input.launcherShape,
     requested_greeting: input.greeting,
+    requested_greeting_bubble_enabled: input.greetingBubbleEnabled,
+    requested_greeting_bubble_delay_seconds:
+      input.greetingBubbleDelaySeconds,
+    requested_show_powered_by: input.showPoweredBy,
+    requested_appearance_mode: input.appearanceMode,
     requested_allowed_origins: input.allowedOrigins,
     requested_anonymous_questions: input.anonymousQuestions,
     requested_show_course_list: input.showCourseList,
@@ -402,4 +577,82 @@ export async function updateWidgetSettings(
     throw new WidgetRpcError("request_denied");
   }
   return result as unknown as WidgetSettingsWrite;
+}
+
+/**
+ * A visual the assistant already showed this visitor, resolved for delivery.
+ *
+ * The read is scoped by disclosure, not by membership: the database returns a
+ * row only when this exact (widget key, origin, conversationRef) triple has
+ * already been shown this exact asset. See the header of
+ * 20260731060000_widget_visual_media_disclosure.sql for why a widget key --
+ * which ships publicly in a <script> tag -- cannot be allowed to stand in for
+ * "may read any of this tenant's media".
+ *
+ * `privateObjectKey` never reaches a browser. The route signs and streams it
+ * server-side, exactly as the authenticated visual route does.
+ */
+export type WidgetVisualAsset = {
+  visualAssetId: string;
+  title: string;
+  altText: string;
+  mediaType: string;
+  sizeBytes: number;
+  privateObjectKey: string;
+};
+
+export async function widgetGetVisualAsset(
+  supabase: SupabaseClient,
+  input: {
+    widgetKey: string;
+    origin: string;
+    conversationRef: string;
+    visualAssetId: string;
+  },
+): Promise<WidgetVisualAsset> {
+  const response = await supabase.rpc("widget_get_visual_asset_for_read", {
+    widget_key: input.widgetKey,
+    origin: input.origin,
+    conversation_ref: input.conversationRef,
+    target_visual_asset_id: input.visualAssetId,
+  });
+  if (response.error) throw new WidgetRpcError("request_failed");
+  const result = requireWidgetRpcSuccess(response.data);
+  if (
+    result.dataMode !== "durable" ||
+    typeof result.privateObjectKey !== "string" ||
+    typeof result.mediaType !== "string" ||
+    typeof result.sizeBytes !== "number"
+  ) {
+    throw new WidgetRpcError("request_denied");
+  }
+  return result as unknown as WidgetVisualAsset;
+}
+
+/**
+ * Records that an answer surfaced these visuals, which is what later authorises
+ * the visitor to read them. Requires the server-held
+ * `conversation.answer.record` operation token, so a browser can never grant
+ * itself access to an asset it was not shown.
+ */
+export async function widgetRecordVisualDisclosure(
+  supabase: SupabaseClient,
+  input: {
+    widgetKey: string;
+    origin: string;
+    conversationRef: string;
+    visualAssetIds: readonly string[];
+    operationToken: string;
+  },
+): Promise<void> {
+  if (input.visualAssetIds.length === 0) return;
+  const response = await supabase.rpc("widget_record_visual_disclosure", {
+    widget_key: input.widgetKey,
+    origin: input.origin,
+    conversation_ref: input.conversationRef,
+    visual_asset_ids: input.visualAssetIds,
+    operation_token: input.operationToken,
+  });
+  if (response.error) throw new WidgetRpcError("request_failed");
+  requireWidgetRpcSuccess(response.data);
 }

@@ -1,719 +1,713 @@
-/*
- * Public landing page — apps/console/src/app/page.tsx.
- *
- * Graphite direction (docs/PLAN.md Section 3): Apple-native via --font-ui,
- * dark ground by default (the same token names as the rest of the console —
- * see tokens.css), hairline separators, generous continuous radii, one
- * motion curve (--ease). Every color here is a token; there is no local
- * palette the way the old `.lbLanding` block in globals.css hardcoded one.
- *
- * This file used to be ~1,400 lines of `.lb*` rules living inside
- * globals.css with their own --lb-* colors, completely disconnected from
- * the Graphite tokens. It has been rebuilt from zero against tokens.css and
- * moved into its own stylesheet so globals.css stops being a dumping
- * ground for page-specific CSS (docs/PLAN.md Phase 2).
- */
-
-.lbLanding {
+.corsoLanding {
   width: 100%;
-  min-height: 100vh;
-}
-
-.lbWrap {
-  width: min(1120px, 100%);
-  margin: 0 auto;
-  padding-inline: clamp(20px, 4vw, 32px);
-}
-
-/* ------------------------------------------------------------------ nav */
-
-.lbNav {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  border-bottom: 1px solid var(--hairline);
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(18px);
-}
-
-.lbNavInner {
-  display: flex;
-  min-height: 64px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.lbBrand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.lbBrand b {
-  font-size: 14px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-
-.lbMark {
-  position: relative;
-  display: grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--accent-wash);
-}
-
-.lbMark i {
-  width: 2px;
-  border-radius: 999px;
-  background: var(--accent);
-}
-
-.lbMark i:nth-child(1) {
-  height: 6px;
-  transform: translateX(-4px);
-}
-
-.lbMark i:nth-child(2) {
-  height: 11px;
-}
-
-.lbMark i:nth-child(3) {
-  height: 6px;
-  transform: translateX(4px);
-}
-
-.lbMark i:not(:first-child) {
-  margin-left: -2px;
-}
-
-.lbNavLinks {
-  display: flex;
-  align-items: center;
-  gap: 26px;
-}
-
-.lbNavLinks a {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 500;
-  text-decoration: none;
-  transition: color 160ms var(--ease);
-}
-
-.lbNavLinks a:hover {
-  color: var(--ink);
-}
-
-.lbNavActions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.lbSignIn {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 550;
-  text-decoration: none;
-}
-
-.lbSignIn:hover {
-  color: var(--ink);
-}
-
-/* ---------------------------------------------------------------- buttons */
-
-.lbBtn {
-  display: inline-flex;
-  min-height: 42px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 18px;
-  border: 1px solid transparent;
-  border-radius: var(--r-md);
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  transition:
-    background 160ms var(--ease),
-    border-color 160ms var(--ease),
-    transform 160ms var(--ease);
-}
-
-.lbBtn:active {
-  transform: translateY(1px);
-}
-
-.lbBtnPrimary {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-
-.lbBtnPrimary:hover {
-  background: color-mix(in srgb, var(--accent) 88%, var(--ink) 12%);
-}
-
-.lbBtnGhost {
-  border-color: var(--hairline);
-  background: transparent;
-  color: var(--ink);
-}
-
-.lbBtnGhost:hover {
-  border-color: var(--muted);
-  background: var(--surface);
-}
-
-.lbBtnSmall {
-  min-height: 36px;
-  padding: 0 14px;
-  font-size: 12px;
-}
-
-/* ------------------------------------------------------------------ hero */
-
-.lbHero {
-  padding: clamp(56px, 9vw, 108px) 0 clamp(48px, 7vw, 88px);
-}
-
-.lbHeroInner {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 24px;
-  max-width: 760px;
-}
-
-.lbEyebrow {
-  margin: 0 0 16px;
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.lbHeroTitle {
-  max-width: 20ch;
-  margin: 0;
-  color: var(--ink);
-  font-size: clamp(34px, 5.2vw, 58px);
-  font-weight: 620;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-}
-
-.lbHeroSub {
-  max-width: 56ch;
-  margin: 20px 0 0;
-  color: var(--muted);
-  font-size: clamp(16px, 1.6vw, 18px);
-  line-height: 1.6;
-}
-
-.lbHeroActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-top: 32px;
-}
-
-.lbHeroNote {
-  margin: 18px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-/* ------------------------------------------------------------------ demo */
-
-.lbDemo {
-  padding: clamp(16px, 4vw, 32px) 0 clamp(64px, 9vw, 112px);
-}
-
-.lbDemoIntro {
-  max-width: 620px;
-  margin-bottom: 28px;
-}
-
-.lbDemoIntro h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: clamp(24px, 2.6vw, 32px);
-  font-weight: 620;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-}
-
-.lbDemoIntro p {
-  max-width: 54ch;
-  margin: 12px 0 0;
-  color: var(--muted);
+  min-height: 100svh;
+  background: #fff;
+  color: #1d1d1f;
+  font-family: var(--font-ui);
   font-size: 15px;
-  line-height: 1.6;
-}
-
-.lbDemoFrame {
-  container-type: inline-size;
-  container-name: lb-demo;
-  width: 100%;
-  max-width: 880px;
-  overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  box-shadow: 0 32px 80px rgb(0 0 0 / 30%);
-}
-
-.lbCommunityBar {
-  display: flex;
-  min-height: 52px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 18px;
-  border-bottom: 1px solid var(--hairline);
-  background: var(--elev);
-}
-
-.lbCommunityName {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.lbCommunityName span {
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.lbCommunityTabs {
-  display: flex;
-  gap: 4px;
-}
-
-.lbCommunityTabs span {
-  padding: 6px 12px;
-  border-radius: var(--r-sm);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 550;
-}
-
-.lbCommunityTabs span[data-active="true"] {
-  background: var(--surface);
-  color: var(--ink);
-}
-
-.lbThread {
-  padding: 24px 22px 26px;
-}
-
-.lbThreadMeta {
-  margin: 0 0 16px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.lbThreadPost {
-  max-width: 88%;
-  margin: 0 0 20px;
-  padding: 12px 16px;
-  border-radius: var(--r-md) var(--r-md) var(--r-md) 4px;
-  background: var(--elev);
-  color: var(--ink);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.lbReply {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  gap: 12px;
-}
-
-.lbReplyAvatar {
-  width: 30px;
-  height: 30px;
-}
-
-.lbReplyBody p {
-  margin: 0;
-  color: var(--ink);
-  font-size: 14px;
   line-height: 1.65;
 }
 
-.lbReplyBody ol {
-  display: grid;
-  gap: 8px;
-  margin: 14px 0 0;
-  padding: 0;
-  list-style: none;
+.corsoWrap {
+  width: min(1040px, calc(100% - 64px));
+  margin: 0 auto;
 }
 
-.lbReplyBody li {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
+.corsoNav {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  height: 56px;
+  border-bottom: 1px solid rgb(0 0 0 / 7%);
+  background: rgb(255 255 255 / 80%);
+  backdrop-filter: saturate(180%) blur(24px);
+}
+
+.corsoNav .corsoWrap {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  gap: 28px;
+}
+
+.corsoBrand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #1d1d1f;
+  text-decoration: none;
+}
+
+.corsoBrand b {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.corsoNavLinks {
+  display: flex;
+  flex: 1;
+  gap: 24px;
+}
+
+.corsoNavLinks a,
+.corsoNavActions > a:not(.corsoButton) {
+  color: #6e6e73;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.corsoNavActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.corsoButton {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 26px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  font-size: 16px;
+  text-decoration: none;
+}
+
+.corsoButton.corsoSmall {
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 11px;
+  font-size: 14px;
+}
+
+.corsoPrimary {
+  background: #4a637f;
+  color: #fff;
+  font-weight: 600;
+}
+
+.corsoSecondary {
+  border-color: rgb(0 0 0 / 14%);
+  background: #fff;
+  color: #1d1d1f;
+}
+
+.corsoHero {
+  padding: 88px 0 0;
+  text-align: center;
+}
+
+.corsoHeroInner {
+  width: min(900px, calc(100% - 64px));
+  margin: 0 auto;
+}
+
+.corsoKicker {
+  margin: 0 0 20px;
+  color: #4a637f;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.corsoHero h1 {
+  margin: 0 0 24px;
+  font-family: var(--font-display);
+  font-size: clamp(58px, 7.5vw, 78px);
+  font-weight: 700;
+  letter-spacing: -0.038em;
+  line-height: 1.02;
+}
+
+.corsoHeroCopy {
+  max-width: 640px;
+  margin: 0 auto 34px;
+  color: #6e6e73;
+  font-size: 20px;
+  line-height: 1.55;
+}
+
+.corsoActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+.corsoNote {
+  margin: 22px 0 0;
+  color: #6e6e73;
+  font-size: 14px;
+}
+
+.corsoStillWrap {
+  padding-top: 60px;
+}
+
+.corsoStill {
+  position: relative;
+  min-height: 440px;
+  overflow: hidden;
+  border: 1px solid rgb(0 0 0 / 7%);
+  border-radius: 24px;
+  background: #f5f5f7;
+}
+
+.corsoCommunityBar {
+  display: flex;
+  height: 42px;
+  align-items: center;
+  gap: 20px;
+  padding: 0 20px;
+  border-bottom: 1px solid rgb(0 0 0 / 7%);
+  background: #fff;
+  font-size: 13px;
+}
+
+.corsoCommunityBar span {
+  color: #6e6e73;
+}
+
+.corsoCommunityBar span[data-active] {
+  color: #1d1d1f;
+  font-weight: 500;
+}
+
+.corsoLesson {
+  padding: 30px 34px;
+}
+
+.corsoLesson > p {
+  margin: 0 0 6px;
+  color: #6e6e73;
+  font-size: 12px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.corsoLesson h3 {
+  margin: 0 0 20px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  letter-spacing: -0.024em;
+}
+
+.corsoLines {
+  display: flex;
+  max-width: 520px;
+  flex-direction: column;
   gap: 10px;
-  color: var(--ink);
+}
+
+.corsoLines i {
+  width: 94%;
+  height: 10px;
+  border-radius: 100px;
+  background: #e3e3e8;
+}
+
+.corsoLines i:nth-child(2) {
+  width: 88%;
+}
+
+.corsoLines i:nth-child(3) {
+  width: 92%;
+}
+
+.corsoLines i:nth-child(4) {
+  width: 46%;
+}
+
+.corsoVideo {
+  display: grid;
+  max-width: 520px;
+  height: 150px;
+  margin-top: 22px;
+  border-radius: 14px;
+  background: repeating-linear-gradient(
+    135deg,
+    #eeeef1,
+    #eeeef1 8px,
+    #e7e7eb 8px,
+    #e7e7eb 16px
+  );
+  color: #6e6e73;
+  font: 11px var(--font-mono);
+  place-items: center;
+}
+
+.corsoWidget {
+  position: absolute;
+  right: 26px;
+  bottom: 26px;
+  overflow: hidden;
+  width: 340px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow:
+    0 22px 54px rgb(0 0 0 / 20%),
+    0 0 0 1px rgb(0 0 0 / 5%);
+}
+
+.corsoWidget header {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  padding: 13px 16px;
+  border-bottom: 1px solid rgb(0 0 0 / 7%);
+}
+
+.corsoWidget header > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #4a637f;
+  place-items: center;
+}
+
+.corsoWidget header div {
+  display: grid;
+}
+
+.corsoWidget header b {
+  font-size: 14px;
+}
+
+.corsoWidget header small {
+  color: #1d7a33;
+  font-size: 11px;
+}
+
+.corsoMessages {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 14px;
+  background: #f5f5f7;
+}
+
+.corsoMessages [data-person="student"] {
+  max-width: 82%;
+  align-self: flex-end;
+  padding: 10px 13px;
+  border-radius: 16px 16px 4px 16px;
+  margin: 0;
+  background: #4a637f;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.corsoMessages [data-person="assistant"] {
+  padding: 13px 15px;
+  border-radius: 16px 16px 16px 4px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
   font-size: 13px;
   line-height: 1.55;
 }
 
-.lbReplyBody li b {
-  color: var(--accent);
-  font-weight: 650;
-}
-
-.lbCitationMark {
-  display: inline-flex;
-  min-width: 15px;
-  height: 15px;
-  align-items: center;
-  justify-content: center;
-  margin-left: 3px;
-  border-radius: 4px;
-  background: var(--accent-wash);
-  color: var(--accent);
-  font-size: 9px;
-  font-weight: 700;
-  vertical-align: middle;
-}
-
-.lbGroundedRow {
+.corsoMessages [data-person="assistant"] > span {
   display: flex;
+  gap: 9px;
   align-items: center;
-  gap: 8px;
-  margin-top: 16px;
+  padding-top: 9px;
+  border-top: 1px solid rgb(0 0 0 / 7%);
+  margin-top: 11px;
+  font-size: 12px;
 }
 
-.lbGroundedLabel {
-  color: var(--good);
-  font-size: 11px;
-  font-weight: 600;
+.corsoMessages [data-person="assistant"] > span i {
+  margin-left: auto;
+  color: #c7c7cc;
 }
 
-/* Compact (< 420px container): sources collapse to a count, per
-   docs/PLAN.md Section 3.4. */
-.lbSourceCount {
-  display: inline-flex;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--elev);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
+.corsoSection {
+  padding: 96px 0 0;
 }
 
-.lbSources {
-  display: none;
+.corsoSectionHead {
+  margin-bottom: 44px;
+  text-align: center;
 }
 
-@container lb-demo (min-width: 420px) {
-  /* Regular: sources render inline under the answer. */
-  .lbSourceCount {
-    display: none;
-  }
-
-  .lbSources {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 14px;
-  }
-
-  .lbSourceItem {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    border: 1px solid var(--hairline);
-    border-radius: 999px;
-    color: var(--muted);
-    font-size: 11px;
-  }
-
-  .lbSourceItem b {
-    color: var(--ink);
-    font-weight: 600;
-  }
+.corsoSectionHead h2,
+.corsoPricing h2 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: 44px;
+  letter-spacing: -0.032em;
+  line-height: 1.1;
 }
 
-@container lb-demo (min-width: 720px) {
-  /* Wide: answer and source rail sit side by side. */
-  .lbThread {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 220px;
-    gap: 28px;
-    align-items: start;
-    padding: 28px 26px 30px;
-  }
-
-  .lbThreadMeta,
-  .lbThreadPost {
-    grid-column: 1 / -1;
-  }
-
-  .lbSources {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    margin-top: 4px;
-  }
-
-  .lbGroundedRow {
-    margin-top: 18px;
-  }
-
-  .lbSourceItem {
-    display: grid;
-    gap: 2px;
-    padding: 10px 12px;
-    border-radius: var(--r-sm);
-  }
+.corsoSectionHead p {
+  max-width: 580px;
+  margin: 0 auto;
+  color: #6e6e73;
+  font-size: 18px;
+  line-height: 1.55;
 }
 
-/* -------------------------------------------------------------- features */
-
-.lbFeatures {
-  padding: clamp(48px, 7vw, 88px) 0;
-  border-top: 1px solid var(--hairline);
-}
-
-.lbFeatureGrid {
+.corsoSteps {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-lg);
-  background: var(--hairline);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
 }
 
-.lbFeatureCard {
-  display: grid;
-  gap: 10px;
-  padding: 26px;
-  background: var(--surface);
+.corsoSteps article {
+  padding: 30px;
+  border-radius: 22px;
+  background: #f5f5f7;
 }
 
-.lbFeatureIcon {
+.corsoSteps article > span {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 18px;
+  border-radius: 12px;
+  background: #4a637f;
+  color: #fff;
   place-items: center;
-  border-radius: var(--r-sm);
-  background: var(--accent-wash);
-  color: var(--accent);
-  font-size: 15px;
 }
 
-.lbFeatureCard h3 {
-  margin: 6px 0 0;
-  color: var(--ink);
-  font-size: 16px;
-  font-weight: 620;
-  letter-spacing: -0.01em;
+.corsoSteps h3 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  letter-spacing: -0.022em;
+  line-height: 1.2;
 }
 
-.lbFeatureCard p {
+.corsoSteps p,
+.corsoSignals p {
   margin: 0;
-  color: var(--muted);
-  font-size: 13px;
+  color: #6e6e73;
+  font-size: 15px;
   line-height: 1.6;
 }
 
-/* ------------------------------------------------------------ foundation */
-
-.lbFoundation {
-  padding: clamp(48px, 7vw, 88px) 0;
-  border-top: 1px solid var(--hairline);
+.corsoSignals {
+  padding: 96px 0;
 }
 
-.lbFoundationInner {
+.corsoSignals .corsoWrap {
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  gap: clamp(32px, 5vw, 64px);
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 64px;
+  align-items: center;
+}
+
+.corsoMono {
+  margin: 0 0 12px !important;
+  color: #4a637f !important;
+  font: 11px var(--font-mono) !important;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.corsoSignals h2 {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: 40px;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.corsoSignals > .corsoWrap > div:first-child p + p {
+  margin-top: 16px;
+  font-size: 17px;
+}
+
+.corsoSignalList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 26px;
+  border-radius: 22px;
+  background: #f5f5f7;
+}
+
+.corsoSignalList article {
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.corsoSignalList h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+}
+
+.corsoSignalList p {
+  font-size: 14px;
+}
+
+.corsoPricing {
+  padding: 88px 0;
+  background: #f5f5f7;
+}
+
+.corsoPlans {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
   align-items: start;
 }
 
-.lbFoundationCopy h2 {
-  margin: 0;
-  max-width: 18ch;
-  color: var(--ink);
-  font-size: clamp(24px, 2.6vw, 32px);
-  font-weight: 620;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+.corsoPlans article {
+  position: relative;
+  padding: 32px 30px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
 }
 
-.lbFoundationCopy p {
-  max-width: 46ch;
-  margin: 14px 0 0;
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1.65;
+.corsoPlans article[data-featured] {
+  box-shadow: 0 8px 24px rgb(74 99 127 / 16%);
+  outline: 2px solid #4a637f;
+  outline-offset: -2px;
 }
 
-.lbFoundationList {
-  display: grid;
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-lg);
-  background: var(--hairline);
-}
-
-.lbFoundationItem {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  gap: 14px;
-  padding: 18px 22px;
-  background: var(--surface);
-}
-
-.lbFoundationItem span {
-  color: var(--accent);
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.lbFoundationItem strong {
-  display: block;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 620;
-}
-
-.lbFoundationItem p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.55;
-}
-
-/* ------------------------------------------------------------- final cta */
-
-.lbFinalCta {
-  padding: clamp(48px, 7vw, 88px) 0 clamp(64px, 9vw, 100px);
-  border-top: 1px solid var(--hairline);
-}
-
-.lbFinalCtaInner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 28px;
-  padding: clamp(28px, 4vw, 44px);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-}
-
-.lbFinalCtaCopy h2 {
-  margin: 0;
-  max-width: 22ch;
-  color: var(--ink);
-  font-size: clamp(22px, 2.4vw, 28px);
-  font-weight: 620;
-  letter-spacing: -0.02em;
-}
-
-.lbFinalCtaCopy p {
-  max-width: 46ch;
-  margin: 10px 0 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.lbFinalActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-/* ---------------------------------------------------------------- footer */
-
-.lbFooter {
-  border-top: 1px solid var(--hairline);
-}
-
-.lbFooterInner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 28px 0;
-}
-
-.lbFooterInner .lbBrand b {
-  color: var(--muted);
-}
-
-.lbFooterLinks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-}
-
-.lbFooterLinks a {
-  color: var(--muted);
+.corsoPlans em {
+  position: absolute;
+  top: -12px;
+  left: 30px;
+  padding: 5px 12px;
+  border-radius: 100px;
+  background: #4a637f;
+  color: #fff;
   font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.corsoPlans h3 {
+  margin: 0 0 4px;
+  font-size: 19px;
+  letter-spacing: -0.018em;
+}
+
+.corsoPlans h3 + p {
+  min-height: 46px;
+  margin: 0 0 22px;
+  color: #6e6e73;
+  font-size: 14px;
+}
+
+.corsoPrice {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 46px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+
+.corsoPlans article:last-child .corsoPrice {
+  font-size: 38px;
+}
+
+.corsoPrice span {
+  color: #6e6e73;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.corsoPlans small {
+  display: block;
+  margin: 4px 0 24px;
+  color: #6e6e73;
+  font-size: 13px;
+}
+
+.corsoPlans .corsoButton {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 24px;
+  font-size: 15px;
+}
+
+.corsoPlans ul {
+  display: grid;
+  gap: 11px;
+  padding: 0;
+  margin: 0;
+  font-size: 14px;
+  list-style: none;
+}
+
+.corsoPlans li::first-letter {
+  color: #1d7a33;
+}
+
+/* An excluded feature ("— Signals") on a lower tier, styled quiet so it
+   reads as absent rather than as another checked item. */
+.corsoPlans li[data-excluded] {
+  color: var(--muted);
+}
+
+.corsoPlans li[data-excluded]::first-letter {
+  color: var(--muted);
+}
+
+.corsoPricingNote {
+  margin: 24px 0 0;
+  color: #6e6e73;
+  font-size: 13px;
+  text-align: center;
+}
+
+.corsoFinal {
+  padding: 96px 32px;
+  text-align: center;
+}
+
+.corsoFinal h2 {
+  margin: 0 0 18px;
+  font-family: var(--font-display);
+  font-size: 48px;
+  letter-spacing: -0.034em;
+}
+
+.corsoFinal p {
+  max-width: 520px;
+  margin: 0 auto 28px;
+  color: #6e6e73;
+  font-size: 18px;
+}
+
+.corsoFooter {
+  padding: 26px 0;
+  border-top: 1px solid rgb(0 0 0 / 7%);
+  color: #6e6e73;
+  font-size: 13px;
+}
+
+.corsoFooter .corsoWrap {
+  display: flex;
+  justify-content: space-between;
+}
+
+.corsoFooter div div {
+  display: flex;
+  gap: 24px;
+}
+
+.corsoFooter a {
+  color: inherit;
   text-decoration: none;
 }
 
-.lbFooterLinks a:hover {
-  color: var(--ink);
-}
-
-.lbFooterLegal {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-/* -------------------------------------------------------------- motion */
-
-@media (prefers-reduced-motion: reduce) {
-  .lbBtn,
-  .lbNavLinks a,
-  .lbSignIn,
-  .lbFooterLinks a {
-    transition: none;
-  }
-}
-
-/* ------------------------------------------------------------ responsive */
-
-@media (max-width: 720px) {
-  .lbNavLinks {
+@media (max-width: 820px) {
+  .corsoNavLinks {
     display: none;
   }
-}
 
-@media (max-width: 560px) {
-  .lbFoundationInner {
-    grid-template-columns: minmax(0, 1fr);
+  .corsoNavActions {
+    margin-left: auto;
   }
 
-  .lbFinalCtaInner {
+  .corsoSignals .corsoWrap,
+  .corsoSteps,
+  .corsoPlans {
+    grid-template-columns: 1fr;
+  }
+
+  .corsoSignals .corsoWrap {
+    gap: 32px;
+  }
+
+  .corsoWidget {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    width: min(380px, calc(100% - 32px));
+    margin: -60px auto 24px;
+  }
+
+  .corsoStill {
+    min-height: 650px;
+  }
+}
+
+@media (max-width: 620px) {
+  .corsoWrap,
+  .corsoHeroInner {
+    width: min(100% - 32px, 1040px);
+  }
+
+  .corsoNav {
+    height: 52px;
+  }
+
+  .corsoNav .corsoWrap {
+    width: min(100% - 24px, 1040px);
+  }
+
+  .corsoNavActions > a:not(.corsoButton) {
+    display: none;
+  }
+
+  .corsoHero {
+    padding-top: 64px;
+  }
+
+  .corsoHero h1 {
+    font-size: clamp(50px, 16vw, 64px);
+  }
+
+  .corsoHeroCopy {
+    font-size: 17px;
+  }
+
+  .corsoStillWrap {
+    padding-top: 42px;
+  }
+
+  .corsoLesson {
+    padding: 24px 20px;
+  }
+
+  .corsoCommunityBar span {
+    display: none;
+  }
+
+  .corsoSection,
+  .corsoSignals {
+    padding-top: 72px;
+  }
+
+  .corsoSignals {
+    padding-bottom: 72px;
+  }
+
+  .corsoSectionHead h2,
+  .corsoPricing h2 {
+    font-size: 36px;
+  }
+
+  .corsoFinal h2 {
+    font-size: 38px;
+  }
+
+  .corsoFooter .corsoWrap {
     flex-direction: column;
-    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .corsoFooter div div {
+    flex-wrap: wrap;
+    gap: 12px 20px;
   }
 }

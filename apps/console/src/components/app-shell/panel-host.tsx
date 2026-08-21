@@ -38,9 +38,9 @@ export type PanelHostProps = {
 };
 
 /**
- * Renders the panel named by `?panel=`. One dialog at a time, animated in from
- * the trailing edge, with a focus trap, Escape-to-close, background scroll lock
- * and restored focus on exit.
+ * Renders the page named by `?panel=`. The prototype treats these destinations
+ * as full console pages—not modal sheets—so the URL, header and dock remain
+ * visible while the selected page owns the canvas.
  *
  * Which panel is open is a pure function of the URL — `open` below is derived,
  * never stored — so a cold load of `/app?panel=agent` renders the open panel in
@@ -125,13 +125,13 @@ export function PanelHost({
     };
   }, [open]);
 
-  // Move focus into the panel once it exists.
+  // Move focus to the page canvas itself. A routed page must not launch with
+  // its first action visibly focused as a modal dialog would.
   useEffect(() => {
     if (!open) return;
     const root = panelRef.current;
     if (!root) return;
-    const [first] = focusableWithin(root);
-    (first ?? root).focus();
+    root.focus();
   }, [open, requested]);
 
   // Escape closes; Tab cycles inside the dialog.
@@ -189,8 +189,7 @@ export function PanelHost({
       <section
         className={styles.panel}
         data-size={definition.size}
-        role="dialog"
-        aria-modal="true"
+        role="main"
         aria-labelledby={titleId}
         aria-describedby={subtitleId}
         tabIndex={-1}
@@ -205,14 +204,6 @@ export function PanelHost({
               {definition.subtitle}
             </p>
           </div>
-          <button
-            className={styles.panelClose}
-            type="button"
-            onClick={onClose}
-            aria-label={`Close ${definition.title}`}
-          >
-            <span aria-hidden="true">✕</span>
-          </button>
         </header>
         <div className={styles.panelBody}>
           <DataVersionProvider value={dataVersion}>

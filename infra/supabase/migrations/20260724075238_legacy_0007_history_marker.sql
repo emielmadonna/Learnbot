@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0007_durable_execution_primitives.
+-- The executable migration is maintained as 0007_durable_execution_primitives.sql.

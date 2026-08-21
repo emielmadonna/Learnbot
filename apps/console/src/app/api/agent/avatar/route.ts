@@ -513,4 +513,3 @@ export async function POST(request: Request) {
 
 // The exact accepted consent wording, so the Studio UI can present it
 // without a round trip just to discover it.
-export { CONSENT_PERMISSION_STATEMENT, CONSENT_SELF_STATEMENT };

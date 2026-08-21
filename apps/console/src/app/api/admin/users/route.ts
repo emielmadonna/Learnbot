@@ -27,6 +27,28 @@ function response(body: unknown, status = 200) {
   });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+async function functionResult(
+  data: unknown,
+  error: unknown,
+): Promise<Record<string, unknown> | null> {
+  if (isRecord(data)) return data;
+  const context =
+    error && typeof error === "object" && "context" in error
+      ? (error as { context?: unknown }).context
+      : null;
+  if (!(context instanceof Response)) return null;
+  try {
+    const body: unknown = await context.json();
+    return isRecord(body) ? body : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = await authenticatedLearningClient(request);
@@ -78,21 +100,51 @@ export async function POST(request: Request) {
     }
     const invoked = await supabase.functions.invoke("learning-admin-users", {
       body: {
+        tenantId: context.tenantId,
         email,
         displayName,
         role,
         idempotencyKey: `managed-account:${crypto.randomUUID()}`,
       },
     });
-    const result = invoked.data as Record<string, unknown> | null;
+    const result = await functionResult(invoked.data, invoked.error);
     if (invoked.error || !result || result.ok !== true) {
       const code =
         typeof result?.code === "string"
           ? result.code
           : "account_creation_failed";
       const status =
-        code === "access_denied" ? 403 : code === "account_exists" ? 409 : 400;
-      return response({ ok: false, code }, status);
+        code === "access_denied"
+          ? 403
+          : code === "account_exists"
+            ? 409
+            : code === "owner_identity_conflict"
+              ? 409
+              : code === "provider_not_configured"
+                ? 503
+                : code === "invitation_provider_failed" ||
+                    code === "invitation_provisioning_failed"
+                  ? 502
+                  : 400;
+      return response(
+        {
+          ok: false,
+          code,
+          providerCode:
+            typeof result?.providerCode === "string"
+              ? result.providerCode
+              : undefined,
+          providerMessage:
+            typeof result?.providerMessage === "string"
+              ? result.providerMessage
+              : undefined,
+          deliveryStatus:
+            typeof result?.deliveryStatus === "string"
+              ? result.deliveryStatus
+              : undefined,
+        },
+        status,
+      );
     }
     return response(result, 201);
   } catch (error) {

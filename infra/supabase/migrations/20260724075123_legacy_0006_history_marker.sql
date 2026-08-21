@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0006_rls_policies_and_storage.
+-- The executable migration is maintained as 0006_rls_policies_and_storage.sql.

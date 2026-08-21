@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0011_supabase_auth_tenant_bridge.
+-- The executable migration is maintained as 0011_supabase_auth_tenant_bridge.sql.

@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0028_usage_event_membership_resolution.
+-- The executable migration is maintained as 0028_usage_event_membership_resolution.sql.

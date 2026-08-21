@@ -2,6 +2,82 @@
 
 *Read-only audit, 2026-07-26, branch `codex/platform-foundations`. Every claim below carries a file path or a line number. Nothing was modified.*
 
+> **This is a dated snapshot, not a current-state document. Read the errata first.**
+
+## Errata — verified 2026-07-31
+
+The body below is preserved verbatim as the record of what was true on
+2026-07-26, including the parts that were wrong to ship. It is **not** a
+description of the repository today. Each item here was re-verified against the
+working tree on 2026-07-31; anything not listed was not re-checked and should be
+treated as unverified rather than as still true.
+
+**Overtaken by work that has since landed:**
+
+- *"Course content → retrievable knowledge — CLAIMED-NOT-BUILT — this is the
+  blocker."* A producer exists. `apps/console/src/app/api/ingestion/publish/route.ts:30`
+  calls `learning_ingestion_publish`, which projects approved cleaning revisions
+  into `knowledge_versions` / `learning_documents` / `learning_chunks` via
+  `app_private.knowledge_project_ingested_course`. The one-off
+  `scripts/prepare-estie-import.mjs` is no longer the only writer.
+- *"Embeddings — ORPHANED SCHEMA … zero callers repo-wide."* The loop is closed.
+  `apps/console/src/app/api/learning/embeddings/route.ts` calls
+  `learning_claim_embedding_batch` / `learning_commit_embedding_batch` under the
+  `knowledge.embedding.worker` operation secret, and
+  `infra/supabase/functions/learning-embedding-worker/` exists.
+- *"File upload — every hop after quarantine [is missing]. No scanner, no
+  extractor, no promotion RPC."* `api/ingestion/{scan,extract,clean,review,publish}`
+  and `apps/console/src/lib/ingestion/` all exist. See `docs/PLAN.md` §2 for the
+  live-apply caveats, which still stand.
+- *"`telemetry_outbox` is write-only — nothing leases or drains it. Rows
+  accumulate forever."* `apps/console/src/app/api/ops/telemetry-outbox/drain/route.ts`
+  drains it with a retention policy.
+- *"`public.cost_ledger` has zero writers repo-wide."* It has writers:
+  `apps/console/src/lib/cost-metering.ts`, reached from
+  `apps/console/src/lib/provider-runtime.ts:29`.
+- *"Voice hardcoded `"marin"` while `tenant_branding.agent_voice` sits unread."*
+  Resolved; `apps/console/src/lib/voice-runtime.ts` resolves the configured voice
+  and there is no `"marin"` literal left under `api/learning/voice/`.
+- *"Cost / COGS / margin / billing — CLAIMED-NOT-BUILT."* `api/billing/` and
+  `apps/console/src/lib/billing/` exist (Phase 15, marked done in `docs/PLAN.md`).
+- *"`packages/widget-runtime` (1521 lines, Shadow DOM) has never been loaded by
+  anything"* and *"Current shipped artifact is `apps/console/public/integrations/circle-learningbot.js`
+  — 38 lines that append a link opening `/app/conversation`."* Both false as of
+  Phase 7. The runtime is served by `apps/console/src/app/widget.js/route.ts`. The
+  `public/integrations/` artifacts were never updated, were referenced by nothing
+  executable, and were **deleted on 2026-07-31**; by then `circle-learningbot.js`
+  was 277 lines and mounted a stale bundled copy of the runtime, and it still
+  documented the `data-widget-key` attribute that the shipped runtime does not
+  read.
+- **The P2 "delete, don't wire" table was executed.** `application-services`,
+  `postgres-adapters`, `intelligence-core`, `onboarding-core`, `course-authoring`,
+  `privacy-lifecycle`, `learning-pipeline`, `realtime-voice` and `mcp-server` are
+  all gone. `packages/` now contains exactly `contracts`, `identity-access`,
+  `provider-router`, `widget-runtime`. Consequently every line-number citation in
+  this document that points into a deleted package is unresolvable, and the
+  "11 packages / ~23,000 lines" figure in the Verdict no longer describes anything.
+
+**Still true, re-verified 2026-07-31 — do not assume these were fixed too:**
+
+- **Edge functions still have no deploy configuration anywhere.** There is no
+  `supabase functions deploy` in `infra/supabase/scripts/hosted-release.mjs`, no
+  step for it in `.github/workflows/ci.yml`, and no other deploy tooling in the
+  repository. The eight functions under `infra/supabase/functions/` are pushed by
+  hand, exactly as `CLAUDE.md` states. The only recorded invocation of the command
+  is a transcript line in `infra/supabase/SCHEMA-DRIFT.md:531`.
+- **Invitations still have no delivery hop.** No mailer in the dependency tree.
+- **Privacy / GDPR export and deletion still have no code path.**
+- **`packages/identity-access` is still orphaned**, and is now the last survivor of
+  the P2 table. It is not even declared in `apps/console/package.json`, yet
+  `pnpm check` builds and typechecks it on every run.
+
+**Corrected in this document only, not in the code:** the P0/P1 remediation list
+below is a 2026-07-26 plan. Items 1, 2, 7, 8 and 10 have since been done; items 3,
+4, 5, 6 and 9 have not been re-verified here. A current, evidenced register lives
+in [TECHNICAL-DEBT.md](TECHNICAL-DEBT.md).
+
+---
+
 ## Verdict
 
 The console is a genuinely wired, thin, well-secured client over 39 Supabase migrations: sign-in, tenant selection, onboarding, managed accounts, platform administration, agent configuration, course authoring, publishing, question intelligence and analytics all have a real UI → route → `SECURITY DEFINER` RPC → table path with no fixture. That work is good and it is done. But the one hop that turns a client's course content into something the assistant can answer from — content → `learning_documents`/`learning_chunks`/`knowledge_versions` — **has no producer anywhere in the repository except a one-off script hardwired to `/Users/emielmadonna/Estie Starr/scraper`** (`scripts/prepare-estie-import.mjs:7,256,349,396`). Because `learning-provider.ts:133-142` returns a canned refusal when zero sources are retrieved, a newly onboarded tenant can author and publish an entire course and its assistant will answer *"I couldn't find this in the published learning yet"* to every question, forever. Uploads are a one-way trip into a quarantine bucket with no scanner, no extractor and no promotion RPC. Around that working core sit 11 packages / ~23,000 lines that reach production through zero import edges, and a `README.md`/`DEVELOPMENT.md` pair that presents most of them as delivered capability. The gap is not quality — most of the orphaned code is careful — it is that the durable implementations were re-written in plpgsql and nobody deleted the TypeScript, and nobody built the two workers (extraction, embedding) that the whole product depends on.
@@ -36,7 +112,7 @@ The console is a genuinely wired, thin, well-secured client over 39 Supabase mig
 | **Voice (realtime + push-to-talk)** | PARTIAL | Button `components/app-shell/app-shell.tsx:179` → `agent-panel.tsx:11` hosts `conversation-client.tsx`; `:993,1062,1074,1123` → `api/learning/voice/{realtime,transcribe,speak}/route.ts`. Grounding hop at `conversation-client.tsx:866-896` routes the transcript through `/api/learning/respond` so the realtime model never invents facts — genuinely good design. Persisted as `messages.modality='voice_transcript'` (`respond/route.ts:254`) | (a) `OPENAI_API_KEY` unset and **undocumented** — all three routes 503 (`realtime/route.ts:43`); (b) **zero cost attribution** — `public.cost_ledger` (`0005:51`) has zero writers repo-wide, so the most expensive SKU is unmetered; (c) rate limits are an in-process `Map` (`voice/rate-limit.ts:16-23`) — useless on serverless; (d) voice hardcoded `"marin"` (`realtime/route.ts:160`, `speak/route.ts:16`) while `tenant_branding.agent_voice` sits unread; (e) no partial captions, no latency telemetry; `conversations.channel_state` (`0004:123`) never written. |
 | **Files in the student conversation** | CLAIMED-NOT-BUILT | `conversation-client.tsx:111-118,1846` *renders* an `attachment` part; there is no `<input type="file">` anywhere in the conversation UI, and `public.attachments` (`0004:184`) has zero writers | The whole feature. `README.md:7` claims "text, voice, files, rich text and diagrams". |
 | **Diagrams** | CLAIMED-NOT-BUILT | `conversation-client.tsx:128-138,1797` renders a `diagram` part; `diagram_review` exists only as an onboarding checkbox (`0010:75`). No extraction, no curation gallery, no producer | Everything. |
-| **Widget delivery** | IN-FLIGHT | `20260726093000_widget_delivery.sql` landed today (public `widget_bootstrap`/`widget_ask` with origin allowlisting). Current shipped artifact is `apps/console/public/integrations/circle-learningbot.js` — 38 lines that append a link opening `/app/conversation`. `packages/widget-runtime` (1521 lines, Shadow DOM) has never been loaded by anything. `apps/edge/` is a README | Being built by others — excluded from remediation below. |
+| **Widget delivery** | IN-FLIGHT | `20260726093000_widget_delivery.sql` landed today (public `widget_bootstrap`/`widget_ask` with origin allowlisting). Current shipped artifact is `apps/console/public/integrations/circle-learningbot.js` — 38 lines that append a link opening `/app/conversation`. `packages/widget-runtime` (1521 lines, Shadow DOM) has never been loaded by anything. `apps/edge/` is a README | Being built by others — excluded from remediation below. **[Superseded 2026-07-31 — see Errata. The runtime is now served by `/widget.js`; the `public/integrations/` artifacts named here were deleted as orphans.]** |
 | **MCP server** | ORPHANED / BROKEN | `packages/mcp-server` registers **36** tools (`src/server-discovery.test.ts:91`). 27 of them HTTP-call `/api/dev/*` (`src/server.ts:689…1868`) — **that directory was deleted this session** (`git status`: 19 staged deletions under `src/app/api/dev/`). Grants come from `COURSE_AI_MCP_GRANTS` env into a `Map` (`enterprise-control.ts:166`); `public.mcp_grants`/`mcp_invocations` (`0005:100,139`) are written only by `tests/security_verification.sql:61,174`. No Dockerfile/fly/wrangler/CI deploy. stdio transport, unhostable on Vercel | 75% of it points at a 404. The 9 durable tools are an HTTP proxy over console routes needing a hand-pasted user bearer token. |
 | **Privacy / GDPR (export, delete, retention, legal hold)** | CLAIMED-NOT-BUILT | `packages/privacy-lifecycle` (2168 lines) — zero importers; every repository in `src/repositories.ts` is an interface whose only implementations are `Memory*` in `src/fakes.ts`. Zero API routes (grep for `erasure\|dsar\|legal.?hold\|gdpr\|retention` over `apps/console/src/app/api/` → 0 hits). Zero tables. Zero cron/`pg_cron`/`pg_net`/worker | All five hops. `0010:26` stores a nullable `retention_policy_ref` and `0012:230` still raises `O-13:retention_policy_decision_required`. **If a client asks to delete or export their data today, there is no code path at all.** |
 | **SSO / SAML / SCIM** | CLAIMED-NOT-BUILT | `packages/identity-access` (1809) — zero importers from `apps/`. `src/oidc.ts` (376 lines, `jose`-backed) is real and unreachable. SAML exists only as a string literal in a union (`src/types.ts:15`); there is no SAML file. SCIM has no `/scim/v2/*` route, no schema/filter/PATCH parser; `identity_scim_bindings`/`identity_scim_receipts` (`0008:150,167`) are referenced by zero SQL functions and zero app code | Everything. An enterprise buyer asking for "Okta SSO" or "SCIM deprovisioning" gets neither. |

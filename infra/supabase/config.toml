@@ -36,10 +36,13 @@ file_size_limit = "50MiB"
 enabled = true
 site_url = "https://clone.stack-labs.ai"
 additional_redirect_urls = [
+  "http://localhost:3001/auth/callback",
+  "http://localhost:3001/auth/invite",
   "http://127.0.0.1:3100",
   "http://127.0.0.1:3100/auth/callback",
   "https://clone.stack-labs.ai",
   "https://clone.stack-labs.ai/auth/callback",
+  "https://clone.stack-labs.ai/auth/invite",
   "https://learningbot-estie-preview.vercel.app/auth/callback",
   "https://learningbot-estie-preview-emiel-madonnas-projects.vercel.app/auth/callback",
   "https://learningbot-estie-preview-git-co-984d79-emiel-madonnas-projects.vercel.app/auth/callback",
@@ -74,8 +77,30 @@ uri = "pg-functions://postgres/public/learningbot_custom_access_token_hook"
 [functions.learning-embeddings]
 verify_jwt = true
 
+[functions.learning-embedding-worker]
+# Service-to-service operation capability is verified in constant time inside
+# the function and again by every database RPC it calls.
+verify_jwt = false
+
 [functions.learning-admin-users]
 verify_jwt = true
+
+[functions.learning-provider-credentials]
+verify_jwt = true
+
+[functions.learning-provider-voice]
+verify_jwt = true
+
+# Provider completion is authenticated inside the function with the verified
+# Supabase user plus the rotating, operation-scoped server token.
+[functions.learning-provider-complete]
+verify_jwt = false
+
+# Anonymous widget and hosted turns cannot carry a Supabase user JWT. This
+# endpoint instead requires the widget delivery key, exact allowed Origin and
+# the rotating conversation operation token before provider access is resolved.
+[functions.learning-provider-widget-complete]
+verify_jwt = false
 
 # This is intentionally not JWT-gated because it is authenticated by the
 # tenant-bound, expiring, one-use owner claim. Once claimed, it fails closed.

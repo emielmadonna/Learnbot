@@ -22,5 +22,6 @@
   },
   "devDependencies": {
     "typescript": "^5.9.3"
-  }
+  },
+  "workspaces": ["apps/*", "services/*", "packages/*"]
 }

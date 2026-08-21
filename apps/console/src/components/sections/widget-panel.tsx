@@ -9,7 +9,8 @@ import {
   useState,
 } from "react";
 import type { PanelProps } from "../app-shell/contract";
-import { useDataVersion } from "../app-shell/shell-data";
+import { BrandGlyph } from "../corso/brand-glyph";
+import { asWorkspace, useDataVersion } from "../app-shell/shell-data";
 import { usePanelRouter } from "../app-shell/use-panel-router";
 import {
   Button,
@@ -21,6 +22,7 @@ import {
   TextField,
   Toggle,
 } from "../ui";
+import { HostedPublicationControls } from "./hosted-publication-controls";
 import sectionStyles from "./sections.module.css";
 import styles from "./widget-panel.module.css";
 
@@ -39,16 +41,16 @@ import styles from "./widget-panel.module.css";
  *    visitor gets. See {@link WidgetPreview} for how, and for what is honestly
  *    different about it (the transport).
  * 3. It does not invent a key, an origin list or a saved state. Until the
- *    widget delivery migration and `/api/widget/config` are live on this
+ *    widget delivery migration and `/api/widget/settings` are live on this
  *    database, the surface says so and offers nothing else.
  *
  * ---------------------------------------------------------------------------
  * Delivery contract this panel codes against (owned by the widget backend):
  *
- *   GET  /api/widget/config
+ *   GET  /api/widget/settings
  *     -> { ok: true, dataMode: "durable", tenantId, expectedVersion,
  *          settings: WidgetSettings }
- *   POST /api/widget/config
+ *   POST /api/widget/settings
  *        { enabled, allowedOrigins, greeting, launcherLabel, launcherPosition,
  *          presentation, anonymousAccess, expectedVersion, idempotencyKey }
  *     -> { ok: true, expectedVersion, settings: WidgetSettings }
@@ -100,6 +102,7 @@ const ADMIN_ROLES = new Set(["tenant_owner", "tenant_admin"]);
 const MAX_ORIGINS = 20;
 const MAX_GREETING = 500;
 const MAX_LAUNCHER_LABEL = 40;
+const MAX_GREETING_DELAY_SECONDS = 120;
 
 /**
  * The forms the runtime can be told to take on a desktop viewport.
@@ -111,12 +114,23 @@ const MAX_LAUNCHER_LABEL = 40;
 const FORM_OPTIONS: readonly { value: DesktopPresentation; label: string }[] = [
   { value: "launcher", label: "Launcher only" },
   { value: "panel", label: "Panel — a floating window" },
-  { value: "expanded", label: "Expanded — nearly full screen" },
 ];
 
 const POSITION_OPTIONS = [
   { value: "bottom-right", label: "Bottom right" },
   { value: "bottom-left", label: "Bottom left" },
+] as const;
+
+const SHAPE_OPTIONS = [
+  { value: "bubble", label: "Bubble" },
+  { value: "pill", label: "Pill" },
+  { value: "tab", label: "Tab" },
+] as const;
+
+const APPEARANCE_OPTIONS = [
+  { value: "auto", label: "Automatic" },
+  { value: "light", label: "Always light" },
+  { value: "dark", label: "Always dark" },
 ] as const;
 
 /** Server codes become sentences. A raw code is never shown to a person. */
@@ -164,6 +178,11 @@ type WidgetSettings = {
   greeting: string;
   launcherLabel: string;
   launcherPosition: WidgetBranding["launcherPosition"];
+  launcherShape: WidgetBranding["launcherShape"];
+  greetingBubbleEnabled: boolean;
+  greetingBubbleDelaySeconds: number;
+  showPoweredBy: boolean;
+  appearanceMode: WidgetBranding["appearanceMode"];
   presentation: WidgetPresentation;
   anonymousAccess: boolean;
   updatedAt: string | null;
@@ -185,10 +204,14 @@ type ServerState = {
 type Draft = {
   enabled: boolean;
   openByDefault: boolean;
-  form: Exclude<DesktopPresentation, "launcher">;
   launcherPosition: WidgetBranding["launcherPosition"];
+  launcherShape: WidgetBranding["launcherShape"];
   greeting: string;
+  greetingBubbleEnabled: boolean;
+  greetingBubbleDelaySeconds: number;
   launcherLabel: string;
+  showPoweredBy: boolean;
+  appearanceMode: WidgetBranding["appearanceMode"];
   anonymousAccess: boolean;
   allowedOrigins: string[];
 };
@@ -265,13 +288,23 @@ function nullableText(value: unknown): string | null {
 }
 
 function presentationOf(value: unknown): WidgetPresentation {
-  return value === "panel" || value === "expanded" || value === "mobile-sheet"
-    ? value
-    : "launcher";
+  return value === "panel" ? value : "launcher";
 }
 
 function positionOf(value: unknown): WidgetBranding["launcherPosition"] {
   return value === "bottom-left" ? "bottom-left" : "bottom-right";
+}
+
+function launcherShapeOf(value: unknown): WidgetBranding["launcherShape"] {
+  return value === "pill" || value === "tab" ? value : "bubble";
+}
+
+function appearanceModeOf(value: unknown): WidgetBranding["appearanceMode"] {
+  return value === "light" || value === "dark" ? value : "auto";
+}
+
+function integer(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isInteger(value) ? value : fallback;
 }
 
 function stringList(value: unknown): string[] {
@@ -298,6 +331,14 @@ function readSettings(body: Record<string, unknown>): WidgetSettings | null {
     greeting: text(container.greeting, ""),
     launcherLabel: text(container.launcherLabel, ""),
     launcherPosition: positionOf(container.launcherPosition),
+    launcherShape: launcherShapeOf(container.launcherShape),
+    greetingBubbleEnabled: flag(container.greetingBubbleEnabled, true),
+    greetingBubbleDelaySeconds: integer(
+      container.greetingBubbleDelaySeconds,
+      20,
+    ),
+    showPoweredBy: flag(container.showPoweredBy, true),
+    appearanceMode: appearanceModeOf(container.appearanceMode),
     presentation: presentationOf(container.presentation),
     anonymousAccess: flag(container.anonymousAccess, false),
     updatedAt: nullableText(container.updatedAt),
@@ -308,11 +349,15 @@ function toDraft(settings: WidgetSettings): Draft {
   const presentation = settings.presentation;
   return {
     enabled: settings.enabled,
-    openByDefault: presentation === "panel" || presentation === "expanded",
-    form: presentation === "expanded" ? "expanded" : "panel",
+    openByDefault: presentation === "panel",
     launcherPosition: settings.launcherPosition,
+    launcherShape: settings.launcherShape,
     greeting: settings.greeting,
+    greetingBubbleEnabled: settings.greetingBubbleEnabled,
+    greetingBubbleDelaySeconds: settings.greetingBubbleDelaySeconds,
     launcherLabel: settings.launcherLabel,
+    showPoweredBy: settings.showPoweredBy,
+    appearanceMode: settings.appearanceMode,
     anonymousAccess: settings.anonymousAccess,
     allowedOrigins: [...settings.allowedOrigins],
   };
@@ -320,7 +365,7 @@ function toDraft(settings: WidgetSettings): Draft {
 
 /** The single presentation value the delivery record stores for a draft. */
 function draftPresentation(draft: Draft): DesktopPresentation {
-  return draft.openByDefault ? draft.form : "launcher";
+  return draft.openByDefault ? "panel" : "launcher";
 }
 
 /** Order-sensitive identity of a draft, so "unsaved" never fires spuriously. */
@@ -391,7 +436,11 @@ function isInsecure(origin: string): boolean {
   return origin.startsWith("http://") && !isLoopback(origin);
 }
 
-type DraftErrors = { greeting?: string; launcherLabel?: string };
+type DraftErrors = {
+  greeting?: string;
+  greetingBubbleDelaySeconds?: string;
+  launcherLabel?: string;
+};
 
 function validate(draft: Draft): DraftErrors {
   const errors: DraftErrors = {};
@@ -404,7 +453,45 @@ function validate(draft: Draft): DraftErrors {
   if (draft.launcherLabel.trim().length > MAX_LAUNCHER_LABEL) {
     errors.launcherLabel = `Use ${MAX_LAUNCHER_LABEL} characters or fewer.`;
   }
+  if (
+    !Number.isInteger(draft.greetingBubbleDelaySeconds) ||
+    draft.greetingBubbleDelaySeconds < 0 ||
+    draft.greetingBubbleDelaySeconds > MAX_GREETING_DELAY_SECONDS
+  ) {
+    errors.greetingBubbleDelaySeconds =
+      `Choose a delay from 0 to ${MAX_GREETING_DELAY_SECONDS} seconds.`;
+  }
   return errors;
+}
+
+function SegmentedChoice<Value extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly { value: Value; label: string }[];
+  value: Value;
+  onChange: (value: Value) => void;
+}) {
+  return (
+    <fieldset className={styles.segmentedField}>
+      <legend>{label}</legend>
+      <div className={styles.segmentedControl}>
+        {options.map((option) => (
+          <button
+            aria-pressed={value === option.value}
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  );
 }
 
 /* ------------------------------------------------------- runtime delivery */
@@ -464,40 +551,127 @@ function retryWidgetRuntime() {
 /**
  * The preview transport.
  *
- * The element is real; this is not the real answering path and does not
- * pretend to be. It never reaches `/api/widget/ask`, because that endpoint
- * answers for an allowed customer domain and the console is not one — a
- * preview that quietly failed a CORS check would be worse than one that says
- * what it is. Every reply is the same fixed sentence, so nothing on screen can
- * be mistaken for a grounded answer.
+ * This authenticated transport uses the same grounded provider path as the
+ * assistant editor while keeping the turn ephemeral. Owners can verify a real
+ * answer and its sources before enabling anonymous access on customer domains.
  */
-function previewAdapter(): WidgetRuntimeAdapter {
+function previewAdapter(branding: PreviewBranding): WidgetRuntimeAdapter {
   let sequence = 0;
   return {
     bootstrap: (): Promise<WidgetBootstrap> =>
       Promise.resolve({
         conversation: { id: `preview-${Date.now()}`, items: [] },
+        branding,
         identity: { tier: "anonymous" as const },
         learningContext: { status: "unknown" as const },
       }),
-    sendText: (input, emit) => {
+    sendText: async (input, emit) => {
       sequence += 2;
-      const item: WidgetThreadItem = {
-        id: `preview-reply-${sequence}`,
-        sequence,
-        role: "assistant",
-        modality: "text",
-        status: "complete",
-        parts: [
+      const itemId = `preview-reply-${sequence}`;
+      emit({
+        type: "thread.item",
+        conversationId: input.conversationId,
+        item: {
+          id: itemId,
+          sequence,
+          role: "assistant",
+          modality: "text",
+          status: "pending",
+          parts: [],
+          createdAt: new Date().toISOString(),
+        },
+      });
+      try {
+        const response = await fetch("/api/agent/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: input.text,
+            assistantName: branding.assistantName,
+          }),
+          signal: input.signal,
+        });
+        const payload = (await response.json()) as Record<string, unknown>;
+        const preview =
+          payload.preview && typeof payload.preview === "object"
+            ? (payload.preview as Record<string, unknown>)
+            : null;
+        if (!response.ok || payload.ok !== true || !preview) {
+          emit({
+            type: "error",
+            conversationId: input.conversationId,
+            code: "answer_unavailable",
+            recoverable: true,
+          });
+          return;
+        }
+
+        const parts: WidgetThreadItem["parts"] = [
           {
             kind: "text",
-            text: "This is the configuration preview, so nothing is answered here. On an allowed domain this reply comes from your published learning, with its sources attached.",
+            text:
+              typeof preview.answer === "string"
+                ? preview.answer
+                : "The grounded preview did not return an answer.",
           },
-        ],
-        createdAt: new Date().toISOString(),
-      };
-      emit({ type: "thread.item", conversationId: input.conversationId, item });
-      return Promise.resolve();
+        ];
+        if (Array.isArray(preview.sources)) {
+          for (const [index, candidate] of preview.sources.entries()) {
+            if (
+              !candidate ||
+              typeof candidate !== "object" ||
+              Array.isArray(candidate)
+            ) {
+              continue;
+            }
+            const source = candidate as Record<string, unknown>;
+            const title =
+              typeof source.lessonTitle === "string"
+                ? source.lessonTitle
+                : typeof source.documentTitle === "string"
+                  ? source.documentTitle
+                  : null;
+            if (!title) continue;
+            parts.push({
+              kind: "source",
+              id:
+                typeof source.chunkId === "string"
+                  ? source.chunkId
+                  : `preview-source-${index}`,
+              title:
+                typeof source.courseTitle === "string"
+                  ? `${title} · ${source.courseTitle}`
+                  : title,
+              url: "",
+            });
+          }
+        }
+        emit({
+          type: "thread.item",
+          conversationId: input.conversationId,
+          item: {
+            id: itemId,
+            sequence,
+            role: "assistant",
+            modality: "text",
+            status: "complete",
+            parts,
+            createdAt: new Date().toISOString(),
+          },
+        });
+        emit({
+          type: "response.complete",
+          conversationId: input.conversationId,
+          itemId,
+        });
+      } catch {
+        emit({
+          type: "error",
+          conversationId: input.conversationId,
+          code: "answer_unavailable",
+          recoverable: true,
+        });
+      }
     },
   };
 }
@@ -606,11 +780,12 @@ function WidgetPreview({
     const element = elementRef.current;
     if (element === null || runtime !== "ready") return;
     const timer = window.setTimeout(() => {
+      const resolvedBranding = JSON.parse(brandingKey) as PreviewBranding;
       void element
         .configure({
           tenantKey,
-          adapter: previewAdapter(),
-          branding: JSON.parse(brandingKey) as PreviewBranding,
+          adapter: previewAdapter(resolvedBranding),
+          branding: resolvedBranding,
         })
         .then(() => {
           if (presentation === "launcher") element.close();
@@ -672,9 +847,9 @@ function WidgetPreview({
       <p className={styles.previewNote}>
         This is the real <code>&lt;{WIDGET_TAG}&gt;</code> element from the
         widget runtime, scaled down from a full browser window — not a mock-up.
-        Replies inside it are a fixed placeholder: the preview does not call the
-        answering service, because that service only answers for the domains
-        below.
+        Questions use the real grounded assistant in an authenticated,
+        non-persisted preview; published widgets still answer only on the
+        domains below.
         {disabled ? " The widget is currently switched off, so nothing like this is on your site yet." : ""}
       </p>
     </div>
@@ -839,10 +1014,19 @@ function Snippet({
 /**
  * Widget panel — configure and install the embeddable assistant.
  */
-export function WidgetPanel({ payload }: PanelProps) {
+export function WidgetPanel({ payload, params }: PanelProps) {
   const dataVersion = useDataVersion();
   const { panelHref, openPanel } = usePanelRouter();
-  const canConfigure = ADMIN_ROLES.has(payload.role);
+  const workspace = asWorkspace(payload);
+  const role = workspace?.identity.role ?? payload.role;
+  const canConfigure = ADMIN_ROLES.has(role);
+  const requestedView = params.get("view");
+  const activeView =
+    requestedView === "appearance" || requestedView === "install"
+      ? requestedView
+      : "overview";
+  const showAppearance = activeView !== "install";
+  const showDelivery = activeView !== "appearance";
 
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -866,7 +1050,7 @@ export function WidgetPanel({ payload }: PanelProps) {
     async function run() {
       let response: Response;
       try {
-        response = await fetch("/api/widget/config", {
+        response = await fetch("/api/widget/settings", {
           cache: "no-store",
           headers: { accept: "application/json" },
         });
@@ -981,17 +1165,22 @@ export function WidgetPanel({ payload }: PanelProps) {
     setSaveError(null);
     setStatus(null);
     try {
-      const response = await fetch("/api/widget/config", {
+      const response = await fetch("/api/widget/settings", {
         body: JSON.stringify({
           allowedOrigins: draft.allowedOrigins,
           anonymousAccess: draft.anonymousAccess,
           enabled: draft.enabled,
           expectedVersion: server.expectedVersion,
           greeting: draft.greeting.trim(),
+          greetingBubbleDelaySeconds: draft.greetingBubbleDelaySeconds,
+          greetingBubbleEnabled: draft.greetingBubbleEnabled,
           idempotencyKey: crypto.randomUUID(),
           launcherLabel: draft.launcherLabel.trim(),
           launcherPosition: draft.launcherPosition,
+          launcherShape: draft.launcherShape,
+          appearanceMode: draft.appearanceMode,
           presentation: draftPresentation(draft),
+          showPoweredBy: draft.showPoweredBy,
         }),
         cache: "no-store",
         headers: { accept: "application/json", "content-type": "application/json" },
@@ -1095,6 +1284,11 @@ export function WidgetPanel({ payload }: PanelProps) {
     assistantName: payload.agent.assistantName,
     launcherLabel: draft.launcherLabel.trim() || payload.agent.assistantName,
     launcherPosition: draft.launcherPosition,
+    launcherShape: draft.launcherShape,
+    greetingBubbleEnabled: draft.greetingBubbleEnabled,
+    greetingBubbleDelaySeconds: draft.greetingBubbleDelaySeconds,
+    showPoweredBy: draft.showPoweredBy,
+    appearanceMode: draft.appearanceMode,
     primaryColor: payload.agent.primaryColor,
     surfaceColor: payload.agent.surfaceColor,
     textColor: payload.agent.textColor,
@@ -1151,6 +1345,44 @@ export function WidgetPanel({ payload }: PanelProps) {
         side="inline"
         title="Your website widget"
       >
+        <nav className={styles.subnav} aria-label="Widget settings">
+          {[
+            { key: "overview", label: "Overview" },
+            { key: "appearance", label: "Appearance" },
+            { key: "install", label: "Install & domains" },
+          ].map((item) => {
+            const href = panelHref(
+              "widget",
+              item.key === "overview" ? undefined : { view: item.key },
+            );
+            return (
+              <a
+                aria-current={activeView === item.key ? "page" : undefined}
+                className={styles.subnavLink}
+                href={href}
+                key={item.key}
+                onClick={(event) => {
+                  if (
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey ||
+                    event.button !== 0
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  openPanel(
+                    "widget",
+                    item.key === "overview" ? undefined : { view: item.key },
+                  );
+                }}
+              >
+                {item.label}
+              </a>
+            );
+          })}
+        </nav>
         <div className={styles.layout}>
           <div className={styles.column}>
             {conflict ? (
@@ -1176,7 +1408,7 @@ export function WidgetPanel({ payload }: PanelProps) {
             ) : null}
 
             {/* ------------------------------------------------ status */}
-            <section className={styles.card}>
+            <section className={styles.card} hidden={!showDelivery}>
               <header className={styles.cardHead}>
                 <h3>Status</h3>
                 <StateBadge state={server.baseline.enabled ? "known" : "unknown"}>
@@ -1218,7 +1450,7 @@ export function WidgetPanel({ payload }: PanelProps) {
             </section>
 
             {/* -------------------------------------------- appearance */}
-            <section className={styles.card}>
+            <section className={styles.card} hidden={!showAppearance}>
               <header className={styles.cardHead}>
                 <h3>Appearance</h3>
               </header>
@@ -1237,9 +1469,16 @@ export function WidgetPanel({ payload }: PanelProps) {
                   <div>
                     <dt>Mark</dt>
                     <dd>
-                      {payload.agent.logoUrl !== null
-                        ? "Logo image"
-                        : payload.agent.iconGlyph || "Initial"}
+                      {payload.agent.logoUrl !== null ? (
+                        "Logo image"
+                      ) : payload.agent.iconGlyph ? (
+                        // Draws the Corso icon when the stored value names one,
+                        // and the typed character otherwise. Printing the raw
+                        // value here would read out "conversation" as a word.
+                        <BrandGlyph size={18} value={payload.agent.iconGlyph} />
+                      ) : (
+                        "Initial"
+                      )}
                     </dd>
                   </div>
                   <div>
@@ -1296,23 +1535,11 @@ export function WidgetPanel({ payload }: PanelProps) {
                 </a>
               </div>
 
-              <TextAreaField
-                {...(errors.greeting === undefined ? {} : { error: errors.greeting })}
-                help="The first thing a visitor reads when the widget opens. Widget-only — it does not change the welcome inside the app."
-                label="Greeting"
-                onChange={(event) => update("greeting", event.target.value)}
-                rows={3}
-                value={draft.greeting}
-              />
-
-              <TextField
-                {...(errors.launcherLabel === undefined
-                  ? {}
-                  : { error: errors.launcherLabel })}
-                help="Read out by screen readers and shown when there are unread replies. Leave empty to use the assistant's name."
-                label="Launcher label"
-                onChange={(event) => update("launcherLabel", event.target.value)}
-                value={draft.launcherLabel}
+              <SegmentedChoice
+                label="Launcher shape"
+                onChange={(value) => update("launcherShape", value)}
+                options={SHAPE_OPTIONS}
+                value={draft.launcherShape}
               />
 
               <SelectField
@@ -1328,6 +1555,69 @@ export function WidgetPanel({ payload }: PanelProps) {
                 value={draft.launcherPosition}
               />
 
+              <TextField
+                {...(errors.launcherLabel === undefined
+                  ? {}
+                  : { error: errors.launcherLabel })}
+                help="Shown inside Pill and Tab launchers and read out by screen readers. Leave empty to use the assistant's name."
+                label="Label"
+                onChange={(event) => update("launcherLabel", event.target.value)}
+                value={draft.launcherLabel}
+              />
+
+              <TextAreaField
+                {...(errors.greeting === undefined ? {} : { error: errors.greeting })}
+                help="The first thing a visitor reads when the widget opens, and the one-line nudge shown beside the launcher."
+                label="Greeting"
+                onChange={(event) => update("greeting", event.target.value)}
+                rows={3}
+                value={draft.greeting}
+              />
+
+              <Toggle
+                bordered
+                checked={draft.greetingBubbleEnabled}
+                description={`A one-line nudge after ${draft.greetingBubbleDelaySeconds} seconds on a lesson.`}
+                label="Greeting bubble"
+                onChange={(next) => update("greetingBubbleEnabled", next)}
+              />
+
+              {draft.greetingBubbleEnabled ? (
+                <TextField
+                  {...(errors.greetingBubbleDelaySeconds === undefined
+                    ? {}
+                    : { error: errors.greetingBubbleDelaySeconds })}
+                  help="Use 0 to show it immediately, or up to 120 seconds."
+                  label="Greeting delay (seconds)"
+                  max={MAX_GREETING_DELAY_SECONDS}
+                  min={0}
+                  onChange={(event) =>
+                    update(
+                      "greetingBubbleDelaySeconds",
+                      Number(event.currentTarget.value),
+                    )
+                  }
+                  step={1}
+                  type="number"
+                  value={draft.greetingBubbleDelaySeconds}
+                />
+              ) : null}
+
+              <Toggle
+                bordered
+                checked={draft.showPoweredBy}
+                description="Show the Corso attribution below the conversation."
+                label='Show “Powered by Corso”'
+                onChange={(next) => update("showPoweredBy", next)}
+              />
+
+              <SegmentedChoice
+                label="Appearance"
+                onChange={(value) => update("appearanceMode", value)}
+                options={APPEARANCE_OPTIONS}
+                value={draft.appearanceMode}
+              />
+
               <Toggle
                 bordered
                 checked={draft.openByDefault}
@@ -1337,22 +1627,29 @@ export function WidgetPanel({ payload }: PanelProps) {
               />
 
               {draft.openByDefault ? (
-                <SelectField
-                  help="On a screen narrower than 768px the runtime uses a full-height sheet instead, whichever of these you choose. That is not a setting — it is how the widget stays usable on a phone."
-                  label="How it opens"
-                  onChange={(event) =>
-                    update("form", event.target.value === "expanded" ? "expanded" : "panel")
-                  }
-                  options={FORM_OPTIONS.filter(
-                    (option) => option.value !== "launcher",
-                  ).map((option) => ({ label: option.label, value: option.value }))}
-                  value={draft.form}
-                />
+                <p className={styles.meta}>
+                  It opens as a floating panel on desktop and automatically
+                  becomes a full-height sheet below 768px. Expanded desktop
+                  mode is not stored by the current delivery service, so it is
+                  not offered as a setting.
+                </p>
               ) : null}
             </section>
 
+            {/* -------------------------------------- hosted full-page link */}
+            <HostedPublicationControls
+              draftAnonymousAccess={draft.anonymousAccess}
+              draftEnabled={draft.enabled}
+              draftOrigins={draft.allowedOrigins}
+              hidden={!showDelivery}
+              onAddOrigin={addOrigin}
+              savedAnonymousAccess={server.baseline.anonymousAccess}
+              savedEnabled={server.baseline.enabled}
+              savedOrigins={server.baseline.allowedOrigins}
+            />
+
             {/* ----------------------------------------------- security */}
-            <section className={styles.card}>
+            <section className={styles.card} hidden={!showDelivery}>
               <header className={styles.cardHead}>
                 <h3>Domains allowed to use it</h3>
               </header>
@@ -1375,7 +1672,15 @@ export function WidgetPanel({ payload }: PanelProps) {
                 description={
                   draft.anonymousAccess
                     ? "Anyone on an allowed domain can ask, without signing in. Their questions are counted, but nothing is attributed to a person."
-                    : "Only a visitor your site has identified to the widget can ask. Everyone else sees the widget and gets no answer."
+                    : // The old copy promised a visitor-identification path
+                      // into the embed. There is none: the embed adapter sends
+                      // `identity: { tier: "anonymous" }` unconditionally
+                      // (app/widget.js/embed-prelude.ts) and `widget_ask` takes
+                      // no identity argument at all, so with this off the
+                      // answer is refused for everyone. Saying so is the only
+                      // honest description, because the widget still appears
+                      // and still opens.
+                      "Nobody can ask through the embedded widget. It still appears and still opens on your site, and every question is refused."
                 }
                 label="Let signed-out visitors ask"
                 onChange={(next) => update("anonymousAccess", next)}
@@ -1383,7 +1688,7 @@ export function WidgetPanel({ payload }: PanelProps) {
             </section>
 
             {/* ------------------------------------------------ install */}
-            <section className={styles.card}>
+            <section className={styles.card} hidden={!showDelivery}>
               <header className={styles.cardHead}>
                 <h3>Install</h3>
               </header>
@@ -1424,8 +1729,13 @@ export function WidgetPanel({ payload }: PanelProps) {
 
                   <p className={styles.hint}>
                     Whichever you use, the domain has to be in the list above
-                    first. Installing the snippet on a domain that is not listed
-                    produces a widget that loads and answers nothing.
+                    first, and “Let signed-out visitors ask” has to be on.
+                    Installing the snippet without either one produces a widget
+                    that loads and answers nothing.{" "}
+                    <a href="/install/circle">
+                      Step-by-step Circle instructions
+                    </a>
+                    .
                   </p>
                 </>
               )}

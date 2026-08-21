@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0013_auth_select_tenant_ambiguity_fix.
+-- The executable migration is maintained as 0013_auth_select_tenant_ambiguity_fix.sql.

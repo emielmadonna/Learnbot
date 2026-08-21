@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import AppShell from "../../components/app-shell/app-shell";
 import type {
@@ -17,6 +18,7 @@ import {
   parseTenantSections,
 } from "../../lib/supabase/platform-rpc";
 import { createServerSupabaseClient } from "../../lib/supabase/server";
+import { resolveAppAccessMode } from "./access-mode";
 
 const TENANT_ADMIN_ROLES = ["tenant_owner", "tenant_admin"];
 
@@ -72,24 +74,51 @@ async function resolveSections(
 
   try {
     const response = await supabase.rpc("tenant_get_sections");
-    if (response.error) return permitted;
-    const sections = parseTenantSections(
-      (response.data as { sections?: unknown } | null)?.sections,
-    );
-    if (sections.length === 0) return permitted;
-    for (const section of sections) {
-      if (!isPlatformSectionKey(section.sectionKey)) continue;
-      const key = section.sectionKey as PanelKey;
-      // A tenant may switch a section off, but never on past its role gate.
-      permitted[key] = permitted[key] && section.enabled;
+    if (!response.error) {
+      const sections = parseTenantSections(
+        (response.data as { sections?: unknown } | null)?.sections,
+      );
+      for (const section of sections) {
+        if (!isPlatformSectionKey(section.sectionKey)) continue;
+        const key = section.sectionKey as PanelKey;
+        // A tenant may switch a section off, but never on past its role gate.
+        permitted[key] = permitted[key] && section.enabled;
+      }
     }
-    return permitted;
   } catch {
-    return permitted;
+    // Fall through to the operator carve-out on the defaults above.
   }
+
+  // Operator entitlements, applied LAST so they hold on every path — including
+  // an RPC error or an empty catalogue, where the loop above never runs. These
+  // are account-level entitlements rather than client preferences, and a
+  // client's own section catalogue must not take either away from an
+  // authorized platform administrator who also holds a membership there:
+  //
+  //   platform — the operator control plane itself. Losing it strands the
+  //              operator inside the client workspace with no route back.
+  //   insights — analytics and the learner questions behind them. A client may
+  //              legitimately have results switched off in their own console,
+  //              but the operator still has to see what learners are asking in
+  //              order to support the account.
+  //
+  // This only ever widens what the OPERATOR sees. A client's own view is
+  // decided by `section.enabled` in the loop above, so switching results off
+  // for a tenant genuinely hides it from that tenant.
+  if (access.canManagePlatform) {
+    permitted.platform = true;
+    permitted.insights = true;
+  }
+
+  return permitted;
 }
 
 function toShellRole(identityRole: string, canManagePlatform: boolean): ShellRole {
+  // Platform authority takes precedence over any tenant membership. The same
+  // human may legitimately own a client workspace, but that must not collapse
+  // the platform dock into the client-only creator dock.
+  if (canManagePlatform) return "platform_owner";
+
   switch (identityRole) {
     case "tenant_owner":
       return "tenant_owner";
@@ -100,8 +129,7 @@ function toShellRole(identityRole: string, canManagePlatform: boolean): ShellRol
     case "creator":
       return "creator";
     default:
-      // A platform operator without a tenant-scoped role is a platform owner.
-      return canManagePlatform ? "platform_owner" : "learner";
+      return "learner";
   }
 }
 
@@ -127,8 +155,72 @@ export default async function AuthenticatedAppPage() {
     redirect("/auth/sign-in?error=authentication_required&next=/app");
   }
 
-  const context = await getCurrentTenantContext(supabase);
-  if (!context.selected || !context.tenantId) redirect("/onboarding");
+  // Neither read depends on the other, so they travel together. Awaited one
+  // after the other they were two separate round trips to Supabase on the
+  // critical path of every single workspace load.
+  const [platformAuthorization, context] = await Promise.all([
+    supabase.rpc("platform_admin_is_authorized"),
+    getCurrentTenantContext(supabase),
+  ]);
+  const canManagePlatform =
+    !platformAuthorization.error && platformAuthorization.data === true;
+  const accessMode = resolveAppAccessMode({
+    platformAuthorized: canManagePlatform,
+    selectedTenant: context.selected && context.tenantId !== null,
+  });
+
+  const accountName =
+    (typeof user.user_metadata?.full_name === "string"
+      ? user.user_metadata.full_name.trim().split(/\s+/u)[0]
+      : "") ||
+    user.email?.split("@")[0] ||
+    "there";
+
+  if (accessMode === "onboarding") redirect("/onboarding");
+  if (accessMode === "platform_control_plane") {
+    const payload: ShellPayload = {
+      role: "platform_owner",
+      tenant: {
+        tenantId: "",
+        slug: "",
+        displayName: "Corso",
+      },
+      agent: {
+        assistantName: "Platform",
+        logoUrl: null,
+        avatarUrl: null,
+        iconGlyph: "◎",
+        primaryColor: "#4a637f",
+        accentColor: "#4a637f",
+        surfaceColor: "#ffffff",
+        textColor: "#1d1d1f",
+        welcomeMessage: "Manage Corso client workspaces.",
+        personaInstructions: "",
+        tone: "",
+        voice: "Default",
+        courseScope: "all",
+      },
+      sections: {
+        agent: false,
+        course: false,
+        insights: false,
+        people: false,
+        platform: true,
+        widget: false,
+        settings: false,
+      },
+      workspace: null,
+    };
+    return (
+      <Suspense fallback={null}>
+        <AppShell
+          payload={payload}
+          accountName={accountName}
+          accountEmail={user.email ?? null}
+        />
+      </Suspense>
+    );
+  }
 
   let workspace;
   try {
@@ -137,15 +229,19 @@ export default async function AuthenticatedAppPage() {
     redirect("/onboarding?error=selection_failed");
   }
 
-  const platformAuthorization = await supabase.rpc(
-    "platform_admin_is_authorized",
-  );
-  const canManagePlatform =
-    !platformAuthorization.error && platformAuthorization.data === true;
-
   const identityRole = workspace.identity.role || context.identityRole || "";
   const canAdminister = TENANT_ADMIN_ROLES.includes(identityRole);
   const brand = workspace.branding;
+
+  // Two storage signatures and the section catalogue, none of which reads the
+  // others. These were three consecutive awaits — the brand pair awaited inline
+  // inside the object literal below, which is an easy place to miss that it
+  // serialises them.
+  const [logoUrl, avatarUrl, sections] = await Promise.all([
+    signedBrandAsset(supabase, brand?.logoStorageKey),
+    signedBrandAsset(supabase, brand?.avatarStorageKey),
+    resolveSections(supabase, { canAdminister, canManagePlatform }),
+  ]);
 
   // The workspace payload is the authoritative source for presentation: it is
   // the only branding a learner is allowed to see, and it always resolves. The
@@ -153,19 +249,19 @@ export default async function AuthenticatedAppPage() {
   // from non-admins. Both paths degrade to workspace values, so the shell
   // themes correctly whether or not the agent migration has been applied.
   const agent: AgentConfig = {
-    assistantName: brand?.assistantName ?? "LearningBot",
-    logoUrl: await signedBrandAsset(supabase, brand?.logoStorageKey),
-    avatarUrl: await signedBrandAsset(supabase, brand?.avatarStorageKey),
+    assistantName: brand?.assistantName ?? "Corso",
+    logoUrl,
+    avatarUrl,
     iconGlyph: brand?.iconGlyph ?? "◎",
     // Unbranded defaults are NEUTRAL graphite, drawn from the neutral ramp in
     // globals.css (--n-800 / --n-600 / --n-50 / --n-900). A tenant that has not
     // chosen colours should look like an unbranded product, not like somebody
     // else's: these used to be one client's green and gold, which is how that
     // palette ended up painting the whole console.
-    primaryColor: brand?.primaryColor ?? "#2c3230",
-    accentColor: brand?.accentColor ?? "#5f6764",
-    surfaceColor: brand?.surfaceColor ?? "#f7f8f8",
-    textColor: brand?.textColor ?? "#181d1b",
+    primaryColor: brand?.primaryColor ?? "#4a637f",
+    accentColor: brand?.accentColor ?? "#4a637f",
+    surfaceColor: brand?.surfaceColor ?? "#ffffff",
+    textColor: brand?.textColor ?? "#1d1d1f",
     welcomeMessage:
       brand?.welcomeMessage ??
       "Ask a question about your learning and I’ll help you find the answer.",
@@ -179,11 +275,6 @@ export default async function AuthenticatedAppPage() {
     courseScope: brand?.courseScope ?? "all",
   };
 
-  const sections = await resolveSections(supabase, {
-    canAdminister,
-    canManagePlatform,
-  });
-
   const payload: ShellPayload = {
     role: toShellRole(identityRole, canManagePlatform),
     tenant: {
@@ -196,18 +287,13 @@ export default async function AuthenticatedAppPage() {
     workspace,
   };
 
-  const accountName =
-    (typeof user.user_metadata?.full_name === "string"
-      ? user.user_metadata.full_name.trim().split(/\s+/u)[0]
-      : "") ||
-    user.email?.split("@")[0] ||
-    "there";
-
   return (
-    <AppShell
-      payload={payload}
-      accountName={accountName}
-      accountEmail={user.email ?? null}
-    />
+    <Suspense fallback={null}>
+      <AppShell
+        payload={payload}
+        accountName={accountName}
+        accountEmail={user.email ?? null}
+      />
+    </Suspense>
   );
 }

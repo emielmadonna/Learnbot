@@ -99,6 +99,14 @@ limiting were listed here until 2026-07-27. All three have shipped and moved up 
   `infra/supabase/SCHEMA-DRIFT.md` for the applied hashes and the before/after
   verification.
 
+- **Widget visual disclosure and answer feedback.** `20260731060000` and
+  `20260731061000` were applied to the live database by hand on 2026-07-31 and
+  recorded in the migration ledger in the same session. The widget-scoped visual
+  reader, signed-in and anonymous feedback writers, feedback summary, and lesson
+  reception readout are present. The final live ledger contains all 113 of 113
+  repository migration versions; exact applied hashes and verification are in
+  `infra/supabase/SCHEMA-DRIFT.md`.
+
 ### Absent — no code path at all
 
 - **Privacy, export, deletion, retention.** Zero tables, zero routes, despite
@@ -633,9 +641,16 @@ already exists and is imported by exactly one settings preview. *Small.*
 
 **Phase 7 — The assistant / embeddable widget.** Graphite, container-queried per §3.4,
 the answer typeset as a document rather than a bubble, text arriving token by token, the
-full motion sequence. Replace the 38-line `circle-learningbot.js` — which today only
-appends a link — with a real embeddable widget. *This is the product, and the largest UI
-phase. Depends on 1, 2, 3, 6.*
+full motion sequence. Replace the then-shipped `circle-learningbot.js` with a real
+embeddable widget. *This is the product, and the largest UI phase. Depends on 1, 2, 3, 6.*
+
+*(Landed — see the status table above. Delivery is the `/widget.js` route serving the
+host adapter plus the built `packages/widget-runtime` IIFE, mounted from `data-tenant`.
+The replaced artifact was not deleted at the time and sat orphaned under
+`apps/console/public/integrations/` — still publicly served, still documenting the
+superseded `data-widget-key` attribute — until 2026-07-31. The description of it in this
+line was also wrong by then: it had grown past "appends a link" into a 277-line adapter
+that mounted an equally stale bundled copy of the runtime. Both files are now removed.)*
 
 **Phase 8 — Signals readout.** Studio view over `question_labels` / `question_signals`:
 depth, theme, who is escalating, who is stuck, who is ready for the next course. The data

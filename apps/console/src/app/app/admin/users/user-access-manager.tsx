@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import styles from "./users.module.css";
 
 type Account = {
@@ -13,8 +13,19 @@ type Account = {
   passwordChangedAt: string | null;
 };
 
+type PendingInvitation = {
+  email: string;
+  displayName: string;
+  role: string;
+  status: "pending";
+  sentAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+};
+
 type AccessPayload = {
   accounts: Account[];
+  pendingInvitations: PendingInvitation[];
   usage: {
     activeLearners: number;
     last30Days: Record<string, number>;
@@ -29,39 +40,55 @@ function roleLabel(role: string) {
 
 export function UserAccessManager() {
   const [data, setData] = useState<AccessPayload | null>(null);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [role, setRole] = useState("student");
-  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(
-    null,
-  );
-  const [createdEmail, setCreatedEmail] = useState("");
+  const [invitedEmail, setInvitedEmail] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  async function load() {
-    const response = await fetch("/api/admin/users", {
-      cache: "no-store",
-      credentials: "same-origin",
-    });
-    const payload = (await response.json()) as Record<string, unknown>;
-    if (!response.ok || payload.ok !== true) {
-      throw new Error("access_load_failed");
+  const load = useCallback(async () => {
+    setLoadingAccounts(true);
+    try {
+      const response = await fetch("/api/admin/users", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const payload = (await response.json()) as Record<string, unknown>;
+      if (!response.ok || payload.ok !== true) {
+        throw new Error("access_load_failed");
+      }
+      const parsed = payload as unknown as AccessPayload;
+      setData({
+        ...parsed,
+        accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
+        pendingInvitations: Array.isArray(parsed.pendingInvitations)
+          ? parsed.pendingInvitations
+          : [],
+      });
+      setLoadError(null);
+      return true;
+    } catch {
+      setLoadError(
+        "People and usage could not be loaded. No sample data was shown.",
+      );
+      return false;
+    } finally {
+      setLoadingAccounts(false);
     }
-    setData(payload as unknown as AccessPayload);
-  }
+  }, []);
 
   useEffect(() => {
-    void load().catch(() =>
-      setError("People and usage could not be loaded. No sample data was shown."),
-    );
-  }, []);
+    void load();
+  }, [load]);
 
   async function createAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
-    setError(null);
-    setTemporaryPassword(null);
+    setActionError(null);
+    setInvitedEmail(null);
     try {
       const response = await fetch("/api/admin/users", {
         method: "POST",
@@ -73,25 +100,37 @@ export function UserAccessManager() {
       });
       const payload = (await response.json()) as Record<string, unknown>;
       if (!response.ok || payload.ok !== true) {
+        const providerMessage =
+          typeof payload.providerMessage === "string"
+            ? payload.providerMessage
+            : null;
         throw new Error(
           payload.code === "account_exists"
             ? "An account already exists for that email."
-            : "The account could not be created.",
+            : payload.code === "owner_identity_conflict"
+              ? "The workspace owner must use a different identity from the platform administrator."
+              : providerMessage ??
+                "The invitation could not be sent. The provider did not confirm delivery.",
         );
       }
-      const password =
-        typeof payload.temporaryPassword === "string"
-          ? payload.temporaryPassword
-          : "";
-      if (!password) throw new Error("The temporary password was not returned.");
-      setCreatedEmail(email);
-      setTemporaryPassword(password);
+      const invitation =
+        payload.invitation &&
+        typeof payload.invitation === "object" &&
+        !Array.isArray(payload.invitation)
+          ? (payload.invitation as Record<string, unknown>)
+          : null;
+      if (invitation?.status !== "sent") {
+        throw new Error(
+          "The invitation provider did not confirm that the email was sent.",
+        );
+      }
+      setInvitedEmail(email);
       setEmail("");
       setDisplayName("");
       setRole("student");
       await load();
     } catch (caught) {
-      setError(
+      setActionError(
         caught instanceof Error
           ? caught.message
           : "The account could not be created.",
@@ -105,24 +144,32 @@ export function UserAccessManager() {
     (total, value) => total + Number(value || 0),
     0,
   );
+  const pendingMetric = loadingAccounts ? "…" : "Not known";
+  const activeCount = data?.accounts.length ?? 0;
+  const invitationCount = data?.pendingInvitations.length ?? 0;
+  const peopleCount = activeCount + invitationCount;
 
   return (
     <div className={styles.canvas}>
       <section className={styles.metrics} aria-label="Learning activity">
         <div>
           <span>Active learners</span>
-          <strong>{data?.usage.activeLearners ?? "—"}</strong>
+          <strong>{data?.usage.activeLearners ?? pendingMetric}</strong>
           <small>Last 30 days</small>
         </div>
         <div>
           <span>Meaningful events</span>
-          <strong>{data ? eventTotal : "—"}</strong>
+          <strong>{data ? eventTotal : pendingMetric}</strong>
           <small>Learning, voice and progress</small>
         </div>
         <div>
-          <span>Managed accounts</span>
-          <strong>{data?.accounts.length ?? "—"}</strong>
-          <small>Inside this workspace</small>
+          <span>People with access</span>
+          <strong>{data ? activeCount : pendingMetric}</strong>
+          <small>
+            {data
+              ? `${invitationCount} invitation${invitationCount === 1 ? "" : "s"} pending`
+              : "Inside this workspace"}
+          </small>
         </div>
       </section>
 
@@ -130,38 +177,77 @@ export function UserAccessManager() {
         <div className={styles.cardTitle}>
           <div>
             <p className={styles.eyebrow}>Workspace people</p>
-            <h2>Everyone with access</h2>
+            <h2>Everyone active or invited</h2>
             <p className={styles.help}>
               Passwords, prompt text, email content, and raw audio are never
               included in the activity totals.
             </p>
           </div>
-          <span className={styles.count}>{data?.accounts.length ?? 0}</span>
+          <span className={styles.count}>
+            {data ? peopleCount : loadingAccounts ? "…" : "—"}
+          </span>
         </div>
+        {loadError !== null && data !== null ? (
+          <p className={styles.reloadWarning} role="status">
+            {loadError} The last verified list remains visible.
+            <button type="button" onClick={() => void load()}>
+              Try again
+            </button>
+          </p>
+        ) : null}
         <div className={styles.people}>
-          {data?.accounts.length ? (
-            data.accounts.map((account) => (
-              <article key={account.authUserId}>
-                <div className={styles.personMark}>
-                  {account.email.slice(0, 2).toUpperCase()}
-                </div>
-                <div>
-                  <b>{account.email}</b>
-                  <span>{roleLabel(account.role)}</span>
-                </div>
-                <small data-pending={account.mustChangePassword}>
-                  {account.mustChangePassword
-                    ? "First sign-in pending"
-                    : "Active"}
-                </small>
-              </article>
-            ))
+          {loadError !== null && data === null ? (
+            <div className={styles.errorState} role="alert">
+              <span aria-hidden="true">!</span>
+              <div>
+                <b>People could not be loaded</b>
+                <p>{loadError}</p>
+              </div>
+              <button type="button" onClick={() => void load()}>
+                Try again
+              </button>
+            </div>
+          ) : data && peopleCount > 0 ? (
+            <>
+              {data.accounts.map((account) => (
+                <article key={account.authUserId}>
+                  <div className={styles.personMark}>
+                    {account.email.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <b>{account.email}</b>
+                    <span>{roleLabel(account.role)}</span>
+                  </div>
+                  <small data-pending={account.mustChangePassword}>
+                    {account.mustChangePassword
+                      ? "Password setup required"
+                      : "Active"}
+                  </small>
+                </article>
+              ))}
+              {data.pendingInvitations.map((invitation) => (
+                <article key={`pending:${invitation.email}`}>
+                  <div className={styles.pendingMark}>
+                    {(invitation.displayName || invitation.email)
+                      .slice(0, 2)
+                      .toUpperCase()}
+                  </div>
+                  <div>
+                    <b>{invitation.email}</b>
+                    <span>
+                      {invitation.displayName} · {roleLabel(invitation.role)}
+                    </span>
+                  </div>
+                  <small data-pending="true">Invitation pending</small>
+                </article>
+              ))}
+            </>
           ) : (
             <div className={styles.emptyState}>
               <span aria-hidden="true">◎</span>
               <p>
                 {data
-                  ? "No managed accounts yet. Add the first person when you’re ready."
+                  ? "No active people or pending invitations yet. Add the first person when you’re ready."
                   : "Loading secure accounts…"}
               </p>
             </div>
@@ -173,7 +259,7 @@ export function UserAccessManager() {
         <summary>
           <span>
             <b>Add a person</b>
-            <small>Generate a one-time, controlled sign-in</small>
+            <small>Send a secure invitation email</small>
           </span>
           <span className={styles.summaryAction}>Open</span>
         </summary>
@@ -182,8 +268,8 @@ export function UserAccessManager() {
             <p className={styles.eyebrow}>Controlled access</p>
             <h2>Invite someone securely.</h2>
             <p className={styles.help}>
-              We generate one strong temporary password. The person must
-              replace it before entering the workspace.
+              Supabase sends a time-limited invitation. The person chooses
+              their own password before entering the workspace.
             </p>
           </div>
           <form className={styles.form} onSubmit={createAccount}>
@@ -224,33 +310,25 @@ export function UserAccessManager() {
               </select>
             </label>
             <button type="submit" disabled={pending}>
-              {pending ? "Creating secure access…" : "Create secure access"}
+              {pending ? "Sending invitation…" : "Send invitation"}
             </button>
           </form>
         </div>
-        {temporaryPassword ? (
+        {invitedEmail ? (
           <div className={styles.credential} role="status">
             <div>
-              <b>Copy this now</b>
-              <span>This password is shown once and cannot be recovered.</span>
+              <b>Invitation sent</b>
+              <span>
+                Supabase accepted the delivery request. The invitation remains
+                pending until the person chooses a password.
+              </span>
             </div>
-            <span>{createdEmail}</span>
-            <code>{temporaryPassword}</code>
-            <button
-              type="button"
-              onClick={() =>
-                void navigator.clipboard.writeText(
-                  `${createdEmail}\n${temporaryPassword}`,
-                )
-              }
-            >
-              Copy sign-in details
-            </button>
+            <span>{invitedEmail}</span>
           </div>
         ) : null}
-        {error ? (
+        {actionError ? (
           <p className={styles.error} role="alert">
-            {error}
+            {actionError}
           </p>
         ) : null}
       </details>

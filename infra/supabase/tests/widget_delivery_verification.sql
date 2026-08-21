@@ -829,7 +829,10 @@ declare
 begin
   foreach signature in array array[
     'public.widget_bootstrap(text,text)',
-    'public.widget_ask(text,text,text,text,text,text,text,text)',
+    -- Ten arguments since 20260731090000, which dropped the eight-argument
+    -- form rather than overloading it: PostgREST calls this by name, and two
+    -- candidates would have made every widget question ambiguous.
+    'public.widget_ask(text,text,text,text,text,text,text,text,text,text)',
     'public.widget_record_answer(text,text,text,text,jsonb,text,text,text,' ||
       'text,text)'
   ]

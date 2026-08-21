@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0010_onboarding_control_plane.
+-- The executable migration is maintained as 0010_onboarding_control_plane.sql.

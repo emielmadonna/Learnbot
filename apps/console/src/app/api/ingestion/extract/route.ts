@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { extractPlainText, type PlainTextMediaType } from "../../../../lib/ingestion/extract";
+import {
+  DocumentExtractionError,
+  extractUploadedDocument,
+  type SupportedDocumentMediaType,
+} from "../../../../lib/ingestion/extract";
 import {
   authenticatedLearningClient,
   executeLearningRpc,
@@ -7,15 +11,20 @@ import {
 import { LearningRpcError } from "../../../../lib/supabase/learning-rpc";
 import { ingestionErrorResponse, isRecord, uuid } from "../shared";
 
-const SUPPORTED_MEDIA_TYPES = new Set(["text/plain", "text/markdown"]);
+const SUPPORTED_MEDIA_TYPES = new Set<SupportedDocumentMediaType>([
+  "text/plain",
+  "text/markdown",
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
 
 /**
  * Stage 2 (Extract), docs/PLAN.md Section 4. Downloads the quarantined
  * object with the caller's own authenticated storage session (same RLS the
- * upload itself went through — no service-role bypass), runs the plain-text
- * extractor, and persists the result. The database RPC underneath refuses
- * this unless the malware-scan checkpoint has already succeeded; this
- * repository ships no scanner, so that stays closed until one exists.
+ * upload itself went through — no service-role bypass), runs the
+ * format-specific extractor, and persists the result. Text and Markdown may
+ * use the recorded inert-file clearance; PDF and DOCX require the configured
+ * malware scanner because they invoke complex parsers.
  */
 export async function POST(request: Request) {
   try {
@@ -32,7 +41,7 @@ export async function POST(request: Request) {
     if (typeof objectKey !== "string" || typeof mediaType !== "string") {
       throw new LearningRpcError("object_not_found");
     }
-    if (!SUPPORTED_MEDIA_TYPES.has(mediaType)) {
+    if (!SUPPORTED_MEDIA_TYPES.has(mediaType as SupportedDocumentMediaType)) {
       throw new LearningRpcError("unsupported_media_type");
     }
     if (detail.malwareScanStatus !== "succeeded") {
@@ -45,7 +54,10 @@ export async function POST(request: Request) {
     }
     const bytes = new Uint8Array(await download.data.arrayBuffer());
 
-    const extraction = extractPlainText(bytes, mediaType as PlainTextMediaType);
+    const extraction = await extractUploadedDocument(
+      bytes,
+      mediaType as SupportedDocumentMediaType,
+    );
 
     const result = await executeLearningRpc(supabase, "learning_ingestion_record_extraction", {
       target_job_id: jobId,
@@ -59,6 +71,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
+    if (error instanceof DocumentExtractionError) {
+      return ingestionErrorResponse(
+        new LearningRpcError(error.code),
+        "api/ingestion/extract",
+      );
+    }
     return ingestionErrorResponse(error, "api/ingestion/extract");
   }
 }

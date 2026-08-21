@@ -1,0 +1,2 @@
+-- Legacy Supabase CLI history marker for 0027_managed_access_and_usage_events.
+-- The executable migration is maintained as 0027_managed_access_and_usage_events.sql.

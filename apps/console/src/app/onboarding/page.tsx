@@ -7,6 +7,7 @@ import {
 } from "../../lib/supabase/auth-boundary";
 import { getOnboardingSnapshot } from "../../lib/supabase/onboarding-rpc";
 import { createServerSupabaseClient } from "../../lib/supabase/server";
+import { CorsoMark } from "../../components/corso/corso-mark";
 import styles from "../auth/auth.module.css";
 import { DurableWorkspace } from "./durable-workspace";
 
@@ -16,13 +17,13 @@ const statusMessages: Record<string, string> = {
   workspace_restored:
     "Welcome back. We found your existing workspace and opened it safely.",
   workspace_claimed:
-    "Estie’s prepared workspace is now connected to your account.",
+    "The prepared workspace is now connected to your account.",
   tenant_selected: "Your learning workspace is now active.",
   session_refreshed: "Your secure session is up to date.",
   profile_updated: "Company, identity mode, and brand settings were saved.",
   step_updated: "The durable readiness step was updated.",
   invitation_created:
-    "The invitation was created. Share its opaque ID through an approved channel.",
+    "The invitation is ready. Copy its private code and send it through an approved channel.",
   invitation_revoked: "The pending invitation was revoked.",
   invitation_accepted:
     "Invitation accepted. Your tenant membership and session are now active.",
@@ -63,8 +64,9 @@ const errorMessages: Record<string, string> = {
 
 function ConfigurationFailure() {
   return (
-    <main className={styles.shell}>
-      <section className={styles.card}>
+    <main className={styles.onboardingShell}>
+      <section className={styles.onboardingFailure}>
+        <CorsoMark size={38} />
         <p className={styles.eyebrow}>Configuration required</p>
         <h1 className={styles.title}>Authentication is unavailable.</h1>
         <p className={styles.error} role="alert">
@@ -108,8 +110,9 @@ export default async function OnboardingPage({
     ]);
   } catch {
     return (
-      <main className={styles.shell}>
-        <section className={styles.card}>
+      <main className={styles.onboardingShell}>
+        <section className={styles.onboardingFailure}>
+          <CorsoMark size={38} />
           <p className={styles.eyebrow}>Workspace unavailable</p>
           <h1 className={styles.title}>We could not verify your workspace.</h1>
           <p className={styles.error} role="alert">
@@ -142,43 +145,40 @@ export default async function OnboardingPage({
   }
 
   return (
-    <main className={styles.shell}>
-      <div className={styles.frame}>
-        <nav className={styles.floatingNav} aria-label="Workspace setup">
-          <Link className={styles.brand} href="/">
-            <span className={styles.brandMark}>E</span>
-            <span>
-              <b>Estie</b>
-              <small>Native learning</small>
-            </span>
+    <main className={styles.onboardingShell}>
+      <div className={styles.onboardingFrame}>
+        <nav className={styles.onboardingNav} aria-label="Workspace setup">
+          <Link className={styles.onboardingBrand} href="/">
+            <CorsoMark size={31} />
+            <span>Corso</span>
           </Link>
-          <span className={styles.secureLabel}>Private workspace setup</span>
+          <span className={styles.onboardingSecure}>Private workspace setup</span>
         </nav>
-        <section className={styles.wideCard}>
-          <div className={styles.progress} aria-label="First sign-in progress">
+        <section className={styles.onboardingCard}>
+          <div className={styles.onboardingProgress} aria-label="First sign-in progress">
             <span data-complete="true">
               <b>✓</b> Sign in
             </span>
             <i data-complete="true" />
             <span data-complete="true">
-              <b>✓</b> Secure
+              <b>✓</b> Verify
             </span>
             <i data-complete="true" />
             <span data-active="true">
-              <b>3</b> Enter
+              <b>3</b> Workspace
             </span>
           </div>
           <p className={styles.eyebrow}>Workspace setup</p>
           <h1 className={styles.title}>
             {memberships.length === 0
-              ? "Let’s connect your learning workspace."
+              ? "Your workspace is ready."
               : context.selected
-                ? "Make the workspace ready for your team."
-                : "Choose where you want to learn."}
+                ? "Make it ready for your team."
+                : "Choose your workspace."}
           </h1>
           <p className={styles.lede}>
-            Signed in as {user.email ?? "a verified user"}. Choose the path
-            that matches how you joined.
+            Signed in as {user.email ?? "a verified user"}. Choose how this
+            account should enter Corso.
           </p>
           {statusMessages[status] ? (
             <p className={styles.notice} role="status">
@@ -201,10 +201,10 @@ export default async function OnboardingPage({
             <section className={styles.primaryAcceptancePanel}>
               <div>
                 <p className={styles.optionLabel}>Workspace owner</p>
-                <strong>Estie’s learning library is already prepared.</strong>
+                <strong>Claim a workspace that has been prepared for you.</strong>
                 <span>
                   Enter the one-time owner code from your private handoff to
-                  connect the courses and learning assistant to this account.
+                  connect its course and assistant to this account.
                 </span>
               </div>
               <form action="/auth/claim-tenant" method="post">
@@ -216,7 +216,7 @@ export default async function OnboardingPage({
                     required
                     minLength={2}
                     maxLength={63}
-                    defaultValue="estie-starr"
+                    placeholder="workspace-name"
                   />
                 </label>
                 <label className={styles.field}>
@@ -233,14 +233,14 @@ export default async function OnboardingPage({
                   />
                 </label>
                 <button className={styles.button} type="submit">
-                  Open Estie’s workspace
+                  Claim workspace
                 </button>
               </form>
             </section>
             <section className={styles.acceptancePanel}>
               <div>
                 <p className={styles.optionLabel}>Invited teammate</p>
-                <strong>Joining a client workspace?</strong>
+                <strong>Have a private invitation?</strong>
                 <span>
                   Sign in with the email that received the invitation, then
                   paste the private invitation code.
@@ -263,7 +263,7 @@ export default async function OnboardingPage({
               </form>
             </section>
             <div className={styles.divider}>
-              <span>or start a new company workspace</span>
+              <span>or create a new workspace</span>
             </div>
             <form className={styles.form} action="/auth/bootstrap" method="post">
               <div className={styles.grid}>
@@ -296,7 +296,7 @@ export default async function OnboardingPage({
                   <input
                     className={styles.input}
                     name="assistantName"
-                    defaultValue="Estie"
+                    defaultValue="Course Guide"
                     required
                     maxLength={80}
                   />
@@ -318,7 +318,7 @@ export default async function OnboardingPage({
                     className={styles.input}
                     name="primaryColor"
                     type="color"
-                    defaultValue="#635bff"
+                    defaultValue="#4a637f"
                     required
                   />
                 </label>
@@ -328,7 +328,7 @@ export default async function OnboardingPage({
                     className={styles.input}
                     name="accentColor"
                     type="color"
-                    defaultValue="#00a88f"
+                    defaultValue="#7d97b5"
                     required
                   />
                 </label>
@@ -372,8 +372,8 @@ export default async function OnboardingPage({
               {context.claimsRefreshRequired ? (
                 <form action="/auth/refresh" method="post">
                   <p className={styles.notice}>
-                    The durable tenant is selected, but this browser session has
-                    stale display claims.
+                    This workspace is selected, but the browser session needs
+                    to refresh before it can open.
                   </p>
                   <button className={styles.button} type="submit">
                     Refresh secure session
