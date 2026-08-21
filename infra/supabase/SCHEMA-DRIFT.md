@@ -919,3 +919,36 @@ is the last thing standing in front of the service-role key. Until it ships,
 anything holding a valid tenant JWT could call the function directly and set a
 credential the platform owner never granted. Deploy it in the same session as
 the migration.
+
+### `20260821223000_widget_conversation_history` -- unapplied, 2026-08-21
+
+`public.widget_conversation_history(text, text, text, integer, text)` is a new
+`SECURITY DEFINER` read that returns the prior turns of one widget
+conversation, oldest first, capped at 16 and defaulting to the 8 the provider
+window actually uses. It re-checks the `(key, origin)` pair through
+`app_private.widget_resolve` exactly as `widget_ask` and
+`widget_record_answer` do, gates on the existing
+`conversation.answer.record` capability -- deliberately, because
+`app_private.learning_operation_secrets` constrains `capability` with a
+one-value `check` (0021) -- and is granted to `anon` only.
+
+**Why it exists.** `api/widget/ask/route.ts` passed `history: []` to the
+provider, hardcoded, while the authenticated console path passes the real
+transcript. The hosted assistant and the embedded widget were therefore not
+conversational at all: every turn arrived as an isolated query, so a visitor
+who asked a full question and then typed a follow-up was told the answer was
+not in the published learning.
+
+**Not applying it is safe, and the code already assumes it is unapplied.**
+`widgetConversationHistory` in `lib/supabase/widget-rpc.ts` returns an empty
+list on *any* error, including PostgREST failing to match a function that does
+not exist. In that state the widget behaves exactly as it does today. History
+only conditions the model; grounding still comes exclusively from the sources
+`widget_ask` returned, so a miss costs continuity and nothing else.
+
+### Rollback
+
+`drop function public.widget_conversation_history(text, text, text, integer, text);`
+
+Nothing else is created, altered or dropped by the file. It reads
+`public.conversations` and `public.messages` and writes neither.

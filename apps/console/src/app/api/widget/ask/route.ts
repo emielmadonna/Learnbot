@@ -23,6 +23,7 @@ import {
   isVisitorRef,
   isWidgetKey,
   widgetAsk,
+  widgetConversationHistory,
   type WidgetAskMatch,
   WidgetRpcError,
   widgetRecordAnswer,
@@ -365,6 +366,7 @@ function buildStreamingWidgetResponse(params: {
   assistantName: string;
   directive: unknown;
   retrievalMode: string;
+  history: readonly { actorType: string; body: string }[];
   sources: readonly GroundingSource[];
   evidence: readonly Record<string, unknown>[];
   visuals: readonly CitedVisual[];
@@ -471,7 +473,7 @@ function buildStreamingWidgetResponse(params: {
               scopeLabel: null,
               personaInstructions: streamDirective.personaInstructions,
               tone: streamDirective.tone,
-              history: [],
+              history: params.history,
               sources: params.sources,
               model: streamDirective.model,
             }),
@@ -712,6 +714,28 @@ export async function POST(request: Request) {
      * key, so a first call that somehow did land is deduplicated rather than
      * doubled.
      */
+    /*
+     * Fetched BEFORE `widgetAsk`, not after, and that ordering is the whole
+     * trick. `widget_ask` durably records the visitor's question as part of
+     * the same call that retrieves for it, so reading history afterwards
+     * would hand the provider the current question twice - once as the last
+     * "turn" and once as the question itself. The console path solves the
+     * same problem by popping the duplicate
+     * (`api/learning/respond/route.ts`); reading first is cheaper and has no
+     * edge case when a visitor asks the identical question twice.
+     *
+     * This is what makes the hosted assistant conversational. It used to pass
+     * `history: []`, hardcoded, so every turn arrived as a cold query and a
+     * follow-up like "what about the banner?" retrieved against those words
+     * alone.
+     */
+    const history = await widgetConversationHistory(supabase, {
+      widgetKey: key,
+      origin,
+      conversationRef,
+      operationToken,
+    });
+
     const asked = await (async () => {
       if (visitorRef === null) return widgetAsk(supabase, askInput);
       try {
@@ -831,6 +855,7 @@ export async function POST(request: Request) {
         assistantName: asked.assistantName,
         directive: asked.directive,
         retrievalMode: asked.retrievalMode,
+        history,
         sources,
         evidence,
         visuals,
@@ -851,7 +876,7 @@ export async function POST(request: Request) {
       scopeLabel: null,
       personaInstructions: asked.directive?.personaInstructions ?? null,
       tone: asked.directive?.tone ?? null,
-      history: [],
+      history,
       sources,
       completion: (context, providerRequest) =>
         completeWithManagedWidgetProvider({

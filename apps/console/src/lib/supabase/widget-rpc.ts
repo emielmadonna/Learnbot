@@ -656,3 +656,60 @@ export async function widgetRecordVisualDisclosure(
   if (response.error) throw new WidgetRpcError("request_failed");
   requireWidgetRpcSuccess(response.data);
 }
+
+export type WidgetConversationTurn = {
+  actorType: string;
+  body: string;
+};
+
+/**
+ * The prior turns of one widget conversation, oldest first.
+ *
+ * Deliberately best-effort. Migrations on this project are applied by hand, so
+ * a deployment can be running this code against a database that has not been
+ * given `20260821223000_widget_conversation_history` yet; in that state
+ * PostgREST cannot match the call and reports an error. History only
+ * *conditions* the model - grounding still comes exclusively from the sources
+ * `widget_ask` returned - so a miss costs continuity and nothing else. It must
+ * never turn a working question into a failed one, which is why every failure
+ * path here returns an empty list rather than throwing.
+ */
+export async function widgetConversationHistory(
+  supabase: SupabaseClient,
+  input: {
+    widgetKey: string;
+    origin: string;
+    conversationRef: string;
+    turnLimit?: number;
+    operationToken: string | null;
+  },
+): Promise<readonly WidgetConversationTurn[]> {
+  const response = await supabase.rpc("widget_conversation_history", {
+    widget_key: input.widgetKey,
+    origin: input.origin,
+    conversation_ref: input.conversationRef,
+    turn_limit: input.turnLimit ?? 8,
+    operation_token: input.operationToken,
+  });
+  if (response.error) return [];
+  const data: unknown = response.data;
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    (data as { ok?: unknown }).ok !== true
+  ) {
+    return [];
+  }
+  const turns = (data as { turns?: unknown }).turns;
+  if (!Array.isArray(turns)) return [];
+  const parsed: WidgetConversationTurn[] = [];
+  for (const turn of turns) {
+    if (typeof turn !== "object" || turn === null) continue;
+    const actorType = (turn as { actorType?: unknown }).actorType;
+    const body = (turn as { body?: unknown }).body;
+    if (typeof actorType !== "string" || typeof body !== "string") continue;
+    if (!body.trim()) continue;
+    parsed.push({ actorType, body });
+  }
+  return parsed;
+}
