@@ -920,7 +920,7 @@ anything holding a valid tenant JWT could call the function directly and set a
 credential the platform owner never granted. Deploy it in the same session as
 the migration.
 
-### `20260821223000_widget_conversation_history` -- unapplied, 2026-08-21
+### `20260821223000_widget_conversation_history` -- APPLIED 2026-08-21
 
 `public.widget_conversation_history(text, text, text, integer, text)` is a new
 `SECURITY DEFINER` read that returns the prior turns of one widget
@@ -952,3 +952,19 @@ only conditions the model; grounding still comes exclusively from the sources
 
 Nothing else is created, altered or dropped by the file. It reads
 `public.conversations` and `public.messages` and writes neither.
+
+**Applied 2026-08-21** through the Supabase SQL editor against
+`fwilehggxqkpeuojxqzk`, pasted via the base64 route so the editor could not
+mangle it; the editor reported `Success. No rows returned`. The editor's
+"Potential issue detected / creates tables without enabling Row Level
+Security" prompt is a false positive on this file - it contains no
+`create table`, only `create or replace function` - so it was run with
+**Run without RLS**. Taking the other branch would have let the editor append
+`alter table` statements against tables it had wrongly inferred.
+
+Verified end to end on `https://clone.stack-labs.ai/c/estie-starr`: asking
+"What is the LinkedIn 15?" and then "Which phase should I do first?" - a
+follow-up naming no course at all - returned an answer that opens "For the
+LinkedIn 15, the published excerpt refers to Phase 1 and Phase 2 topics". The
+topic carried across turns, which is only possible with the history this
+function returns.
