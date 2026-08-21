@@ -848,7 +848,14 @@ export default function ConversationClient({
         const payload = await readJson(response);
         if (!active || !isRecord(payload)) return;
         const branding = isRecord(payload.branding) ? payload.branding : null;
-        setBrandAccent(hexColor(branding?.accentColor));
+        // `primaryColor`, not `accentColor`. Settings labels the swatch the
+        // creator actually picks "Accent colour" but stores it in
+        // `primaryColor` (settings-panel.tsx:423), and the hosted page and
+        // widget both brand from `primaryColor`
+        // (hosted-assistant.tsx:398). Reading `accentColor` here meant this
+        // surface rendered a field nobody had ever set - Estie picked
+        // #7B3FA0 and the chat painted itself #D814FF.
+        setBrandAccent(hexColor(branding?.primaryColor));
         setBrandGlyph(stringValue(branding?.iconGlyph) ?? "");
       } catch {
         // Branding is cosmetic. A network failure must never block the chat.
@@ -2148,7 +2155,17 @@ export default function ConversationClient({
     setVoiceAnswer("");
     setConversationId(null);
     setMessages([]);
-    setLoadingHistory(true);
+    // NOT `true`. The history effect only re-runs on
+    // [selectedCourseId, selectedLessonId], and this function changes
+    // neither - `conversationStartKeyRef` is a ref, so mutating it triggers
+    // nothing. Setting `loadingHistory` true here left it true forever: the
+    // feed stayed on the loading state and the composer and send button,
+    // which are `disabled={... || loadingHistory}`, never came back. The
+    // "Start over" button therefore killed the chat until a page reload.
+    // A brand-new thread has no history to fetch, so the honest value is
+    // false. This never showed up when reset fired as a side effect of a
+    // course or lesson change, because that path does move the deps.
+    setLoadingHistory(false);
     setError(null);
     retryTurnRef.current = null;
     conversationStartKeyRef.current = `conversation:${crypto.randomUUID()}`;

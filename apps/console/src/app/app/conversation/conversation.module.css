@@ -464,7 +464,15 @@
   flex: 1 1 auto;
 }
 
-.messageAvatar {
+/* Doubled class on purpose. `AvatarCharacter`'s own `.root` sets
+   `width: 100%; height: 100%` so it can fill a sized parent (avatar-studio
+   relies on that). Both selectors are a single class, so the winner was
+   decided by stylesheet injection order — and in the production bundle
+   `.root` won, which made the avatar span the whole message row, collapsed
+   the sibling `.answerLayout` to 0px, and left the answer text overflowing as
+   a two-word-wide sliver. Raising specificity here fixes it without changing
+   the shared component. */
+.messageAvatar.messageAvatar {
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
