@@ -30,9 +30,16 @@ async function readBody(response: Response) {
 export function PlatformClientPreviewBanner({
   tenant,
   role,
+  onOpenPortfolio,
 }: {
   tenant: ShellPayload["tenant"];
   role: ShellPayload["role"];
+  /**
+   * Opens the client portfolio WITHOUT leaving the workspace. Omitted while
+   * the portfolio is already on screen. "Return to platform" below is the
+   * exit; without this, the only way back to the other clients was to leave.
+   */
+  onOpenPortfolio?: (() => void) | undefined;
 }) {
   const [session, setSession] = useState<PreviewSession | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -134,14 +141,21 @@ export function PlatformClientPreviewBanner({
           </span>
         ) : null}
       </span>
-      <Button
-        loading={leaving}
-        loadingLabel="Returning…"
-        onClick={exitPreview}
-        variant="secondary"
-      >
-        Return to platform
-      </Button>
+      <span className={styles.clientPreviewActions}>
+        {onOpenPortfolio ? (
+          <Button onClick={onOpenPortfolio} variant="ghost">
+            Client portfolio
+          </Button>
+        ) : null}
+        <Button
+          loading={leaving}
+          loadingLabel="Returning…"
+          onClick={exitPreview}
+          variant="secondary"
+        >
+          Return to platform
+        </Button>
+      </span>
     </aside>
   );
 }

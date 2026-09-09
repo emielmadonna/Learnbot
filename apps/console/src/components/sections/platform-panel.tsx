@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { createBrowserSupabaseClient } from "../../lib/supabase/client";
 import {
   PlatformRpcError,
@@ -607,7 +606,6 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
   const [typedName, setTypedName] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
   const [workspaceQuery, setWorkspaceQuery] = useState("");
   const [workspaceFilter, setWorkspaceFilter] = useState<
     "all" | "attention" | "paused"
@@ -653,10 +651,6 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [portalBusy, setPortalBusy] = useState(false);
   const [clearingOverride, setClearingOverride] = useState<string | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (
@@ -1168,6 +1162,7 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
           : "There was no client workspace to leave.",
       );
       await refresh();
+      if (refreshed) window.location.assign("/app?panel=platform");
     } catch (error) {
       setActionError(describe(error));
     } finally {
@@ -1550,48 +1545,6 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
    * on this bar would be exactly the wrong signal.
    */
 
-  const bar =
-    session === null || !mounted
-      ? null
-      : createPortal(
-          <div className={styles.bar} role="status">
-            <span className={styles.barCopy}>
-              <span aria-hidden="true" className={styles.barDot} />
-              <span>
-                <span className={styles.barLabel}>
-                  Inside a client workspace{" "}
-                </span>
-                <span className={styles.barName}>{session.displayName}</span>
-                <span> · every action here is audited against this client.</span>
-              </span>
-            </span>
-            <span className={styles.barActions}>
-              {claimsStale ? (
-                <form
-                  action="/auth/refresh"
-                  className={styles.barForm}
-                  method="post"
-                >
-                  <button
-                    className={cx(styles.barButton, styles.barButtonQuiet)}
-                    type="submit"
-                  >
-                    Refresh secure session
-                  </button>
-                </form>
-              ) : null}
-              <button
-                className={styles.barButton}
-                disabled={busy?.kind === "exit"}
-                onClick={() => void exitClient()}
-                type="button"
-              >
-                {busy?.kind === "exit" ? "Leaving…" : "Exit client workspace"}
-              </button>
-            </span>
-          </div>,
-          document.body,
-        );
 
   /* --- confirmations ------------------------------------------------- */
 
@@ -3051,39 +3004,19 @@ export function PlatformPanel({ payload, refresh }: PanelProps) {
 
   return (
     <div className={styles.root} data-view={panelView}>
-      {bar}
-
-      {session !== null && panelView !== "add-client" ? (
-        <div className={styles.inside}>
-          <span className={styles.insideCopy}>
-            <span className={styles.insideLabel}>
-              Operating inside a client workspace
-            </span>
-            <span className={styles.insideName}>{session.displayName}</span>
-            <span className={styles.insideMeta}>
-              {session.slug}
-              {formatWhen(session.enteredAt) === null
-                ? ""
-                : ` · entered ${formatWhen(session.enteredAt) ?? ""}`}
-              . This is an audited platform session.
-            </span>
-          </span>
-          <Button
-            loading={busy?.kind === "exit"}
-            loadingLabel="Leaving…"
-            onClick={() => void exitClient()}
-            variant="primary"
-          >
-            Exit client workspace
-          </Button>
-        </div>
-      ) : null}
 
       {notice === null ? null : (
         <p className={styles.notice} role="status">
           {notice}
         </p>
       )}
+      {claimsStale ? (
+        <form action="/auth/refresh" className={styles.claimsForm} method="post">
+          <Button type="submit" variant="primary">
+            Refresh secure session
+          </Button>
+        </form>
+      ) : null}
       {actionError === null ? null : (
         <p className={styles.failure} role="alert">
           {actionError}

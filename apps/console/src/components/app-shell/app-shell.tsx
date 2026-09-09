@@ -225,6 +225,31 @@ export function AppShell({ payload, accountName, accountEmail }: AppShellProps) 
     [openPanel],
   );
 
+  // The header and the client-preview banner stack into one sticky block.
+  // Its height is not constant — the banner appears only inside a client
+  // workspace and wraps on narrow screens — so the panel layer and the canvas
+  // read it from `--shell-chrome` instead of assuming the bare 52px header.
+  // Before this, the banner painted over the top of every open panel and the
+  // panel's first rows sat underneath it, unreachable and unscrollable.
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const chromeRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const shell = shellRef.current;
+    const chrome = chromeRef.current;
+    if (!shell || !chrome) return;
+    const apply = () => {
+      shell.style.setProperty(
+        "--shell-chrome",
+        `${Math.round(chrome.getBoundingClientRect().height)}px`,
+      );
+    };
+    apply();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(apply);
+    observer.observe(chrome);
+    return () => observer.disconnect();
+  }, []);
+
   const handleClose = useCallback(() => closePanel(), [closePanel]);
   const handleDiscard = useCallback(
     () => closePanel({ replace: true }),
@@ -247,6 +272,7 @@ export function AppShell({ payload, accountName, accountEmail }: AppShellProps) 
       }
       data-platform={platformMode || undefined}
       data-theme-preference={themePreference}
+      ref={shellRef}
       style={theme}
     >
       <UsageSignal eventName="learning.workspace_opened" />
@@ -254,149 +280,157 @@ export function AppShell({ payload, accountName, accountEmail }: AppShellProps) 
         Skip to content
       </a>
 
-      <header className={styles.header}>
-        <a
-          className={styles.brand}
-          href={platformMode ? "/app?panel=platform" : "/app"}
-          aria-label={platformMode ? "Corso platform home" : "Corso home"}
-        >
-          <span className={styles.brandMark} aria-hidden="true">
-            <CorsoMark color="var(--accent-ink)" size={15} />
-          </span>
-          <span className={styles.brandText}>
-            <b>{platformMode ? "Corso" : payload.tenant.displayName}</b>
-            <small>
-              {platformMode ? (
-                "PLATFORM"
-              ) : (
-                <>
-                  <span aria-hidden="true">· </span>
-                  {payload.agent.assistantName}
-                </>
-              )}
-            </small>
-          </span>
-        </a>
-
-        <div className={styles.headerActions}>
-          {platformMode ? (
-            <nav className={styles.platformHeaderNav} aria-label="Platform">
-              <a
-                href={panelHref("platform", { view: "billing" })}
-                onClick={(event) => {
-                  if (opensElsewhere(event)) return;
-                  event.preventDefault();
-                  openPanel("platform", { view: "billing" });
-                }}
-              >
-                Billing
-              </a>
-              <a
-                href={panelHref("platform", { view: "settings" })}
-                onClick={(event) => {
-                  if (opensElsewhere(event)) return;
-                  event.preventDefault();
-                  openPanel("platform", { view: "settings" });
-                }}
-              >
-                Platform settings
-              </a>
-            </nav>
-          ) : null}
-          {platformMode ? null : (
-            <span
-              className={answering ? styles.liveStatus : styles.pendingStatus}
-              title={
-                answering
-                  ? "At least one published lesson is available to answer from."
-                  : "No published lesson with content is available yet."
-              }
-            >
-              <i aria-hidden="true" />
-              {answering ? "Answering" : "Needs learning"}
+      <div className={styles.chrome} ref={chromeRef}>
+        <header className={styles.header}>
+          <a
+            className={styles.brand}
+            href={platformMode ? "/app?panel=platform" : "/app"}
+            aria-label={platformMode ? "Corso platform home" : "Corso home"}
+          >
+            <span className={styles.brandMark} aria-hidden="true">
+              <CorsoMark color="var(--accent-ink)" size={15} />
             </span>
-          )}
-
-          <div className={styles.account} ref={accountRef}>
-            <button
-              type="button"
-              className={styles.avatar}
-              aria-haspopup="true"
-              aria-expanded={accountOpen}
-              aria-controls={accountMenuId}
-              onClick={() => setAccountOpen((value) => !value)}
-            >
-              {payload.agent.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={payload.agent.avatarUrl} alt="" />
-              ) : (
-                <span aria-hidden="true">
-                  {accountInitials(payload, accountName)}
-                </span>
-              )}
-              <span className={styles.visuallyHidden}>Account menu</span>
-            </button>
-
-            {accountOpen ? (
-              <div
-                className={styles.accountMenu}
-                id={accountMenuId}
-                aria-label="Account"
-              >
-                <div className={styles.accountIdentity}>
-                  <strong>{accountName}</strong>
-                  {accountEmail ? <small>{accountEmail}</small> : null}
-                  <span className={styles.roleBadge}>
-                    {ROLE_LABELS[payload.role]}
-                  </span>
-                </div>
-                {payload.sections.settings ? (
-                  <button
-                    type="button"
-                    className={styles.accountItem}
-                    onClick={() => openFromMenu("settings")}
-                  >
-                    Settings
-                  </button>
-                ) : null}
-                {platformOnly ? null : (
-                  <a className={styles.accountItem} href="/onboarding">
-                    Workspace setup
-                  </a>
+            <span className={styles.brandText}>
+              <b>{platformMode ? "Corso" : payload.tenant.displayName}</b>
+              <small>
+                {platformMode ? (
+                  "PLATFORM"
+                ) : (
+                  <>
+                    <span aria-hidden="true">· </span>
+                    {payload.agent.assistantName}
+                  </>
                 )}
-                <div className={styles.themeGroup}>
-                  <span className={styles.themeLabel}>Appearance</span>
-                  <div
-                    aria-label="Console appearance"
-                    className={styles.themeOptions}
-                    role="radiogroup"
-                  >
-                    {CONSOLE_THEME_OPTIONS.map((option) => (
-                      <button
-                        aria-checked={themePreference === option.value}
-                        className={styles.themeOption}
-                        key={option.value}
-                        onClick={() => selectTheme(option.value)}
-                        role="radio"
-                        type="button"
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <form action="/auth/sign-out" method="post">
-                  <button className={styles.accountItem} type="submit">
-                    Sign out
-                  </button>
-                </form>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </header>
+              </small>
+            </span>
+          </a>
 
-      <PlatformClientPreviewBanner role={payload.role} tenant={payload.tenant} />
+          <div className={styles.headerActions}>
+            {platformMode ? (
+              <nav className={styles.platformHeaderNav} aria-label="Platform">
+                <a
+                  href={panelHref("platform", { view: "billing" })}
+                  onClick={(event) => {
+                    if (opensElsewhere(event)) return;
+                    event.preventDefault();
+                    openPanel("platform", { view: "billing" });
+                  }}
+                >
+                  Billing
+                </a>
+                <a
+                  href={panelHref("platform", { view: "settings" })}
+                  onClick={(event) => {
+                    if (opensElsewhere(event)) return;
+                    event.preventDefault();
+                    openPanel("platform", { view: "settings" });
+                  }}
+                >
+                  Platform settings
+                </a>
+              </nav>
+            ) : null}
+            {platformMode ? null : (
+              <span
+                className={answering ? styles.liveStatus : styles.pendingStatus}
+                title={
+                  answering
+                    ? "At least one published lesson is available to answer from."
+                    : "No published lesson with content is available yet."
+                }
+              >
+                <i aria-hidden="true" />
+                {answering ? "Answering" : "Needs learning"}
+              </span>
+            )}
+
+            <div className={styles.account} ref={accountRef}>
+              <button
+                type="button"
+                className={styles.avatar}
+                aria-haspopup="true"
+                aria-expanded={accountOpen}
+                aria-controls={accountMenuId}
+                onClick={() => setAccountOpen((value) => !value)}
+              >
+                {payload.agent.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={payload.agent.avatarUrl} alt="" />
+                ) : (
+                  <span aria-hidden="true">
+                    {accountInitials(payload, accountName)}
+                  </span>
+                )}
+                <span className={styles.visuallyHidden}>Account menu</span>
+              </button>
+
+              {accountOpen ? (
+                <div
+                  className={styles.accountMenu}
+                  id={accountMenuId}
+                  aria-label="Account"
+                >
+                  <div className={styles.accountIdentity}>
+                    <strong>{accountName}</strong>
+                    {accountEmail ? <small>{accountEmail}</small> : null}
+                    <span className={styles.roleBadge}>
+                      {ROLE_LABELS[payload.role]}
+                    </span>
+                  </div>
+                  {payload.sections.settings ? (
+                    <button
+                      type="button"
+                      className={styles.accountItem}
+                      onClick={() => openFromMenu("settings")}
+                    >
+                      Settings
+                    </button>
+                  ) : null}
+                  {platformOnly ? null : (
+                    <a className={styles.accountItem} href="/onboarding">
+                      Workspace setup
+                    </a>
+                  )}
+                  <div className={styles.themeGroup}>
+                    <span className={styles.themeLabel}>Appearance</span>
+                    <div
+                      aria-label="Console appearance"
+                      className={styles.themeOptions}
+                      role="radiogroup"
+                    >
+                      {CONSOLE_THEME_OPTIONS.map((option) => (
+                        <button
+                          aria-checked={themePreference === option.value}
+                          className={styles.themeOption}
+                          key={option.value}
+                          onClick={() => selectTheme(option.value)}
+                          role="radio"
+                          type="button"
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <form action="/auth/sign-out" method="post">
+                    <button className={styles.accountItem} type="submit">
+                      Sign out
+                    </button>
+                  </form>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </header>
+
+        <PlatformClientPreviewBanner
+          onOpenPortfolio={
+            activePanel === "platform" ? undefined : () => openPanel("platform")
+          }
+          role={payload.role}
+          tenant={payload.tenant}
+        />
+      </div>
 
       {activePanel === null ? (
         <main className={styles.canvas} id="shell-canvas" tabIndex={-1}>
