@@ -85,6 +85,15 @@ import {
  *     remove the rating control from every streamed turn.
  */
 export const dynamic = "force-dynamic";
+/**
+ * The same ceiling the authenticated `/api/learning/respond` route declares.
+ * Without it this function inherited the platform default while the edge
+ * function behind it may legitimately take up to 30s to first byte and 90s of
+ * stream, so a long answer could be cut off by the host rather than by any
+ * budget this code chose. Both customer-facing surfaces (the embed and the
+ * hosted `/c/[slug]` page) go through here.
+ */
+export const maxDuration = 60;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -670,17 +679,11 @@ export async function POST(request: Request) {
       process.env.LEARNINGBOT_CONVERSATION_OPERATION_TOKEN?.trim() ?? "";
     if (operationToken.length < 32) {
       // Without the operation token the assistant turn could not be recorded,
-      // so refuse before charging the tenant for a model call.
-      return Response.json(
-        { ok: false, code: "widget_unconfigured" },
-        {
-          status: 503,
-          headers: {
-            "Cache-Control": "private, no-store",
-            ...allowedOriginHeaders(origin),
-          },
-        },
-      );
+      // so refuse before charging the tenant for a model call. This is the
+      // one refusal that used to echo `Access-Control-Allow-Origin` for an
+      // origin the database had not validated; it now takes the same opaque,
+      // CORS-less shape as every other refusal.
+      return widgetRefusal(503);
     }
 
     const turnId = crypto.randomUUID();

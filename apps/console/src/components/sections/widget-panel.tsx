@@ -188,9 +188,22 @@ type WidgetSettings = {
   updatedAt: string | null;
 };
 
+/**
+ * What the database says is actually served, computed in
+ * `tenant_get_widget_settings` from the PUBLISHED branding row -- not from the
+ * draft this panel edits. `not_published` is the state that is invisible
+ * everywhere else on this screen: every field looks saved, the domain list is
+ * right, and the widget still refuses every origin because the assistant
+ * configuration has never been published. On a customer's site that refusal
+ * looks like a launcher that appears and vanishes.
+ */
+type LiveStatus = "live" | "disabled" | "not_published" | "no_key";
+
 type ServerState = {
   expectedVersion: number;
   baseline: WidgetSettings;
+  /** `null` only when the service predates the field; never guessed. */
+  liveStatus: LiveStatus | null;
 };
 
 /**
@@ -305,6 +318,15 @@ function appearanceModeOf(value: unknown): WidgetBranding["appearanceMode"] {
 
 function integer(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isInteger(value) ? value : fallback;
+}
+
+function liveStatusOf(value: unknown): LiveStatus | null {
+  return value === "live" ||
+    value === "disabled" ||
+    value === "not_published" ||
+    value === "no_key"
+    ? value
+    : null;
 }
 
 function stringList(value: unknown): string[] {
@@ -1083,7 +1105,14 @@ export function WidgetPanel({ payload, params }: PanelProps) {
         setLoad({ status: "error", error: "unverifiable" });
         return;
       }
-      setLoad({ status: "ready", server: { baseline: settings, expectedVersion } });
+      setLoad({
+        status: "ready",
+        server: {
+          baseline: settings,
+          expectedVersion,
+          liveStatus: liveStatusOf(body.liveStatus),
+        },
+      });
       setDraft(toDraft(settings));
       setPublicKey(settings.publicKey);
       setConflict(false);
@@ -1208,7 +1237,19 @@ export function WidgetPanel({ payload, params }: PanelProps) {
           ? body.expectedVersion
           : server.expectedVersion + 1;
       if (settings !== null) {
-        setLoad({ status: "ready", server: { baseline: settings, expectedVersion } });
+        // The write route publishes what it saves (`requested_publish: true`),
+        // so the record just confirmed IS the published one and the live
+        // state follows from it directly.
+        const liveStatus: LiveStatus =
+          settings.publicKey === null
+            ? "no_key"
+            : settings.enabled
+              ? "live"
+              : "disabled";
+        setLoad({
+          status: "ready",
+          server: { baseline: settings, expectedVersion, liveStatus },
+        });
         setDraft(toDraft(settings));
         setPublicKey(settings.publicKey);
       } else {
@@ -1299,11 +1340,20 @@ export function WidgetPanel({ payload, params }: PanelProps) {
   };
 
   const savedPresentation = server.baseline.presentation;
-  const liveLabel = server.baseline.enabled
-    ? server.baseline.allowedOrigins.length === 0
-      ? "On, but no domain is allowed"
-      : `On for ${server.baseline.allowedOrigins.length} ${server.baseline.allowedOrigins.length === 1 ? "domain" : "domains"}`
-    : "Off";
+  const liveLabel =
+    server.liveStatus === "not_published"
+      ? "Saved, but not published"
+      : server.liveStatus === "no_key"
+        ? "No widget key issued"
+        : server.baseline.enabled
+          ? server.baseline.allowedOrigins.length === 0
+            ? "On, but no domain is allowed"
+            : `On for ${server.baseline.allowedOrigins.length} ${server.baseline.allowedOrigins.length === 1 ? "domain" : "domains"}`
+          : "Off";
+  const isLive =
+    server.liveStatus === null
+      ? server.baseline.enabled
+      : server.liveStatus === "live";
 
   return (
     <div className={styles.editorRoot}>
@@ -1411,10 +1461,33 @@ export function WidgetPanel({ payload, params }: PanelProps) {
             <section className={styles.card} hidden={!showDelivery}>
               <header className={styles.cardHead}>
                 <h3>Status</h3>
-                <StateBadge state={server.baseline.enabled ? "known" : "unknown"}>
-                  {server.baseline.enabled ? "Live" : "Off"}
+                <StateBadge state={isLive ? "known" : "unknown"}>
+                  {isLive
+                    ? "Live"
+                    : server.liveStatus === "not_published"
+                      ? "Not published"
+                      : server.liveStatus === "no_key"
+                        ? "No key"
+                        : "Off"}
                 </StateBadge>
               </header>
+              {server.liveStatus === "not_published" ? (
+                <p className={styles.hint} role="alert">
+                  These settings are saved but the assistant configuration has
+                  never been published, so nothing here is live: the widget
+                  refuses every domain, including the ones listed below. On a
+                  site with the snippet installed that refusal looks like a
+                  launcher that appears for an instant and then disappears.
+                  Publish the assistant configuration, then reload this panel.
+                </p>
+              ) : null}
+              {server.liveStatus === "no_key" ? (
+                <p className={styles.hint} role="alert">
+                  No widget key has been issued for this workspace yet, so
+                  there is nothing a site could load. Turn the widget on and
+                  save to have one issued.
+                </p>
+              ) : null}
               <Toggle
                 checked={draft.enabled}
                 description="While it is off, the widget answers on no domain at all, whether or not the script is still on the page."

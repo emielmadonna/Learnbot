@@ -595,6 +595,7 @@ export class CourseAiWidgetElement extends HTMLElementBase {
   #colorScheme: MediaQueryList | undefined;
   #configurationVersion = 0;
   #failure = false;
+  #renderedItemCount = 0;
   #connected = false;
   #initialized = false;
   #drag: { kind: "move" | "resize"; startX: number; startY: number; layout: WidgetLayout } | undefined;
@@ -719,6 +720,14 @@ export class CourseAiWidgetElement extends HTMLElementBase {
       this.#greetingBubbleShown = false;
       this.#abort = new AbortController();
       this.#config = configuration;
+      // Nothing is painted until the host has confirmed this key is served on
+      // this origin. The element used to render its launcher first and hide
+      // itself when the bootstrap was refused, which is exactly what a visitor
+      // on a domain that is not on the allow-list saw: a launcher that
+      // appeared and vanished a moment later. Refusal is meant to be silent,
+      // and silent means never shown, not shown-then-hidden. The success path
+      // below clears this.
+      this.style.display = "none";
       this.#storage = configuration.storage ?? this.#defaultStorage();
       this.#state = {
         presentation: "launcher",
@@ -1323,6 +1332,18 @@ export class CourseAiWidgetElement extends HTMLElementBase {
 
   #renderThread(): void {
     if (!this.#refs) return;
+    const thread = this.#refs.thread;
+    // Decided before the repaint: was the reader at the bottom? A visitor who
+    // scrolled up to re-read an earlier answer must not be dragged back down
+    // by every streamed token. A new turn -- a question just sent, a fresh
+    // placeholder -- still lands in view, because that is what they asked for.
+    const distanceFromBottom =
+      thread.scrollHeight - thread.scrollTop - (Number(thread.clientHeight) || 0);
+    const pinnedToBottom = !(distanceFromBottom > 40);
+    const itemCount = this.#state.conversation.items.length;
+    const newTurn = itemCount !== this.#renderedItemCount;
+    this.#renderedItemCount = itemCount;
+
     const fragment = document.createDocumentFragment();
     for (const item of [...this.#state.conversation.items].sort((a, b) => a.sequence - b.sequence)) {
       if (item.role === "assistant" && item.status === "pending" && item.parts.length === 0) {
@@ -1333,7 +1354,21 @@ export class CourseAiWidgetElement extends HTMLElementBase {
       article.className = `message ${item.role}`;
       article.dataset.status = item.status;
       article.setAttribute("aria-label", `${item.role === "assistant" ? this.#state.branding.assistantName : "You"} message`);
+      // The host opens the answer on the "sources" event, before a single
+      // token exists, so the citations can render while the model is still
+      // writing. Between that moment and the first token the bubble has an
+      // empty text part -- and an empty bubble reads as a broken one. Keep the
+      // thinking indicator inside it until real text arrives.
+      const awaitingFirstToken =
+        item.role === "assistant" &&
+        (item.status === "pending" || item.status === "streaming") &&
+        !item.parts.some((part) => part.kind === "text" && part.text.length > 0);
+      if (awaitingFirstToken) {
+        article.className = `message ${item.role} awaiting`;
+        article.append(this.#renderThinkingRow());
+      }
       for (const part of item.parts) {
+        if (awaitingFirstToken && part.kind === "text") continue;
         const node = this.#renderPart(part);
         if (node) article.append(node);
       }
@@ -1344,8 +1379,8 @@ export class CourseAiWidgetElement extends HTMLElementBase {
       const feedbackRow = this.#renderFeedbackRow(item);
       if (feedbackRow) fragment.append(feedbackRow);
     }
-    this.#refs.thread.replaceChildren(fragment);
-    this.#refs.thread.scrollTop = this.#refs.thread.scrollHeight;
+    thread.replaceChildren(fragment);
+    if (pinnedToBottom || newTurn) thread.scrollTop = thread.scrollHeight;
   }
 
   /**
@@ -1357,14 +1392,22 @@ export class CourseAiWidgetElement extends HTMLElementBase {
     const article = document.createElement("article");
     article.className = "message assistant thinking";
     article.setAttribute("aria-label", `${this.#state.branding.assistantName} is thinking`);
+    article.append(this.#renderThinkingRow());
+    return article;
+  }
+
+  /** The three-dot bounce plus its label, shared by the placeholder turn and by an opened answer that has no text yet. */
+  #renderThinkingRow(): HTMLElement {
+    const row = document.createElement("span");
+    row.className = "thinkingRow";
     const dots = document.createElement("span");
     dots.className = "thinkingDots";
     for (let index = 0; index < 3; index += 1) dots.append(document.createElement("i"));
     const label = document.createElement("span");
     label.className = "thinkingLabel";
     label.textContent = this.#thinkingLabel();
-    article.append(dots, label);
-    return article;
+    row.append(dots, label);
+    return row;
   }
 
   #thinkingLabel(): string {
@@ -2280,6 +2323,9 @@ button:focus-visible,textarea:focus-visible,[tabindex]:focus-visible,a:focus-vis
 .message[data-status=failed]{border:1px solid #c53030}
 .message p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .message.thinking{display:flex;align-items:center;gap:10px}
+.thinkingRow{display:flex;align-items:center;gap:10px}
+.message.awaiting::after{display:none}
+.message.awaiting .thinkingRow{margin-bottom:2px}
 .thinkingDots{display:flex;gap:4px}
 .thinkingDots i{display:block;width:6px;height:6px;border-radius:100px;background:color-mix(in srgb,var(--widget-text) 45%,transparent);animation:thinkBounce 1.2s ease-in-out infinite}
 .thinkingDots i:nth-child(2){animation-delay:.15s}

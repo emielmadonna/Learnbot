@@ -1159,3 +1159,127 @@ test("WID-19: the pending placeholder never carries a ratable id, and the comple
   assert.equal(rated.feedbackRef, "3f1c2b7e-9a4d-4c1b-8f2e-77aa2c9b1d40");
   assert.ok(feedbackButtons(widget.shadowRoot.children[2]));
 });
+
+test("WID-20: nothing is painted until the bootstrap succeeds, so a refused origin never sees a launcher flash", async () => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const widget = connectedWidget();
+  const configured = widget.configure({
+    tenantKey: "pk_gate",
+    adapter: adapter({
+      async bootstrap() {
+        await gate;
+        return { conversation: conversation("conversation-gate") };
+      },
+    }),
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(widget.style.display, "none", "hidden while the host has not yet confirmed the key and origin");
+  release();
+  await configured;
+  assert.equal(widget.style.display, "", "shown once the bootstrap succeeded");
+
+  // The refusal path a visitor on an unlisted domain hits: the element must go
+  // from hidden to hidden, never through a visible launcher.
+  const paints = [];
+  const refused = connectedWidget();
+  const originalRender = refused.shadowRoot;
+  assert.ok(originalRender);
+  await refused.configure({
+    tenantKey: "pk_refused",
+    adapter: adapter({
+      async bootstrap() {
+        paints.push(refused.style.display);
+        throw new Error("widget_unavailable");
+      },
+    }),
+  });
+  assert.deepEqual(paints, ["none"], "hidden at the moment the bootstrap request was in flight");
+  assert.equal(refused.style.display, "none");
+});
+
+test("WID-21: an answer opened with an empty text part keeps the thinking indicator until the first token arrives", async () => {
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_await",
+    adapter: adapter({
+      async sendText(input, emit) {
+        // What the embed prelude emits on the "sources" SSE event: the answer
+        // is open, the citations are known, and no token has been produced.
+        emit({
+          type: "thread.item",
+          conversationId: input.conversationId,
+          item: {
+            id: "assistant-await",
+            sequence: 1,
+            role: "assistant",
+            modality: "text",
+            status: "streaming",
+            parts: [
+              { kind: "text", text: "" },
+              { kind: "source", id: "s1", title: "Module 4 Coaching", url: "" },
+            ],
+            createdAt: "2026-09-08T00:00:00.000Z",
+          },
+        });
+      },
+    }),
+  });
+
+  await widget.send("What is the LinkedIn 15?");
+  const surface = widget.shadowRoot.children[2];
+  const awaiting = findDescendant(surface, (element) => element.className === "message assistant awaiting");
+  assert.ok(awaiting, "the opened answer is marked as awaiting its first token");
+  const dots = findDescendant(awaiting, (element) => element.className === "thinkingDots");
+  assert.equal(dots.children.length, 3, "the same three-dot indicator, inside the bubble");
+  assert.match(descendantText(awaiting), /Module 4 Coaching/, "sources render while the model is still writing");
+
+  widget.receive({
+    type: "response.delta",
+    conversationId: "conversation-1",
+    itemId: "assistant-await",
+    text: "The LinkedIn 15 is",
+  });
+  assert.equal(
+    findDescendant(surface, (element) => element.className === "message assistant awaiting"),
+    undefined,
+    "the indicator leaves with the first token",
+  );
+  assert.match(descendantText(surface), /The LinkedIn 15 is/);
+  assert.equal(findDescendant(surface, (element) => element.className === "thinkingDots"), undefined);
+});
+
+test("WID-22: streamed tokens do not drag a reader who scrolled up back to the bottom, but a new turn does", async () => {
+  const widget = connectedWidget();
+  await widget.configure({
+    tenantKey: "pk_scroll",
+    adapter: adapter({
+      async sendText(input, emit) {
+        emit({
+          type: "response.delta",
+          conversationId: input.conversationId,
+          itemId: `assistant-${input.text}`,
+          text: `Answer to ${input.text}`,
+        });
+      },
+    }),
+  });
+  for (const question of ["one", "two", "three"]) await widget.send(question);
+  const thread = findDescendant(widget.shadowRoot.children[2], (element) => element.className === "thread");
+  assert.ok(thread.scrollHeight > 40, "enough transcript to scroll");
+  assert.equal(thread.scrollTop, thread.scrollHeight, "a new turn lands in view");
+
+  thread.scrollTop = 0; // the reader scrolled up to re-read an earlier answer
+  widget.receive({
+    type: "response.delta",
+    conversationId: "conversation-1",
+    itemId: "assistant-three",
+    text: " and a little more",
+  });
+  assert.equal(thread.scrollTop, 0, "a streamed token does not yank the reader down");
+
+  await widget.send("four");
+  assert.equal(thread.scrollTop, thread.scrollHeight, "the question they just sent is brought into view");
+});

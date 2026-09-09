@@ -721,12 +721,32 @@ export function HostedAssistant({
                 <article className={styles.assistantTurn} key={message.id}>
                   <BrandAvatar alt="" imageUrl={avatarUrl ?? logoUrl} size="turn" />
                   <div className={styles.answer}>
-                    <RichText
-                      citationCount={message.sources.length}
-                      citationHrefPrefix={`#source-${message.id}-`}
-                      className={styles.answerProse}
-                      markdown={message.content}
-                    />
+                    {message.id === streamingId && message.content === "" ? (
+                      /*
+                       * The answer opens on the `sources` event, before the
+                       * model has produced a token, so the citations can
+                       * render early. Measured against production, the gap
+                       * between that event and the first token was over two
+                       * seconds -- of an empty bubble, which reads as broken.
+                       * The indicator stays inside the bubble until real
+                       * text arrives.
+                       */
+                      <div className={styles.awaiting} role="status">
+                        <span>
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                        <em>Writing the answer…</em>
+                      </div>
+                    ) : (
+                      <RichText
+                        citationCount={message.sources.length}
+                        citationHrefPrefix={`#source-${message.id}-`}
+                        className={styles.answerProse}
+                        markdown={message.content}
+                      />
+                    )}
                     {message.visuals.length > 0 ? (
                       <div
                         aria-label="Course visuals used in this answer"
