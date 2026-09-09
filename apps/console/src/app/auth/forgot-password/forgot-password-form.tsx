@@ -23,9 +23,17 @@ export function ForgotPasswordForm({ configured }: { configured: boolean }) {
       });
       if (result.error) throw result.error;
       setSent(true);
-    } catch {
+    } catch (caught) {
+      // Supabase's built-in mailer allows only a few emails per hour for the
+      // whole project. When that cap is hit it answers 429 with
+      // over_email_send_rate_limit, and telling the person to "check the
+      // address" sends them in circles: the address is fine, the hour is not.
+      const status = (caught as { status?: unknown })?.status;
+      const code = (caught as { code?: unknown })?.code;
       setError(
-        "We couldn’t send the reset email. Check the address and try again.",
+        status === 429 || code === "over_email_send_rate_limit"
+          ? "Too many reset emails have been requested in the last hour, so none can be sent right now. The address is fine — wait about an hour and try again, or ask the workspace owner for a one-time sign-in link."
+          : "We couldn’t send the reset email. Check the address and try again.",
       );
     } finally {
       setPending(false);

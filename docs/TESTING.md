@@ -158,7 +158,7 @@ implement, kept here so it is not mistaken for tested.
 | OPS-04 | Production serves the current build | `/widget.js` ETag equals the local build's (`sha256(prelude + iife)`); the domain alias has served a stale build before |
 | OPS-05 | Provider budget | `learning_reserve_provider_call` refuses past the cap; the cost ledger shows the day's spend |
 | OPS-06 | Backups | None exist on the free plan. Any destructive migration is preceded by a manual export |
-| OPS-07 | Emailed links work from any device | The Supabase email templates for Reset Password, Invite and Magic Link point at `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=<recovery\|invite\|magiclink>&next=…` rather than `{{ .ConfirmationURL }}`. The default PKCE link only works in the browser that requested it; opening it on a phone or another profile says "invalid or has expired". `/auth/callback` accepts both shapes |
+| OPS-07 | Emailed links work from any device | The Supabase email templates for Reset Password, Invite and Magic Link point at `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=<recovery\|invite\|magiclink>&next=…` rather than `{{ .ConfirmationURL }}`. The default PKCE link only works in the browser that requested it; opening it on a phone or another profile says "invalid or has expired". `/auth/callback` accepts both shapes. The built-in mailer allows only a few emails per hour project-wide (`429 over_email_send_rate_limit`); when it is spent, `node infra/supabase/scripts/mint-recovery-link.mjs <email>` prints a one-time `token_hash` link that needs no email |
 
 ## UX quality gates (every screen, every release)
 
