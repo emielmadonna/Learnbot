@@ -10,6 +10,14 @@ import { SignInForm } from "./sign-in-form";
 const messages: Record<string, string> = {
   callback_failed:
     "That link could not be used. Emailed links only work in the browser that asked for them, so open it in the same browser you used to request it, or request a new one from there. Each link works once.",
+  link_expired:
+    "That link was already used or has expired. Each link works once and for a limited time — request a new one and click it once.",
+  link_other_browser:
+    "This browser did not request that link. Open it in the browser you used to ask for it, or request a new link from this one.",
+  link_incomplete:
+    "That link is missing its sign-in code, so it cannot be used. Request a new one.",
+  link_rejected:
+    "That link was rejected. Request a new one and use it within an hour.",
   authentication_required: "Sign in to continue to your workspace.",
   signed_out: "You have been signed out securely.",
 };

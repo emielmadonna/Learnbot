@@ -28,7 +28,14 @@ test("the callback verifies a token_hash link server-side", () => {
   }
 });
 
-test("an unknown type or a missing token is the same opaque failure", () => {
+test("failures are kept apart so the person can act on them", () => {
   assert.match(source, /otpTypes\.has\(type\)/);
-  assert.match(source, /error", "callback_failed"/);
+  for (const reason of ["link_expired", "link_other_browser", "link_incomplete", "link_rejected"]) {
+    assert.match(source, new RegExp(`"${reason}"`), `${reason} must be a distinct outcome`);
+  }
+  assert.match(source, /error_code/, "Supabase's own error_code on the redirect is read");
+  const signIn = readFileSync(resolve(process.cwd(), "src/app/auth/sign-in/page.tsx"), "utf8");
+  for (const reason of ["link_expired", "link_other_browser", "link_incomplete", "link_rejected"]) {
+    assert.match(signIn, new RegExp(`${reason}:`), `${reason} must have sign-in copy`);
+  }
 });

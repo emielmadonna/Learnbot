@@ -40,18 +40,61 @@ const otpTypes: ReadonlySet<string> = new Set<EmailOtpType>([
   "email_change",
 ]);
 
+/**
+ * Every failure used to collapse into `callback_failed`, which the sign-in
+ * page rendered as "invalid or has expired" — true for one cause out of
+ * four. The reasons are now kept apart so the person can act on them:
+ *
+ *   link_expired        Supabase refused the emailed token (already used, or
+ *                       past its lifetime). It says so itself, on the
+ *                       redirect, as `error_code=otp_expired`.
+ *   link_other_browser  the PKCE code arrived but this browser has no
+ *                       verifier cookie for it: the link was opened
+ *                       somewhere other than where it was requested.
+ *   link_incomplete     no code and no token at all.
+ *   link_rejected       the exchange or verification failed for any other
+ *                       reason.
+ *
+ * None of these carries anything from the request through to the page.
+ */
+type LinkFailure =
+  | "link_expired"
+  | "link_other_browser"
+  | "link_incomplete"
+  | "link_rejected";
+
+function supabaseReportedFailure(url: URL): LinkFailure | null {
+  const code = url.searchParams.get("error_code") ?? "";
+  const error = url.searchParams.get("error") ?? "";
+  if (!code && !error) return null;
+  return /expired|otp/i.test(code) ? "link_expired" : "link_rejected";
+}
+
+function classifyExchangeError(message: string): LinkFailure {
+  if (/verifier|flow state|both auth code/i.test(message)) return "link_other_browser";
+  if (/expired|invalid|used/i.test(message)) return "link_expired";
+  return "link_rejected";
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const nextPath = safeRelativePath(requestUrl.searchParams.get("next"));
   const code = requestUrl.searchParams.get("code");
   const tokenHash = requestUrl.searchParams.get("token_hash");
   const type = requestUrl.searchParams.get("type");
-  const failureUrl = new URL("/auth/sign-in", requestUrl.origin);
-  failureUrl.searchParams.set("error", "callback_failed");
-  failureUrl.searchParams.set("next", nextPath);
+
+  const fail = (reason: LinkFailure) => {
+    const failureUrl = new URL("/auth/sign-in", requestUrl.origin);
+    failureUrl.searchParams.set("error", reason);
+    failureUrl.searchParams.set("next", nextPath);
+    return NextResponse.redirect(failureUrl);
+  };
+
+  const reported = supabaseReportedFailure(requestUrl);
+  if (reported) return fail(reported);
 
   if (!code && !(tokenHash && type && otpTypes.has(type))) {
-    return NextResponse.redirect(failureUrl);
+    return fail("link_incomplete");
   }
 
   try {
@@ -63,11 +106,11 @@ export async function GET(request: Request) {
           type: type as EmailOtpType,
         });
     if (result.error) {
-      return NextResponse.redirect(failureUrl);
+      return fail(code ? classifyExchangeError(result.error.message) : "link_expired");
     }
     await requireVerifiedUser(supabase);
     return NextResponse.redirect(new URL(nextPath, requestUrl.origin));
   } catch {
-    return NextResponse.redirect(failureUrl);
+    return fail("link_rejected");
   }
 }
