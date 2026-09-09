@@ -9,7 +9,7 @@ import { SignInForm } from "./sign-in-form";
 
 const messages: Record<string, string> = {
   callback_failed:
-    "That sign-in attempt is invalid or has expired. Try again.",
+    "That link could not be used. Emailed links only work in the browser that asked for them, so open it in the same browser you used to request it, or request a new one from there. Each link works once.",
   authentication_required: "Sign in to continue to your workspace.",
   signed_out: "You have been signed out securely.",
 };
