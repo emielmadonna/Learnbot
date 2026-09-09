@@ -72,6 +72,11 @@ the deployed edge function) works. Run L5 against a deployment.
 
 ## Persona journeys
 
+The journeys below are the checklist. For an agent or a person to actually
+*use* the product as each persona — with goals, not steps — use the briefs in
+[PERSONA-WALKTHROUGH-PROMPTS.md](PERSONA-WALKTHROUGH-PROMPTS.md); those find
+the confusion and dead ends a checklist cannot.
+
 IDs are stable and appear in test titles and in evidence. `Auto` names the
 spec that proves the row; `Manual` rows have their steps written out because
 no machine can do them yet. `Gap` marks a journey the product does not yet
@@ -153,6 +158,7 @@ implement, kept here so it is not mistaken for tested.
 | OPS-04 | Production serves the current build | `/widget.js` ETag equals the local build's (`sha256(prelude + iife)`); the domain alias has served a stale build before |
 | OPS-05 | Provider budget | `learning_reserve_provider_call` refuses past the cap; the cost ledger shows the day's spend |
 | OPS-06 | Backups | None exist on the free plan. Any destructive migration is preceded by a manual export |
+| OPS-07 | Emailed links work from any device | The Supabase email templates for Reset Password, Invite and Magic Link point at `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=<recovery\|invite\|magiclink>&next=…` rather than `{{ .ConfirmationURL }}`. The default PKCE link only works in the browser that requested it; opening it on a phone or another profile says "invalid or has expired". `/auth/callback` accepts both shapes |
 
 ## UX quality gates (every screen, every release)
 
