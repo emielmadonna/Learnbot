@@ -32,3 +32,8 @@ infra/supabase/supabase/
 # ...and at the repo root, when the CLI is invoked from there.
 /supabase/
 .vercel
+
+# Playwright end-to-end suite (apps/e2e)
+apps/e2e/.auth/
+apps/e2e/test-results/
+apps/e2e/playwright-report/

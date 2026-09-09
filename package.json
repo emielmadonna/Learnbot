@@ -13,6 +13,8 @@
     "check": "pnpm docs:check && pnpm check:contrast && pnpm supabase:verify && pnpm supabase:release:test && pnpm build:packages && pnpm typecheck && pnpm test",
     "check:contrast": "node scripts/check-contrast.mjs",
     "docs:check": "node scripts/validate-docs.mjs",
+    "e2e": "pnpm --filter @course-ai/e2e e2e",
+    "e2e:public": "pnpm --filter @course-ai/e2e e2e:public",
     "supabase:verify": "node infra/supabase/scripts/verify-structure.mjs",
     "supabase:release": "node infra/supabase/scripts/hosted-release.mjs",
     "supabase:release:test": "node --test infra/supabase/scripts/hosted-release.test.mjs",

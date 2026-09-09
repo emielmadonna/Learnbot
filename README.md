@@ -174,7 +174,12 @@ pnpm --filter @course-ai/console test
 pnpm supabase:verify
 pnpm docs:check
 pnpm check          # everything above, plus package builds
+pnpm e2e:public     # browser + API suite, public surfaces, against E2E_BASE_URL
+pnpm e2e            # the whole suite: adds learner, teacher and admin journeys
 ```
+
+The end-to-end programme — layers, persona journeys, what is automated, what
+stays manual, and the release gate — is in [docs/TESTING.md](docs/TESTING.md).
 
 Development-server and parallel-ownership rules are in
 [DEVELOPMENT.md](DEVELOPMENT.md). Read
