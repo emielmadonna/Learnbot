@@ -2,6 +2,10 @@
 
 import { useState, type FormEvent } from "react";
 import { createBrowserSupabaseClient } from "../../../lib/supabase/client";
+import {
+  passwordChangeMessage,
+  setPasswordAndProve,
+} from "../../../lib/supabase/password-change";
 import styles from "../auth.module.css";
 
 export function ChangePasswordForm({ nextPath }: { nextPath: string }) {
@@ -38,8 +42,15 @@ export function ChangePasswordForm({ nextPath }: { nextPath: string }) {
     setPending(true);
     try {
       const supabase = createBrowserSupabaseClient();
-      const updated = await supabase.auth.updateUser({ password });
-      if (updated.error) throw updated.error;
+      // Set it AND prove it (see lib/supabase/password-change.ts). The
+      // credential-state RPC below runs only once a password sign-in with the
+      // new password has actually succeeded.
+      const outcome = await setPasswordAndProve(supabase, password);
+      if (!outcome.ok) {
+        setError(passwordChangeMessage(outcome));
+        setPending(false);
+        return;
+      }
       const completed = await supabase.rpc("auth_complete_password_change", {
         requested_idempotency_key: `password-change:${crypto.randomUUID()}`,
       });

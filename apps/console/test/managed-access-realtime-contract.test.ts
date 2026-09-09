@@ -26,7 +26,7 @@ const learningRoute = source("../src/lib/supabase/learning-route.ts");
 test("production access is admin-created password access without public signup", () => {
   assert.match(signIn, /signInWithPassword/);
   assert.doesNotMatch(signIn, /signInWithOtp|signUp/);
-  assert.match(passwordChange, /auth\.updateUser\(\{ password \}\)/);
+  assert.match(passwordChange, /setPasswordAndProve\(supabase, password\)/);
   assert.match(passwordChange, /auth_complete_password_change/);
   assert.match(proxy, /must_change_password/);
   assert.match(proxy, /\/auth\/change-password/);

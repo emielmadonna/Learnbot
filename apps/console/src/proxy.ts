@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { readSupabasePublicConfig } from "./lib/supabase/config";
+import { sessionLacksPassword } from "./lib/supabase/session-methods";
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -44,6 +45,7 @@ export async function proxy(request: NextRequest) {
       request.nextUrl.pathname.startsWith("/app") ||
       request.nextUrl.pathname.startsWith("/onboarding");
     if (signedIn && protectedWorkspace) {
+      const requestedPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
       const access = await supabase.rpc("auth_current_access_state");
       const row = Array.isArray(access.data) ? access.data[0] : access.data;
       if (
@@ -54,8 +56,22 @@ export async function proxy(request: NextRequest) {
         row.must_change_password === true
       ) {
         const destination = request.nextUrl.clone();
-        const requestedPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
         destination.pathname = "/auth/change-password";
+        destination.search = "";
+        destination.searchParams.set("next", requestedPath);
+        return NextResponse.redirect(destination);
+      }
+
+      // A session that only an emailed link established (recovery, magic
+      // link, invitation) is not finished: the person has proven they own
+      // the mailbox, not that they hold a password. Letting them into the
+      // workspace on that session is how someone ends up "signed in" on one
+      // device and locked out of every other. They go to the reset page,
+      // which sets a password AND signs in with it, and only that password
+      // session reaches the workspace. OAuth/SSO sessions are left alone.
+      if (sessionLacksPassword(identity.data?.claims)) {
+        const destination = request.nextUrl.clone();
+        destination.pathname = "/auth/reset-password";
         destination.search = "";
         destination.searchParams.set("next", requestedPath);
         return NextResponse.redirect(destination);

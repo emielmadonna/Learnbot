@@ -2,6 +2,10 @@
 
 import { useState, type FormEvent } from "react";
 import { createBrowserSupabaseClient } from "../../../lib/supabase/client";
+import {
+  passwordChangeMessage,
+  setPasswordAndProve,
+} from "../../../lib/supabase/password-change";
 import styles from "../auth.module.css";
 
 export function ResetPasswordForm({ nextPath = "/app/entry" }: { nextPath?: string }) {
@@ -37,8 +41,15 @@ export function ResetPasswordForm({ nextPath = "/app/entry" }: { nextPath?: stri
     setPending(true);
     try {
       const supabase = createBrowserSupabaseClient();
-      const result = await supabase.auth.updateUser({ password });
-      if (result.error) throw result.error;
+      // Set it AND prove it: the page moves on only after a real sign-in with
+      // the new password has succeeded, so "it worked here but nowhere else"
+      // cannot happen again.
+      const outcome = await setPasswordAndProve(supabase, password);
+      if (!outcome.ok) {
+        setError(passwordChangeMessage(outcome));
+        setPending(false);
+        return;
+      }
       window.location.assign(nextPath);
     } catch {
       setError(
